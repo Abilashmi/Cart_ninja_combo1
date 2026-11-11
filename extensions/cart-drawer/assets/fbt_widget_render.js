@@ -561,7 +561,42 @@
         return null;
       }
 
+      /* Widget Placement "Custom selector": the theme element the merchant's
+         CSS selector finds (a visible one first), never the widget itself or
+         the page shell. Bad selector / no match = null. */
+      function findSelectorTarget(){
+        var sel=el.__psSelector;
+        if(!sel)return null;
+        var list;
+        try{list=document.querySelectorAll(sel);}catch(e){return null;}
+        var first=null;
+        for(var i=0;i<list.length;i++){
+          var n=list[i];
+          if(n===el||el.contains(n)||n===document.body||n===document.documentElement||!n.parentNode)continue;
+          if(n.offsetParent!==null)return n;
+          if(!first)first=n;
+        }
+        return first;
+      }
+
       function doPlace(apiPlacement){
+        if(apiPlacement==='selector'){
+          var target=findSelectorTarget();
+          if(target){
+            el.__psWaiting=false;
+            el.style.display='block';
+            el.style.width='100%';
+            el.style.margin=el.__psMargin||'16px 0';
+            el.style.boxSizing='border-box';
+            target.parentNode.insertBefore(el,el.__psSelectorPos==='before'?target:target.nextSibling);
+            return true;
+          }
+          /* Not on the page (yet): stay hidden while placeWidget waits; once it
+             gives up, fall back to below the Add to Cart button. */
+          if(!el.__psSelectorGaveUp){el.__psWaiting=true;el.style.display='none';return false;}
+          el.__psWaiting=false;
+          apiPlacement='below_cart';
+        }
         var atcBtn=findAtcBtn();
         el.style.display='block';
         el.style.width='100%';
@@ -592,11 +627,11 @@
         var done=false;
         var obs=new MutationObserver(function(){
           if(done)return;
-          if(findAtcBtn()){done=true;obs.disconnect();doPlace(apiPlacement);}
+          if(apiPlacement==='selector'?findSelectorTarget():findAtcBtn()){done=true;obs.disconnect();doPlace(apiPlacement);}
         });
         obs.observe(document.body,{childList:true,subtree:true});
         /* Safety: stop observing after 6s and place wherever we can */
-        setTimeout(function(){if(!done){done=true;obs.disconnect();doPlace(apiPlacement);}},6000);
+        setTimeout(function(){if(!done){done=true;obs.disconnect();el.__psSelectorGaveUp=true;doPlace(apiPlacement);}},6000);
       }
 
       if(!shop){el.style.display='none';return;}
@@ -630,6 +665,11 @@
           var config=normalizeConfig(templateMap[selectedTemplate],currencySymbol);
           if(!config)return;
           var apiPlacement=(templateMap[selectedTemplate]&&templateMap[selectedTemplate].widgetPlacement)||data.widgetPlacement||'below_cart';
+          /* "Custom selector" placement keys ride in the template JSON (fbt-style.shared.js pickFbtLayout). */
+          var activeTpl=templateMap[selectedTemplate]||{};
+          el.__psSelector=typeof activeTpl.widgetSelector==='string'?activeTpl.widgetSelector.trim().slice(0,200):'';
+          el.__psSelectorPos=activeTpl.widgetSelectorPosition==='before'?'before':'after';
+          if(apiPlacement==='selector'&&!el.__psSelector)apiPlacement='below_cart';
           var rules=normalizeRules(data.condition||data.manualRules||data.manualConfiguration||[]);
           var currentNumId=extractNumericId(productId);
           var matchedProducts=[];
@@ -704,7 +744,8 @@
             var keepHeight=el.offsetHeight;
             if(keepHeight)el.style.minHeight=keepHeight+'px';
             renderFBT(el,config,products,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
-            el.style.display='block';
+            /* Custom selector still waiting for its element: stay hidden (doPlace shows it). */
+            if(!el.__psWaiting)el.style.display='block';
             placeOnce();
             if(keepHeight)requestAnimationFrame(function(){el.style.minHeight='';});
           }

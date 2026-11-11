@@ -42,7 +42,7 @@ const browser = await chromium.launch();
 
 // products: a whole /products.json catalog instead of catalog(); pageProduct:
 // the viewed product's /products/joggers.js (its options and variants).
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '', productJs = {} }) {
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '', productJs = {}, extraHtml = '' }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   // Account → Price display → "Hide decimals in prices" (printed by the block).
   if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
@@ -60,7 +60,7 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
     if (url.pathname === '/cart/add.js') { log.added.push(r.request().postDataJSON()); return r.fulfill({ contentType: 'application/json', body: '{"items":[]}' }); }
     if (url.hostname === 'img.test' || url.pathname.endsWith('.svg')) return r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#16a34a"/></svg>' });
     // The product page form: variant 1005 of the viewed product (id 100) is selected.
-    return r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><style>${themeCss}</style></head><body style="margin:0;font-family:Arial"><form action="/cart/add"><input type="hidden" name="id" value="1005"><button name="add" type="submit">Add to cart</button></form>${fbt}</body></html>` });
+    return r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><style>${themeCss}</style></head><body style="margin:0;font-family:Arial"><form action="/cart/add"><input type="hidden" name="id" value="1005"><button name="add" type="submit">Add to cart</button></form>${extraHtml}${fbt}</body></html>` });
   });
   await page.goto('http://shop.test/products/joggers');
   if (catalogDelay) return { page, log };
@@ -470,6 +470,43 @@ const inner = (page) => page.evaluate(() => {
   await off.page.waitForTimeout(300);
   check('popup off: images are not tappable', (await off.page.$$('ps-fbt-widget [data-fbt-zoom]')).length === 0 && !(await off.page.$('#ps-fbt-pop')));
   await off.page.close();
+}
+
+// Widget Placement "Custom selector": next to the theme element the CSS
+// selector finds; waits for one added late; falls back below Add to Cart.
+{
+  const rule = [{ id: 'rs', displayScope: 'all', fbtProducts: [SOCKS, CAP] }];
+  const desc = '<div class="product__description" id="desc">Description</div>';
+  const spot = (page) => page.evaluate(() => { const w = document.querySelector('ps-fbt-widget'); return { prev: w.previousElementSibling?.id || w.previousElementSibling?.tagName || '', next: w.nextElementSibling?.id || '', parent: w.parentElement.tagName, shown: getComputedStyle(w).display }; });
+
+  let { page } = await open({ condition: rule, extraHtml: desc, temp1: { widgetPlacement: 'selector', widgetSelector: '.product__description' } });
+  let s = await spot(page);
+  check('selector: shown below the matched element', s.prev === 'desc' && s.shown === 'block', JSON.stringify(s));
+  await page.close();
+
+  ({ page } = await open({ condition: rule, extraHtml: desc, temp1: { widgetPlacement: 'selector', widgetSelector: '#desc', widgetSelectorPosition: 'before' } }));
+  s = await spot(page);
+  check('selector: "above" puts it before the element (ID selector)', s.next === 'desc' && s.shown === 'block', JSON.stringify(s));
+  await page.close();
+
+  // The theme draws the element 1.5 s after load; the widget stays hidden until then.
+  const late = "<script>setTimeout(function(){var d=document.createElement('div');d.className='late-block';d.id='late';document.body.appendChild(d);},1500)</script>";
+  const t0 = Date.now();
+  ({ page } = await open({ condition: rule, extraHtml: late, temp1: { widgetPlacement: 'selector', widgetSelector: '.late-block' } }));
+  s = await spot(page);
+  check('selector: waits (hidden) for an element the theme adds late', s.prev === 'late' && s.shown === 'block' && Date.now() - t0 >= 1500, JSON.stringify({ ...s, ms: Date.now() - t0 }));
+  await page.close();
+
+  ({ page } = await open({ condition: rule, temp1: { widgetPlacement: 'selector', widgetSelector: '.not-on-this-page' } }));
+  s = await spot(page);
+  check('selector: no match = below Add to Cart after waiting', s.parent === 'FORM' && s.prev === 'BUTTON' && s.shown === 'block', JSON.stringify(s));
+  await page.close();
+
+  ({ page } = await open({ condition: rule, extraHtml: desc, temp1: { widgetPlacement: 'selector', widgetSelector: '>>bad((' } }));
+  await page.waitForFunction(() => document.querySelector('ps-fbt-widget').parentElement.tagName === 'FORM', null, { timeout: 9000 }).catch(() => {});
+  s = await spot(page);
+  check('selector: an invalid selector never breaks the widget (falls back)', s.parent === 'FORM' && s.shown === 'block', JSON.stringify(s));
+  await page.close();
 }
 
 await browser.close();

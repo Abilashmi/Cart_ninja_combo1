@@ -54,6 +54,29 @@ export function excludedCollectionIds(prepaid) {
   return (cleanExcludedCollections(prepaid?.excludedCollections) || []).map((c) => COLLECTION_GID_RE.exec(c.id)[1]);
 }
 
+const PRODUCT_GID_RE = /^gid:\/\/shopify\/Product\/(\d+)$/;
+
+/** The excluded products, cleaned: [{ id: gid, title }], unique, at most PREPAID_EXCLUDE_MAX. */
+export function cleanExcludedProducts(list) {
+  if (!Array.isArray(list)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    const raw = typeof item === 'string' ? item : item?.id;
+    const id = /^\d+$/.test(String(raw ?? '')) ? `gid://shopify/Product/${raw}` : String(raw ?? '');
+    if (!PRODUCT_GID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, title: cleanText(typeof item === 'object' ? item?.title : '', '', 80) });
+    if (out.length >= PREPAID_EXCLUDE_MAX) break;
+  }
+  return out;
+}
+
+/** Numeric ids of the excluded products (the Function, the code and the storefront compare with them). */
+export function excludedProductIds(prepaid) {
+  return (cleanExcludedProducts(prepaid?.excludedProducts) || []).map((c) => PRODUCT_GID_RE.exec(c.id)[1]);
+}
+
 export const PREPAID_PERCENT_MIN = 1;
 export const PREPAID_PERCENT_MAX = 50;
 export const PAY_RADIUS_MAX = 24;
@@ -109,6 +132,8 @@ export const DEFAULT_PRODUCT_PAYMENT = Object.freeze({
     minNotMetText: 'Get {percent}% off on orders above {min}',
     // Products in these collections never get it: [{ id: 'gid://shopify/Collection/1', title }].
     excludedCollections: Object.freeze([]),
+    // These products never get it: [{ id: 'gid://shopify/Product/1', title }].
+    excludedProducts: Object.freeze([]),
   }),
   layout: Object.freeze({
     placement: 'before_purchase_buttons',
@@ -213,6 +238,7 @@ export function sanitizeProductPayment(patch, base = DEFAULT_PRODUCT_PAYMENT) {
     offerDescription: cleanText(pp.offerDescription ?? prepaid.offerDescription, '', L.offerDescription),
     minNotMetText: cleanText(pp.minNotMetText ?? prepaid.minNotMetText, '', L.minNotMetText),
     excludedCollections: cleanExcludedCollections(pp.excludedCollections) ?? cleanExcludedCollections(prepaid.excludedCollections) ?? [],
+    excludedProducts: cleanExcludedProducts(pp.excludedProducts) ?? cleanExcludedProducts(prepaid.excludedProducts) ?? [],
   };
 
   const layout = sub('layout');

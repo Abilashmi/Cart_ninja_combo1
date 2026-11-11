@@ -48,6 +48,36 @@ export const pxOrNull = (v, min, max) => {
   return v === '' || v === null || v === undefined || !Number.isFinite(n) ? null : Math.max(min, Math.min(max, Math.round(n)));
 };
 
+/**
+ * The layout the cart drawer's coupon cards really use: 'grid' (2 columns) only
+ * when the merchant picked Grid (`layoutPicked`), else 'carousel' (the
+ * sliding row). `layout` defaulted to 'grid' for years while the storefront
+ * always slid, so an unpicked 'grid' means the row every live store shows.
+ * Mirrored by cart_drawer_inline.js ccCouponLayout.
+ */
+export function drawerCouponLayout(cs) {
+  return cs && cs.layoutPicked === true && cs.layout === 'grid' ? 'grid' : 'carousel';
+}
+
+/**
+ * The cart drawer coupon design (Cart Editor template name) the storefront
+ * draws for saved coupon_data, read the way cart_drawer_inline.js does
+ * (`data.style || data.selectedStyle || TEMPLATE_STYLE_MAP[data.template] ||
+ * 'style-2'`). 'template1/2/3' are the Coupon Banner's names: they reached
+ * drawers through the shared coupon_slider_settings row, and the storefront
+ * draws them as style-1/2/3, so the editor must show the same.
+ */
+const DRAWER_STYLE_TEMPLATES = { 'style-1': 'minimal-card', 'style-2': 'bold-vibrant', 'style-3': 'classic-banner' };
+const DRAWER_TEMPLATE_STYLES = {
+  'minimal-card': 'style-1', 'bold-vibrant': 'style-2', 'classic-banner': 'style-3',
+  template1: 'style-1', template2: 'style-2', template3: 'style-3',
+};
+export function drawerCouponTemplate(cs) {
+  const d = cs || {};
+  const style = d.style || d.selectedStyle || DRAWER_TEMPLATE_STYLES[d.template] || 'style-2';
+  return DRAWER_STYLE_TEMPLATES[style] || 'bold-vibrant';
+}
+
 /** SVG markup for a built-in icon. */
 export function couponIconSvg(key, size, color) {
   const paths = COUPON_ICON_PATHS[key] || COUPON_ICON_PATHS.discount;

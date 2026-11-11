@@ -9,7 +9,7 @@ import { announcementMessages, clampInterval, cleanMessages, messagesFromConfig 
 import { withoutLegacyBarColors } from '../../app/utils/progress-bar-colors.shared.js';
 import { darken, fbtEffectiveColors, pickFbtExtras } from '../../app/utils/fbt-style.shared.js';
 import { getUnlockedRewards, getPreviewTotals, rewardBadgeText, rewardVariant } from '../../app/utils/preview-cart.js';
-import { COUPON_ICON_OPTIONS, COUPON_ICON_PATHS, couponIconSvg } from '../../app/utils/coupon-style.shared.js';
+import { COUPON_ICON_OPTIONS, COUPON_ICON_PATHS, couponIconSvg, drawerCouponLayout, drawerCouponTemplate } from '../../app/utils/coupon-style.shared.js';
 
 test('colour codes: #rgb and #rrggbb (with or without #) are valid and stored as #rrggbb', () => {
   for (const ok of ['#008060', '#FF5733', '#000000', '#abc', 'ABC', '008060', '  #fff  ']) assert.equal(isHexColor(ok), true, ok);
@@ -91,4 +91,28 @@ test('coupon icons: a ₹ (rupee) icon is offered and drawn as SVG paths, not te
   const svg = couponIconSvg('rupee', 18, '#008060');
   assert.match(svg, /fill="#008060"/);
   assert.doesNotMatch(svg, /₹|<text/);
+});
+
+test('cart drawer coupon layout: Grid only when picked, the storefront copy agrees', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../../extensions/cart-drawer/assets/cart_drawer_inline.js', import.meta.url), 'utf8');
+  const body = src.match(/function ccCouponLayout\(data\) \{([\s\S]*?)\n  \}/)[1];
+  const ccCouponLayout = new Function('data', body);
+  const cases = [undefined, {}, { layout: 'grid' }, { layout: 'grid', layoutPicked: true }, { layout: 'carousel', layoutPicked: true },
+    { layout: 'grid', layoutPicked: 'true' }, { layout: 'list', layoutPicked: true }];
+  assert.deepEqual(cases.map(drawerCouponLayout), ['carousel', 'carousel', 'carousel', 'grid', 'carousel', 'carousel', 'carousel']);
+  for (const c of cases) assert.equal(ccCouponLayout(c), drawerCouponLayout(c), JSON.stringify(c));
+});
+
+test('cart drawer coupon design: the editor reads saved data the way the storefront draws it', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../../extensions/cart-drawer/assets/cart_drawer_inline.js', import.meta.url), 'utf8');
+  const map = new Function(`return ${src.match(/const TEMPLATE_STYLE_MAP = (\{[\s\S]*?\});/)[1]}`)();
+  const expr = src.match(/const style = (data\.style \|\| data\.selectedStyle[\s\S]*?);/)[1];
+  const storefrontStyle = new Function('data', 'TEMPLATE_STYLE_MAP', `return ${expr};`);
+  const styleOf = { 'minimal-card': 'style-1', 'bold-vibrant': 'style-2', 'classic-banner': 'style-3' };
+  const cases = [{}, { template: 'classic-banner' }, { template: 'minimal-card' }, { template: 'bold-vibrant' },
+    { template: 'template1' }, { template: 'template2' }, { template: 'template3' }, { template: 'weird' },
+    { style: 'style-3', template: 'minimal-card' }, { selectedStyle: 'style-1' }];
+  for (const c of cases) assert.equal(styleOf[drawerCouponTemplate(c)], storefrontStyle(c, map), JSON.stringify(c));
+  // The Coupon Banner's 'template1' (silverline925.in's drawer) is Minimal Card on the storefront, so in the editor too.
+  assert.equal(drawerCouponTemplate({ template: 'template1', layout: 'list' }), 'minimal-card');
 });

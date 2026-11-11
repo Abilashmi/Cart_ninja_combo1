@@ -147,8 +147,10 @@ await page.evaluate(() => {
 });
 const drawerBtn = page.locator('#drawer-slot [data-brix-cod-btn]');
 check('drawer: disabled below the minimum, with the reason', await drawerBtn.isDisabled() && (await drawerBtn.textContent()).includes('299'));
-await page.evaluate(() => window.BrixCod.mountDrawerButton(document.getElementById('drawer-slot'), { cart: { items: [{ variant_id: 11, quantity: 1, final_line_price: 89900, properties: { _brix_pack_id: '3' } }] } }));
-check('drawer: disabled for Pack carts', await drawerBtn.isDisabled() && (await drawerBtn.textContent()).includes('Packs'));
+await page.evaluate(() => window.BrixCod.mountDrawerButton(document.getElementById('drawer-slot'), { cart: { items: [{ variant_id: 11, quantity: 2, final_line_price: 89900, properties: { _brix_pack_id: '3', _brix_pack_quantity: '2' } }] } }));
+check('drawer: a Pack cart can pay on delivery (the server gives the Pack price)', !(await drawerBtn.isDisabled()));
+await page.evaluate(() => window.BrixCod.mountDrawerButton(document.getElementById('drawer-slot'), { cart: { items: [{ variant_id: 11, quantity: 1, final_line_price: 89900, properties: {} }, { variant_id: 12, quantity: 1, final_line_price: 0, properties: { _brixReward: 'true' } }] } }));
+check('drawer: disabled for a free gift cart, with the reason', await drawerBtn.isDisabled() && (await drawerBtn.textContent()).includes('free gifts'), await drawerBtn.textContent());
 await page.evaluate(() => window.BrixCod.mountDrawerButton(document.getElementById('drawer-slot'), { cart: { items: [{ variant_id: 11, quantity: 1, final_line_price: 89900, properties: {} }] }, onPayOnline: () => { window.__paidOnline = true; }, onSuccess: (o) => { window.__success = o.orderName; } }));
 check('drawer: enabled for an eligible cart', !(await drawerBtn.isDisabled()));
 

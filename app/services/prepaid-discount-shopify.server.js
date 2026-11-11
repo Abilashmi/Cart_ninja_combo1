@@ -17,7 +17,7 @@
  * php_backend/cod_storefront.php), so shoppers are never promised a discount
  * Shopify won't give.
  */
-import { excludedCollectionIds, prepaidDiscountLive, prepaidShowOnly, prepaidUsable } from '../utils/product-payment.shared.js';
+import { excludedCollectionIds, excludedProductIds, prepaidDiscountLive, prepaidShowOnly, prepaidUsable } from '../utils/product-payment.shared.js';
 
 export const PREPAID_FUNCTION_HANDLE = 'brix-prepaid-discount';
 export const PREPAID_DISCOUNT_TITLE = 'BRIX Prepaid Discount';
@@ -63,6 +63,8 @@ export function buildPrepaidConfig(settings, { currencyCode = null, planLive = f
     title: live ? pp.prepaid.title : '',
     // Only when set, so a config without a cap is exactly what it was.
     ...(live && Number(pp.prepaid.maxDiscount) > 0 ? { maxDiscount: Number(pp.prepaid.maxDiscount) } : {}),
+    // Products left out one by one (numeric ids); only when set, like the cap.
+    ...(live && excludedProductIds(pp.prepaid).length ? { excludedProducts: excludedProductIds(pp.prepaid) } : {}),
   };
 }
 
@@ -90,12 +92,62 @@ async function findInstalledDiscount(admin) {
   return node ? { id: node.id, automaticDiscount: node.discount } : null;
 }
 
+/**
+ * Prepaid off (or show only, or locked by the plan): delete BRIX's automatic
+ * discount, so it is gone from the store's Discounts list too and can't give
+ * anything even if a config write failed. It is created again when switched
+ * back on. Never throws: { removed, failed }.
+ */
+async function removePrepaidDiscount(admin) {
+  try {
+    const existing = await findInstalledDiscount(admin);
+    if (!existing) return { removed: false, failed: false };
+    const data = await gql(admin, `#graphql
+      mutation PrepaidDiscountDelete($id: ID!) {
+        discountAutomaticDelete(id: $id) {
+          deletedAutomaticDiscountId
+          userErrors { field message }
+        }
+      }`, { id: existing.id });
+    const errors = data?.discountAutomaticDelete?.userErrors || [];
+    if (errors.length) throw new Error(errors[0].message);
+    return { removed: true, failed: false };
+  } catch (error) {
+    console.error('[prepaid-discount] could not delete the discount:', String(error?.message || error).slice(0, 300));
+    return { removed: false, failed: true };
+  }
+}
+
+/** Reactivate BRIX's discount. Returns its status afterwards (the old one if Shopify refused). */
+async function activatePrepaidDiscount(admin, id, oldStatus) {
+  try {
+    const data = await gql(admin, `#graphql
+      mutation PrepaidDiscountActivate($id: ID!) {
+        discountAutomaticActivate(id: $id) {
+          automaticDiscountNode { id automaticDiscount { ... on DiscountAutomaticApp { status } } }
+          userErrors { field message }
+        }
+      }`, { id });
+    const errors = data?.discountAutomaticActivate?.userErrors || [];
+    if (errors.length) throw new Error(errors[0].message);
+    return data?.discountAutomaticActivate?.automaticDiscountNode?.automaticDiscount?.status || oldStatus;
+  } catch (error) {
+    console.error('[prepaid-discount] could not reactivate the discount:', String(error?.message || error).slice(0, 300));
+    return oldStatus;
+  }
+}
+
 /** Create the automatic app discount that runs the Function, if it isn't there yet, and (re)write its input variables. */
 async function ensurePrepaidDiscount(admin, variables) {
   const existing = await findInstalledDiscount(admin);
   if (existing) {
     await writePrepaidVariables(admin, existing.id, variables);
-    return { created: false, status: existing.automaticDiscount.status };
+    const status = existing.automaticDiscount.status;
+    // Deactivated in Shopify → Discounts (e.g. to switch it off there): the
+    // BRIX switch is the one that counts, so switching prepaid on here makes
+    // BRIX's own discount active again.
+    if (status && status !== 'ACTIVE') return { created: false, status: await activatePrepaidDiscount(admin, existing.id, status) };
+    return { created: false, status };
   }
   const data = await gql(admin, `#graphql
     mutation PrepaidDiscountCreate($discount: DiscountAutomaticAppInput!) {
@@ -128,9 +180,9 @@ async function ensurePrepaidDiscount(admin, variables) {
 /** What the storefront may show: only a verified discount, with the numbers Shopify really has. */
 export function prepaidRuntime(result, config) {
   // Show only: the numbers the storefront shows; no discount of BRIX's.
-  if (result.showOnly) return { verified: false, showOnly: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() };
+  if (result.showOnly) return { verified: false, showOnly: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], excludedProducts: result.excludedProducts || [], state: result.state, at: new Date().toISOString() };
   return result.verified
-    ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], state: result.state, at: new Date().toISOString() }
+    ? { verified: true, percent: config.percent, minSubtotal: config.minSubtotal, maxDiscount: config.maxDiscount || 0, currency: config.currency, excludedCollections: result.excludedCollections || [], excludedProducts: result.excludedProducts || [], state: result.state, at: new Date().toISOString() }
     : { verified: false, state: result.state, at: new Date().toISOString() };
 }
 
@@ -147,6 +199,12 @@ export async function syncPrepaidDiscount(admin, settings, { currencyCode = null
   const config = buildPrepaidConfig(settings, { currencyCode, planLive });
   const wanted = Boolean(settings?.productPayment?.prepaid?.enabled && prepaidUsable(settings.productPayment));
   try {
+    // Off: the discount itself goes first, so a failed config write below
+    // can't leave the old one giving money off.
+    const removal = config.enabled ? null : await removePrepaidDiscount(admin);
+    const stillThere = removal?.failed
+      ? ` ${PREPAID_DISCOUNT_TITLE} could not be deleted from Shopify; it gives nothing now, and you can delete it in Shopify → Discounts.`
+      : '';
     await writePrepaidConfig(admin, config);
     if (!config.enabled) {
       // "Create the discount" off: BRIX's discount gives nothing (config
@@ -156,14 +214,14 @@ export async function syncPrepaidDiscount(admin, settings, { currencyCode = null
         const shown = { percent: Number(p.percent), minSubtotal: Number(p.minSubtotal) || 0, maxDiscount: Number(p.maxDiscount) || 0, currency: currencyCode, title: p.title };
         return {
           ok: true, verified: false, showOnly: true, state: 'show_only',
-          message: `Shoppers see the ${shown.percent}% prepaid price, but BRIX creates no discount: your checkout (e.g. Shiprocket) has to give it.`,
-          config: shown, excludedCollections: excludedCollectionIds(p),
+          message: `Shoppers see the ${shown.percent}% prepaid price, but BRIX creates no discount: your checkout (e.g. Shiprocket) has to give it.${stillThere}`,
+          config: shown, excludedCollections: excludedCollectionIds(p), excludedProducts: excludedProductIds(p),
         };
       }
       if (wanted && !planLive) {
-        return { ok: true, verified: false, state: 'plan_locked', message: 'The prepaid discount goes live for shoppers on the Starter or Pro plan.', config };
+        return { ok: true, verified: false, state: 'plan_locked', message: `The prepaid discount goes live for shoppers on the Starter or Pro plan.${stillThere}`, config };
       }
-      return { ok: true, verified: false, state: 'not_needed', message: 'The prepaid discount is off.', config };
+      return { ok: true, verified: false, state: 'not_needed', message: `The prepaid discount is off${removal?.removed ? ` and ${PREPAID_DISCOUNT_TITLE} was removed from Shopify` : ''}.${stillThere}`, config };
     }
     const variables = buildPrepaidVariables(settings);
     const discount = await ensurePrepaidDiscount(admin, variables);
@@ -172,8 +230,11 @@ export async function syncPrepaidDiscount(admin, settings, { currencyCode = null
     }
     // Numeric ids, for the storefront (cod_storefront.php) and the Shiprocket code.
     const excludedCollections = excludedCollectionIds(settings.productPayment.prepaid);
-    const left = excludedCollections.length ? ` Not on ${excludedCollections.length} excluded collection${excludedCollections.length === 1 ? '' : 's'}.` : '';
-    return { ok: true, verified: true, state: 'active', message: `The ${config.percent}% prepaid discount is active in Shopify checkout.${left}`, config, excludedCollections };
+    const excludedProducts = excludedProductIds(settings.productPayment.prepaid);
+    const plural = (n, word) => `${n} excluded ${word}${n === 1 ? '' : 's'}`;
+    const leftOut = [excludedProducts.length && plural(excludedProducts.length, 'product'), excludedCollections.length && plural(excludedCollections.length, 'collection')].filter(Boolean);
+    const left = leftOut.length ? ` Not on ${leftOut.join(' or ')}.` : '';
+    return { ok: true, verified: true, state: 'active', message: `The ${config.percent}% prepaid discount is active in Shopify checkout.${left}`, config, excludedCollections, excludedProducts };
   } catch (error) {
     if (error?.code === 'not_deployed') {
       return {

@@ -408,7 +408,12 @@ function createOfferLadder(){
    app calling /cart/add, change, update); only when a ladder uses auto-apply. */
 var LADDER=createOfferLadder();
 var _ladders=[],_ladderBusy=false,_ladderAgain=false,_ladderWatching=false,_ladderLastPut='';
-/* The theme's Add to cart button (placement, and ladders sized like it). */
+/* The theme's Add to cart button (placement, and ladders sized like it).
+   The first VISIBLE match wins, in this order (a hidden one, e.g. a sticky bar
+   or quick view earlier on the page, only when nothing visible matches): the
+   banner used to sit next to whatever matched first and vanish with it. The
+   last pattern is a submit button outside its form, tied to a /cart/add form
+   by form="..." (Silverline: <button type="submit" form="pdp-form">). */
 var ATC_SELECTORS=[
   '.product-form__submit',
   '.product__submit button[type="submit"]',
@@ -416,14 +421,26 @@ var ATC_SELECTORS=[
   '[name="add"]',
   '.btn--add-to-cart',
   '.product-form button[type="submit"]',
+  'button[type="submit"][form]',
   '.shopify-payment-button__button',
 ];
+function atcShown(b){
+  if(!b.getClientRects().length)return false;
+  return window.getComputedStyle(b).visibility!=='hidden';
+}
 function findAtcButton(){
+  var hidden=null;
   for(var i=0;i<ATC_SELECTORS.length;i++){
-    var b=document.querySelector(ATC_SELECTORS[i]);
-    if(b)return b;
+    var list=document.querySelectorAll(ATC_SELECTORS[i]);
+    for(var j=0;j<list.length;j++){
+      var b=list[j];
+      if(b.closest('ps-coupon-slider,ps-fbt-widget,#cc-root'))continue;
+      if(b.hasAttribute('form')&&!(b.form&&/\/cart\/add/.test(b.form.getAttribute('action')||'')))continue;
+      if(atcShown(b))return b;
+      if(!hidden)hidden=b;
+    }
   }
-  return null;
+  return hidden;
 }
 /* Width 'same as Add to cart' (the whole banner, or one offer ladder): the
    node takes the Add to cart button's width and left edge (a ladder also at
@@ -874,6 +891,8 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
     if(this._psInit)return;
     this._psInit=true;
     var el=this,shop=normalizeText(el.dataset.shop||(window.Shopify&&window.Shopify.shop));
+    // A product tagged no-coupon (any case) shows no Coupon Banner.
+    if(asArray(el.dataset.productTags).map(normalizeText).indexOf('no-coupon')!==-1){el.style.display='none';return;}
 
     function placeWidget(apiPlacement){
       var raw=apiPlacement||el.dataset.placement||'above_atc';

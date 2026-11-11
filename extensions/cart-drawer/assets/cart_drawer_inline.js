@@ -1424,7 +1424,7 @@
       enabled,
       style,
       position,
-      layout: data.layout || 'grid',
+      layout: ccCouponLayout(data),
       alignment: data.alignment || 'horizontal',
       // Card size in the scrolling row (px): width 100-360 (default 132),
       // min height 0-200 (0 = as tall as its text).
@@ -1463,6 +1463,10 @@
       sticky: coerceBoolean(data.sticky, false),
       position: data.position || 'bottom',
       direction,
+      // Layout "Slider (one product at a time)": a carousel of full-width
+      // list rows (picture, name + price, Add), one per slide. Saved as
+      // layout 'carousel' + listSlider, so an older script draws the carousel.
+      listSlider: layout === 'carousel' && coerceBoolean(data.listSlider, false),
       // Admin saves this as `showWhenEmpty` (see progress bar note above).
       showOnEmptyCart: coerceBoolean(data.showWhenEmpty ?? data.showOnEmptyCart ?? data.show_on_empty_cart, true),
       buttonText: ccUpsellButtonText(data.buttonText),
@@ -3083,6 +3087,33 @@
     renderDrawer();
   }
 
+  /* =================== UPSELL AUTO SLIDE (phones) =================== */
+
+  const CC_UPSELL_AUTO_MS = 3500;
+  const CC_UPSELL_PAUSE_MS = 6000;
+  function ccAutoSlideUpsell(list) {
+    if (!list || list._ccAuto) return;
+    const phone = window.matchMedia ? window.matchMedia('(max-width: 480px)') : null;
+    const still = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    let pausedUntil = 0;
+    const pause = () => { pausedUntil = Date.now() + CC_UPSELL_PAUSE_MS; };
+    list.addEventListener('pointerdown', pause, { passive: true });
+    list.addEventListener('touchstart', pause, { passive: true });
+    list.addEventListener('focusin', pause);
+    list._ccAuto = setInterval(() => {
+      if (!list.isConnected) { clearInterval(list._ccAuto); return; }
+      if (!phone || !phone.matches || (still && still.matches) || document.hidden || Date.now() < pausedUntil) return;
+      const overlay = document.getElementById('cc-overlay');
+      if (!overlay || !overlay.classList.contains('active')) return; // drawer closed
+      const max = list.scrollWidth - list.clientWidth;
+      if (max <= 5) return;
+      const card = list.querySelector('.cc-upsell-card');
+      const step = card ? card.getBoundingClientRect().width + (parseFloat(getComputedStyle(list).columnGap) || 0) : list.clientWidth;
+      const next = list.scrollLeft + step > max + 5 ? 0 : list.scrollLeft + step;
+      list.scrollTo({ left: next, behavior: 'smooth' });
+    }, CC_UPSELL_AUTO_MS);
+  }
+
   /* =================== SCROLL HELPERS =================== */
 
   function ccScrollContainer(containerId, direction) {
@@ -4433,6 +4464,7 @@
       ccRefreshCheckoutTags();
     }
 
+    if (upsell && upsell.enabled) ccInitUpsellList(upsell);
     startCountdownTicker();
     startCouponTimers();
     startAnnouncementRotator();
@@ -4477,7 +4509,17 @@
     if (stickyUpsell && listBody) {
       const ucs = getComputedStyle(listBody);
       if (stickyUpsell.style.top) stickyUpsell.style.top = -parseFloat(ucs.paddingTop || 0) + 'px';
-      if (stickyUpsell.style.bottom) stickyUpsell.style.bottom = -parseFloat(ucs.paddingBottom || 0) + 'px';
+      if (stickyUpsell.style.bottom) {
+        const pb = parseFloat(ucs.paddingBottom || 0);
+        stickyUpsell.style.bottom = -pb + 'px';
+        // Last thing in the list (nothing with a later CSS order, e.g. a bottom
+        // progress bar or coupons): cover the bottom padding so it meets the footer.
+        const ord = (el) => parseInt(getComputedStyle(el).order, 10) || 0;
+        const kids = Array.prototype.filter.call(listBody.children, (c) => getComputedStyle(c).display !== 'none');
+        const at = kids.indexOf(stickyUpsell), o = ord(stickyUpsell);
+        const last = kids.every((c, k) => c === stickyUpsell || ord(c) < o || (ord(c) === o && k < at));
+        stickyUpsell.style.marginBottom = last ? -pb + 'px' : '';
+      }
     }
     // The banner picture's shape, for the next draw (ccLearnBannerRatio).
     const bannerImg = document.querySelector('#cc-drawer #cc-image-banner img');
@@ -4719,12 +4761,20 @@
 
   /* =================== COUPON SECTION RENDERER =================== */
 
+  // Grid (2 columns) only when the merchant picked it in the Cart Editor
+  // (layoutPicked); `layout` used to default to 'grid' while the drawer always
+  // slid, so an unpicked 'grid' keeps the sliding row. Same rule as
+  // app/utils/coupon-style.shared.js drawerCouponLayout.
+  function ccCouponLayout(data) {
+    return data && data.layoutPicked === true && data.layout === 'grid' ? 'grid' : 'carousel';
+  }
+
   function renderCouponSection(couponConfig, cartTotal) {
     const selectedIds = couponConfig.selectedActiveCoupons || [];
     const overrides = couponConfig.couponOverrides || {};
     const savedDetails = couponConfig.allCouponDetails || [];
     const style = couponConfig.style || 'style-2';
-    const layout = couponConfig.layout || 'grid';
+    const layout = couponConfig.layout === 'grid' ? 'grid' : 'carousel';
     const alignment = couponConfig.alignment || 'horizontal';
 
     const title = couponConfig.title || {};
@@ -4835,21 +4885,27 @@
 
     if (couponsToShow.length === 0) return '';
 
-    /* -- Coupon list is a horizontal carousel with nav arrows, unless   -- */
-    /* -- there's only one coupon: then there is nothing to slide, so no  -- */
-    /* -- arrows, and the one coupon fills the full width (wide card).    -- */
+    /* -- Coupon list is a horizontal carousel with nav arrows, or a     -- */
+    /* -- 2-column grid (no arrows, cards fill their column) when the     -- */
+    /* -- merchant picked Grid. One coupon: nothing to slide, so no       -- */
+    /* -- arrows, and it fills the full width (wide card).                -- */
     const isSingleCoupon = couponsToShow.length === 1;
+    const isGrid = !isSingleCoupon && layout === 'grid';
     const couponListStyle = isSingleCoupon
       ? 'display:flex;flex-direction:row;padding:0 0 4px 0;'
-      : 'display:flex;flex-direction:row;align-items:stretch;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
+      : isGrid
+        ? 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:8px;padding:0 0 4px 0;'
+        : 'display:flex;flex-direction:row;align-items:stretch;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 20px 4px;';
     // Merchant's card size. Cards grow with their text (min-height, never a
     // fixed height) and long labels wrap instead of being cut off; on phones
     // a card is never wider than 85% of the screen.
     const cardW = couponConfig.cardWidth || 132;
     const cardMinH = couponConfig.cardMinHeight || 0;
-    const cardSize = `width:${cardW}px;max-width:85vw;${cardMinH ? `min-height:${cardMinH}px;` : ''}`;
+    const cardSize = isGrid
+      ? `width:auto;min-width:0;${cardMinH ? `min-height:${cardMinH}px;` : ''}`
+      : `width:${cardW}px;max-width:85vw;${cardMinH ? `min-height:${cardMinH}px;` : ''}`;
     const wrapText = 'white-space:normal;overflow-wrap:anywhere;word-break:break-word;';
-    const couponNavHtml = isSingleCoupon ? '' : `
+    const couponNavHtml = isSingleCoupon || isGrid ? '' : `
     <div style="display:flex;gap:6px;">
       <button class="cc-nav-btn" onclick="ccCouponNav('left')" title="${escapeHtml(bxT('storefront.coupon.previous', 'Previous coupon'))}">←</button>
       <button class="cc-nav-btn" onclick="ccCouponNav('right')" title="${escapeHtml(bxT('storefront.coupon.next', 'Next coupon'))}">→</button>
@@ -4860,7 +4916,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
     <p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p>${couponNavHtml}
   </div>
-  <div id="cc-coupon-list" class="cc-hide-scrollbar" style="${couponListStyle}">
+  <div id="cc-coupon-list" class="cc-hide-scrollbar${isGrid ? ' cc-coupon-list--grid' : ''}" style="${couponListStyle}">
 `;
 
     // Compact per-card countdown strip (cards are only 132px wide, so this is
@@ -5023,6 +5079,26 @@
   // drawer opens with the last one drawn and redraws once it is.
   const _ccUpsellSections = {};
   let _ccLastUpsellHtml = '';
+  // The drawer is showing the last picks (for an older cart) while this
+  // cart's are still loading.
+  let _ccUpsellStale = false;
+
+  // The last picks, drawn for an older cart, minus the products now in this
+  // cart (unless the merchant shows those): the product just added from its
+  // product page stayed on offer in the drawer (pabra).
+  function ccUpsellWithoutCartProducts(html, cart, upsellConfig) {
+    if (!html || upsellConfig.showIfInCart) return html;
+    const inCart = new Set((cart.items || []).map((it) => String(it.product_id)));
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    let left = 0;
+    box.querySelectorAll('.cc-upsell-card').forEach((card) => {
+      if (inCart.has(card.getAttribute('data-cc-product'))) card.remove();
+      else left++;
+    });
+    return left ? box.innerHTML : '';
+  }
+
   function ccUpsellHtmlFor(cart, upsellConfig, seq) {
     const key = upsellConfig.position + '|' + Array.from(new Set((cart.items || []).map((it) => String(it.product_id)))).sort().join(',');
     let entry = _ccUpsellSections[key];
@@ -5033,7 +5109,10 @@
         .then((html) => { entry.html = html || ''; return entry.html; });
       _ccUpsellSections[key] = entry;
     }
-    if (entry.html !== null) return Promise.resolve(_ccLastUpsellHtml = entry.html);
+    if (entry.html !== null) {
+      _ccUpsellStale = false;
+      return Promise.resolve(_ccLastUpsellHtml = entry.html);
+    }
     // Opening: the drawer comes first and the picks follow. Already open (an
     // upsell ADD, a quantity change): wait a little longer for them, so the
     // drawer is redrawn once, not once with the old picks and again with the
@@ -5041,12 +5120,21 @@
     const openNow = document.getElementById('cc-overlay');
     const wait = openNow && openNow.classList.contains('active') ? 600 : 150;
     return Promise.race([entry.job, new Promise((r) => setTimeout(() => r(null), wait))]).then((html) => {
-      if (html !== null) return (_ccLastUpsellHtml = html);
+      if (html !== null) {
+        _ccUpsellStale = false;
+        return (_ccLastUpsellHtml = html);
+      }
       entry.job.then(() => {
         const overlay = document.getElementById('cc-overlay');
-        if (seq === _ccRenderSeq && overlay && overlay.classList.contains('active')) renderDrawer({ cart: cart });
+        if (!overlay || !overlay.classList.contains('active')) return;
+        if (seq === _ccRenderSeq) renderDrawer({ cart: cart });
+        // A later draw (an add opens the drawer more than once) also showed
+        // the old picks and is now outdated itself: draw the cart as it is.
+        // Only this check was there, so the old picks stayed for good.
+        else if (_ccUpsellStale) renderDrawer();
       });
-      return _ccLastUpsellHtml;
+      _ccUpsellStale = true;
+      return ccUpsellWithoutCartProducts(_ccLastUpsellHtml, cart, upsellConfig);
     });
   }
 
@@ -5071,6 +5159,107 @@
     };
     if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 2500 });
     else setTimeout(run, 1200);
+  }
+
+  /**
+   * The upsell carousel's arrows, mouse drag, keyboard and phone auto-slide,
+   * set up on every drawer draw. They were set up once, 100 ms after a list
+   * was first built: the drawer reuses a built list (kept per cart), so the
+   * next draws had no arrows until an add built a new one, and a list built
+   * while the drawer was closed measured no width and hid them (pabra).
+   */
+  function ccInitUpsellList(upsellConfig) {
+    const list = document.getElementById('cc-upsell-list');
+    if (!list || list._ccReady || list.getAttribute('data-cc-carousel') !== '1') return;
+    list._ccReady = true;
+
+    // Keyboard navigation — the list itself is the focusable, scrollable region.
+    list.setAttribute('tabindex', '0');
+    list.setAttribute('role', 'region');
+    list.setAttribute('aria-label', bxT('storefront.upsell.list_label', '{title}, scroll for more', { title: ccUpsellTitle(upsellConfig.upsellTitle.text) }));
+    list.addEventListener('keydown', (e) => {
+      if (e.target && e.target.closest && e.target.closest('select')) return; // the variant dropdown uses arrow keys
+      if (e.key === 'ArrowRight') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'right'); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'left'); }
+    });
+
+    // Mouse drag-to-scroll (touch swipe already works natively via overflow-x).
+    // Capture the pointer only once real drag movement is detected, not
+    // on every pointerdown — calling setPointerCapture immediately (the
+    // previous behavior) retargets the eventual click event to `list`
+    // instead of whatever was actually pressed, which silently ate every
+    // "Add" button click made with a mouse (desktop) while leaving touch
+    // untouched (it bails out above), matching "works on mobile, not
+    // desktop". A small movement threshold before engaging drag mode is
+    // the standard fix used by carousel/slider libraries for exactly
+    // this click-vs-drag conflict.
+    const DRAG_THRESHOLD_PX = 5;
+    let isDown = false;
+    let hasDragged = false;
+    let startX = 0;
+    let startScroll = 0;
+    let dragPointerId = null;
+    list.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'touch') return;
+      if (e.target && e.target.closest && e.target.closest('select')) return; // opening the variant dropdown
+      isDown = true;
+      hasDragged = false;
+      startX = e.clientX;
+      startScroll = list.scrollLeft;
+      dragPointerId = e.pointerId;
+    });
+    list.addEventListener('pointermove', (e) => {
+      if (!isDown) return;
+      const delta = e.clientX - startX;
+      if (!hasDragged) {
+        if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
+        hasDragged = true;
+        list.setPointerCapture(dragPointerId);
+        list.classList.add('cc-dragging');
+      }
+      list.scrollLeft = startScroll - delta;
+    });
+    const endDrag = () => {
+      isDown = false;
+      if (hasDragged && dragPointerId != null) {
+        // Intentionally ignored: the pointer may already be released
+        // (e.g. pointercancel fired first), which throws harmlessly.
+        try { list.releasePointerCapture(dragPointerId); } catch (e) { /* noop */ }
+      }
+      hasDragged = false;
+      list.classList.remove('cc-dragging');
+    };
+    list.addEventListener('pointerup', endDrag);
+    list.addEventListener('pointercancel', endDrag);
+
+    const leftBtn = document.getElementById('upsell-nav-left');
+    const rightBtn = document.getElementById('upsell-nav-right');
+    if (leftBtn && rightBtn) {
+
+      const updateArrows = () => {
+        const maxLeft = list.scrollWidth - list.clientWidth;
+        if (maxLeft <= 5) {
+          leftBtn.style.display = 'none';
+          rightBtn.style.display = 'none';
+          return;
+        }
+        leftBtn.style.display = list.scrollLeft > 5 ? 'flex' : 'none';
+        rightBtn.style.display = list.scrollLeft < maxLeft - 5 ? 'flex' : 'none';
+      };
+
+      list.addEventListener('scroll', updateArrows);
+      // Any size change (the drawer drawn while still closed, then opened; the
+      // window resized; pictures loading) shows or hides them again.
+      if (window.ResizeObserver) new ResizeObserver(updateArrows).observe(list);
+      else window.addEventListener('resize', updateArrows);
+      updateArrows();
+    }
+
+    // Slider on phones: no arrows (CSS), so it moves on its own, one
+    // product every CC_UPSELL_AUTO_MS, back to the first after the last.
+    // A touch pauses it for a while; reduced motion = never. Stops once
+    // this list is gone (every redraw builds a new one).
+    if (list.getAttribute('data-cc-slider') === '1' && list.querySelectorAll('.cc-upsell-card').length >= 2) ccAutoSlideUpsell(list);
   }
 
   async function renderUpsellSectionAsync(cart, upsellConfig) {
@@ -5214,6 +5403,7 @@
     const isVertical = dir === 'vertical';
     const isCarousel = layout === 'carousel';
     const isGrid = layout === 'grid';
+    const isListSlider = isCarousel && upsellConfig.listSlider === true;
     const showUpsellNav = upsellProducts.length >= 2 && isCarousel;
 
     const navPrevSymbol = '←';
@@ -5235,14 +5425,17 @@
       // a vertically-stacked full-width list doesn't read as a carousel.
       // "direction" now only changes card width/density (see card markup
       // below), not the scroll axis.
-      listStyle += `flex-direction: row; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; cursor: grab;`;
+      listStyle += `flex-direction: row; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x ${isListSlider ? 'mandatory' : 'proximity'}; cursor: grab;`;
     }
 
     // Sticky: pinned to the top / bottom of the scrolling list, like the
     // progress bar (the offset past the list's padding is set after the draw).
     const upsellAtTop = upsellConfig.position === 'top';
+    // Sticky at the bottom also sits right on the footer when the cart is
+    // short (margin-top:auto takes the free space above it; the list's bottom
+    // padding is covered after the draw), not after the items with a gap.
     const stickyCss = upsellConfig.sticky
-      ? `position:sticky;${upsellAtTop ? 'top' : 'bottom'}:0;z-index:5;box-shadow:0 ${upsellAtTop ? '6px' : '-6px'} 8px -8px rgba(15,23,42,.25);`
+      ? `position:sticky;${upsellAtTop ? 'top' : 'bottom'}:0;z-index:5;box-shadow:0 ${upsellAtTop ? '6px' : '-6px'} 8px -8px rgba(15,23,42,.25);${upsellAtTop ? '' : 'margin-top:auto;'}`
       : '';
     // The ‹ › arrows sit on the left and right edges of the card row (not in
     // the title's corner), shown only on the side that still has cards to scroll to.
@@ -5253,13 +5446,13 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <p style="margin:0;flex:1;min-width:0;text-align:${upsellConfig.upsellTitle.align || 'left'};${titleStyle}">${escapeHtml(ccUpsellTitle(upsellConfig.upsellTitle.text))}</p>
   </div>
-  <div class="cc-upsell-track" style="position:relative;">
+  <div class="cc-upsell-track${isListSlider ? ' cc-upsell-track--slider' : ''}" style="position:relative;${isListSlider && showUpsellNav ? 'padding:0 28px;' : ''}">
   ${showUpsellNav
-        ? `<button type="button" id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="${navPrevTitle}" aria-label="${navPrevTitle}" style="${navBtnCss}left:-12px;">${navPrevSymbol}</button>
-  <button type="button" id="upsell-nav-right" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','right')" title="${navNextTitle}" aria-label="${navNextTitle}" style="${navBtnCss}right:-12px;">${navNextSymbol}</button>`
+        ? `<button type="button" id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="${navPrevTitle}" aria-label="${navPrevTitle}" style="${navBtnCss}left:${isListSlider ? '-6px' : '-12px'};">${navPrevSymbol}</button>
+  <button type="button" id="upsell-nav-right" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','right')" title="${navNextTitle}" aria-label="${navNextTitle}" style="${navBtnCss}right:${isListSlider ? '-6px' : '-12px'};">${navNextSymbol}</button>`
         : ''
       }
-  <div class="cc-hide-scrollbar" style="${listStyle}" id="cc-upsell-list">
+  <div class="cc-hide-scrollbar" style="${listStyle}" id="cc-upsell-list"${isCarousel ? ' data-cc-carousel="1"' : ''}${isListSlider ? ' data-cc-slider="1"' : ''}>
 `;
 
     upsellProducts.forEach((productId) => {
@@ -5311,11 +5504,31 @@
       const safeHandle = (detail.handle || '').replace(/[^a-z0-9-]/g, '');
       const variantSelect = ccUpsellVariantSelect(detail);
 
-      if (isGrid) {
+      if (isListSlider) {
+        // LIST SLIDER ROW: one full-width row per slide (picture left, name,
+        // price and size in the middle, Add on the right); the ← → arrows sit
+        // outside it in the track's side padding. Mirrored by CartPreview.jsx.
+        html += `
+          <div data-cc-product="${escapeHtml(String(productId))}" class="cc-upsell-card cc-upsell-card--row" style="flex:0 0 100%;width:100%;min-width:0;scroll-snap-align:start;display:flex;align-items:center;gap:12px;padding:10px 12px;background:#fff;border:1px solid #e1e3e5;border-radius:12px;box-sizing:border-box;">
+            <div style="width:64px;height:64px;flex-shrink:0;border-radius:8px;background:#f1f2f3;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+              ${imageHtml}
+            </div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;">
+              <p style="margin:0;font-size:13px;font-weight:600;color:${upTitleColor};line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escapeHtml(title)}</p>
+              <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;">
+                <span class="cc-upsell-price" style="font-size:13px;font-weight:800;color:${upPriceColor};">${priceText}</span>
+                <span class="cc-upsell-compare" style="font-size:11px;color:#94a3b8;text-decoration:line-through;"${compareAtText ? '' : ' hidden'}>${compareAtText}</span>
+              </div>
+              ${variantSelect}
+            </div>
+            <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="flex-shrink:0;padding:8px 14px;font-size:12px;font-weight:700;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;background:${addBtnBg};color:${addBtnFg};">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
+          </div>
+        `;
+      } else if (isGrid) {
         // GRID CARD: Always Square Design (Image on Top, Content Below)
         const gridCardStyle = '';
         html += `
-          <div class="cc-upsell-card cc-layout-grid" style="${gridCardStyle}">
+          <div data-cc-product="${escapeHtml(String(productId))}" class="cc-upsell-card cc-layout-grid" style="${gridCardStyle}">
             <div class="cc-upsell-image-wrapper">
               ${imageHtml}
             </div>
@@ -5335,7 +5548,7 @@
         // centered title/price, spacer, pill button pinned to the bottom)
         // in a horizontally-scrolling, snap-aligned carousel row.
         html += `
-          <div class="cc-upsell-card cc-upsell-card--v">
+          <div data-cc-product="${escapeHtml(String(productId))}" class="cc-upsell-card cc-upsell-card--v">
             <div class="cc-upsell-v-image">
               ${imageHtml}
             </div>
@@ -5354,7 +5567,7 @@
         // below) in a horizontal scroll — matches the editor preview so more
         // products are visible at once.
         html += `
-          <div class="cc-upsell-card" style="min-width:150px;max-width:150px;flex-shrink:0;scroll-snap-align:start;display:flex;flex-direction:column;border:1px solid #e1e3e5;border-radius:8px;overflow:hidden;background:#fff;">
+          <div data-cc-product="${escapeHtml(String(productId))}" class="cc-upsell-card" style="min-width:150px;max-width:150px;flex-shrink:0;scroll-snap-align:start;display:flex;flex-direction:column;border:1px solid #e1e3e5;border-radius:8px;overflow:hidden;background:#fff;">
             <div style="width:90px;height:90px;margin:12px auto 0;background:#f1f2f3;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;">
               ${imageHtml}
             </div>
@@ -5371,92 +5584,6 @@
 
     html += `</div></div></div>`;
 
-    if (isCarousel) {
-      setTimeout(() => {
-        const list = document.getElementById('cc-upsell-list');
-        if (!list) return;
-
-        // Keyboard navigation — the list itself is the focusable, scrollable region.
-        list.setAttribute('tabindex', '0');
-        list.setAttribute('role', 'region');
-        list.setAttribute('aria-label', bxT('storefront.upsell.list_label', '{title}, scroll for more', { title: ccUpsellTitle(upsellConfig.upsellTitle.text) }));
-        list.addEventListener('keydown', (e) => {
-          if (e.target && e.target.closest && e.target.closest('select')) return; // the variant dropdown uses arrow keys
-          if (e.key === 'ArrowRight') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'right'); }
-          else if (e.key === 'ArrowLeft') { e.preventDefault(); ccScrollContainer('cc-upsell-list', 'left'); }
-        });
-
-        // Mouse drag-to-scroll (touch swipe already works natively via overflow-x).
-        // Capture the pointer only once real drag movement is detected, not
-        // on every pointerdown — calling setPointerCapture immediately (the
-        // previous behavior) retargets the eventual click event to `list`
-        // instead of whatever was actually pressed, which silently ate every
-        // "Add" button click made with a mouse (desktop) while leaving touch
-        // untouched (it bails out above), matching "works on mobile, not
-        // desktop". A small movement threshold before engaging drag mode is
-        // the standard fix used by carousel/slider libraries for exactly
-        // this click-vs-drag conflict.
-        const DRAG_THRESHOLD_PX = 5;
-        let isDown = false;
-        let hasDragged = false;
-        let startX = 0;
-        let startScroll = 0;
-        let dragPointerId = null;
-        list.addEventListener('pointerdown', (e) => {
-          if (e.pointerType === 'touch') return;
-          if (e.target && e.target.closest && e.target.closest('select')) return; // opening the variant dropdown
-          isDown = true;
-          hasDragged = false;
-          startX = e.clientX;
-          startScroll = list.scrollLeft;
-          dragPointerId = e.pointerId;
-        });
-        list.addEventListener('pointermove', (e) => {
-          if (!isDown) return;
-          const delta = e.clientX - startX;
-          if (!hasDragged) {
-            if (Math.abs(delta) < DRAG_THRESHOLD_PX) return;
-            hasDragged = true;
-            list.setPointerCapture(dragPointerId);
-            list.classList.add('cc-dragging');
-          }
-          list.scrollLeft = startScroll - delta;
-        });
-        const endDrag = () => {
-          isDown = false;
-          if (hasDragged && dragPointerId != null) {
-            // Intentionally ignored: the pointer may already be released
-            // (e.g. pointercancel fired first), which throws harmlessly.
-            try { list.releasePointerCapture(dragPointerId); } catch (e) { /* noop */ }
-          }
-          hasDragged = false;
-          list.classList.remove('cc-dragging');
-        };
-        list.addEventListener('pointerup', endDrag);
-        list.addEventListener('pointercancel', endDrag);
-
-        if (showUpsellNav) {
-          const leftBtn = document.getElementById('upsell-nav-left');
-          const rightBtn = document.getElementById('upsell-nav-right');
-          if (!leftBtn || !rightBtn) return;
-
-          const updateArrows = () => {
-            const maxLeft = list.scrollWidth - list.clientWidth;
-            if (maxLeft <= 5) {
-              leftBtn.style.display = 'none';
-              rightBtn.style.display = 'none';
-              return;
-            }
-            leftBtn.style.display = list.scrollLeft > 5 ? 'flex' : 'none';
-            rightBtn.style.display = list.scrollLeft < maxLeft - 5 ? 'flex' : 'none';
-          };
-
-          list.addEventListener('scroll', updateArrows);
-          window.addEventListener('resize', updateArrows);
-          updateArrows();
-        }
-      }, 100);
-    }
 
     return html;
   }
@@ -5534,10 +5661,25 @@
     return false;
   }
 
+  // The Add button a press started on. A phone's tap is hit-tested where the
+  // finger lifts: if the list slid under it meanwhile (an auto-slide already
+  // moving, a swipe) or the drawer was redrawn, the click lands on another
+  // card's Add and added that product instead ("adds another product", pabra).
+  var _ccPressBtn = null;
+  var _ccPressAt = 0;
+  document.addEventListener('pointerdown', function (e) {
+    _ccPressBtn = e.target && e.target.closest ? e.target.closest('.cc-add-btn') : null;
+    _ccPressAt = Date.now();
+  }, true);
+
   // Delegated click listener for upsell "Add to Cart" buttons
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('.cc-add-btn');
     if (!btn) return;
+    // A press that started anywhere but on this very button (another card,
+    // or the same spot before a redraw) adds nothing; the shopper taps again.
+    // Keyboard presses have no pointerdown, so they always count.
+    if (Date.now() - _ccPressAt < 2000 && _ccPressBtn !== btn) return;
 
     var id = btn.getAttribute('data-cc-id') || '';
     var handle = btn.getAttribute('data-cc-handle') || '';

@@ -109,7 +109,9 @@ export const defaultCartEditorState = {
       enabled: false,
       template: 'classic-banner',
       position: 'top',
-      layout: 'grid',
+      // 'grid' counts only with layoutPicked (utils/coupon-style.shared.js drawerCouponLayout).
+      layout: 'carousel',
+      layoutPicked: false,
       alignment: 'horizontal',
       singleCouponAlignment: 'left',
       showWhenEmpty: false,
@@ -139,6 +141,8 @@ export const defaultCartEditorState = {
       position: 'bottom',
       direction: 'horizontal',
       layout: 'carousel',
+      // Slider (one product at a time): list rows, one per slide (layout stays 'carousel').
+      listSlider: false,
       limit: 3,
       showReviews: false,
       showIfInCart: false,
@@ -179,6 +183,8 @@ export const defaultCartEditorState = {
   },
   footer: {
     checkoutButton: {
+      // "Checkout opens": shopify | shiprocket (shop_integrations.shiprocket_enabled, saved by /api/checkout-via).
+      checkoutVia: 'shopify',
       text: 'Checkout',
       footerText: 'Shipping and taxes calculated at checkout',
       bgColor: '#000000',

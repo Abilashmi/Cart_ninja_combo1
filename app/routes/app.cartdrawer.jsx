@@ -1,3 +1,4 @@
+import { isShiprocketEnabled } from '../services/shop-integrations.server';
 import { authenticate } from '../shopify.server';
 import CartEditorPage from '../components/CartEditorPage';
 import { fetchCartDrawerRecord, persistCartDrawerRecord, truthyFlag } from '../services/cart-drawer-record.server';
@@ -143,6 +144,8 @@ export const loader = async ({ request }) => {
     pbRecord: pbRecord ?? null,
     csRecord: csRecord ?? null,
     upsellRecord: upsellRecord ?? null,
+    // Cart Editor → Checkout Button → "Checkout opens" (never throws: off on a DB hiccup).
+    shiprocketEnabled: await isShiprocketEnabled(shop),
     shop,
   };
 };

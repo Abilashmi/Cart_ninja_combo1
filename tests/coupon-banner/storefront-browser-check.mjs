@@ -13,7 +13,7 @@ import process from 'node:process';
 
 const snippet = fs.readFileSync(path.join(process.cwd(), 'extensions', 'cart-drawer', 'snippets', 'coupon-slider-render.liquid'), 'utf8');
 const [, ...rest] = snippet.split('\n');
-const element = '<ps-coupon-slider id="ps-coupon-slider-b1" data-shop="demo.myshopify.com" data-product-handle="tee" data-collection-handles="" data-product-tags="" data-placement="custom" data-design-mode="false" style="display:none"><div>Loading coupons...</div></ps-coupon-slider>';
+let element = '<ps-coupon-slider id="ps-coupon-slider-b1" data-shop="demo.myshopify.com" data-product-handle="tee" data-collection-handles="" data-product-tags="" data-placement="custom" data-design-mode="false" style="display:none"><div>Loading coupons...</div></ps-coupon-slider>';
 assert.doesNotMatch(rest.join('\n'), /\{\{|\{%/, 'only the first line of the snippet uses Liquid');
 
 const config = {
@@ -48,6 +48,16 @@ const codes = await page.locator('ps-coupon-slider .ps-btn[data-code]').evaluate
 assert.deepEqual(codes, ['SHIPROCKET10', 'SAVE10', '2024'], 'custom + store codes in saved order; numeric-only custom code kept as-is');
 assert.doesNotMatch(await page.locator('ps-coupon-slider').evaluate((el) => el.innerHTML), /custom:/, 'the internal id prefix never reaches shoppers');
 console.log('  ✓ storefront renders custom + store coupons from the same saved config (incl. numeric-only code)');
+
+// A product tagged no-coupon (the snippet lowercases the tags) shows no banner.
+const plainElement = element;
+element = element.replace('data-product-tags=""', 'data-product-tags="sale,no-coupon"');
+await page.goto('http://shop.test/products/tee');
+await page.waitForTimeout(1500);
+const tagged = await page.evaluate(() => ({ cards: document.querySelectorAll('ps-coupon-slider .ps-card').length, display: document.querySelector('ps-coupon-slider').style.display }));
+assert.deepEqual(tagged, { cards: 0, display: 'none' }, 'no-coupon product: no banner ' + JSON.stringify(tagged));
+element = plainElement;
+console.log('  ✓ a product tagged no-coupon shows no Coupon Banner');
 
 // Text offers ("text:<id>"): heading + subtext only, no code, no Copy button,
 // on every template; merchant text is escaped.
@@ -253,4 +263,40 @@ assert.ok(before > 1000, `banner is far down the page (${before})`);
 assert.equal(after.y, before, 'Copy keeps the page where it was');
 assert.equal(after.text, 'Copied!');
 console.log('  ✓ Copy keeps the page where it was (no jump to the top)');
+
+// "Above Add to cart" on a theme whose button sits outside its form, tied to a
+// hidden /cart/add form by form="..." (Silverline by Gopi Jewels), with a
+// hidden sticky Add to cart earlier on the page. The banner used to match none
+// of its patterns and stay at the end of the page.
+config.data = {
+  is_enabled: 1, widgetPlacement: 'above_cart', selectedTemplate: 'template1', layout: 'list',
+  selectedCouponsGlobal: ['custom:WELCOME5'],
+  temp1CouponStyle: { 'custom:WELCOME5': { couponCode: 'WELCOME5', headingText: 'Get 5% off', subtextText: 'For Your First Silver Jewel' } },
+  temp1CouponCondition: [],
+};
+await page.setViewportSize({ width: 1000, height: 800 });
+pageAtc = '<div class="sticky-atc" style="display:none"><form action="/cart/add"><button type="submit" name="add">Add to cart</button></form></div>'
+  + '<div class="pdp__details"><h1>Anklet</h1><div class="pdp__buy" data-atc-anchor=""><span class="stockpill">In stock</span>'
+  + '<div class="pdp__buy-row"><div class="qty"><input type="number" name="quantity" value="1" form="pdp-form"></div>'
+  + '<button class="btn btn--solid" type="submit" form="pdp-form">Add to cart</button></div>'
+  + '<form method="post" action="/cart/add" id="product-form-installment"><div class="shiprocket-headless"><button type="button" class="sr-headless-checkout">BUY NOW</button></div></form>'
+  + '<button class="btn btn--accent" type="button" data-buy-now="">Buy it now</button></div>'
+  + '<form method="post" action="/cart/add" id="pdp-form" hidden><input type="hidden" name="id" value="1"></form>'
+  + '<div style="height:1200px">Description</div></div>';
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 1, null, { timeout: 10000 });
+const spot = await page.evaluate(() => {
+  const el = document.querySelector('ps-coupon-slider');
+  const atc = document.querySelector('.pdp__buy-row .btn--solid');
+  return { next: el.nextElementSibling && el.nextElementSibling.className, parent: el.parentElement.className,
+    visible: el.getClientRects().length > 0 && el.getBoundingClientRect().height > 0,
+    above: el.getBoundingClientRect().bottom <= atc.getBoundingClientRect().top + 1 };
+});
+assert.deepEqual(spot, { next: 'pdp__buy-row', parent: 'pdp__buy', visible: true, above: true }, 'banner right above the visible Add to cart row ' + JSON.stringify(spot));
+// A submit button tied to a form that isn't /cart/add (newsletter) is never taken for Add to cart.
+pageAtc = '<button type="submit" form="news">Subscribe</button><form id="news" action="/contact"></form><div class="buy"><form action="/cart/add"><button name="add">Add</button></form></div>';
+await page.goto('http://shop.test/products/tee');
+await page.waitForFunction(() => document.querySelectorAll('ps-coupon-slider .ps-card').length === 1, null, { timeout: 10000 });
+assert.equal(await page.evaluate(() => document.querySelector('ps-coupon-slider').nextElementSibling.getAttribute('action')), '/cart/add', 'placed above the real Add to cart form, not the newsletter button');
+console.log('  ✓ Above Add to cart: finds a button tied to its form by form="..." and skips hidden / non-cart buttons');
 await browser.close();

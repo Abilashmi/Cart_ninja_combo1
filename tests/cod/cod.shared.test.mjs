@@ -177,7 +177,7 @@ test('state names map to Shopify province codes', () => {
 });
 
 test('Pack and free-gift lines are checkout-only', () => {
-  assert.equal(isCheckoutOnlyLine({ _brix_pack_id: '12' }), true);
+  assert.equal(isCheckoutOnlyLine({ _brix_pack_id: '12' }), false, 'Packs: COD gives the Pack price itself');
   assert.equal(isCheckoutOnlyLine({ _brixReward: 'true' }), true);
   assert.equal(isCheckoutOnlyLine({ Engraving: 'A' }), false);
   assert.equal(isCheckoutOnlyLine(undefined), false);
@@ -398,4 +398,20 @@ test('drawer button padding: defaults 14 / 16, clamped, kept on other saves', ()
   assert.deepEqual([wild.buttons.paddingY, wild.buttons.paddingX], [32, 4]);
   // Settings saved before padding existed draw at the old fixed size.
   assert.deepEqual([codButtonLook({ buttons: { bg: '#111827' } }, 'drawer').paddingY, codButtonLook({ buttons: {} }, 'drawer').paddingX], [14, 16]);
+});
+
+test('products with their own COD fee: only them = their fee, mixed = the higher, none = the normal fee', () => {
+  const s = sanitizeCodSettings({ enabled: true, codFeeEnabled: true, codFee: 100, codFeeProducts: { fee: 40, products: [{ id: 'gid://shopify/Product/7', title: 'Luna' }, '8', 'gid://shopify/Collection/1'] } });
+  assert.deepEqual(s.codFeeProducts, { fee: 40, products: [{ id: 'gid://shopify/Product/7', title: 'Luna' }, { id: 'gid://shopify/Product/8', title: '' }] }, 'cleaned: products only');
+  assert.equal(codFeeOf(s, 500, ['gid://shopify/Product/7']), 40, 'only that product → ₹40');
+  assert.equal(codFeeOf(s, 500, ['7', '8', '7']), 40, 'only picked products (numeric ids too) → ₹40');
+  assert.equal(codFeeOf(s, 500, ['7', '9']), 100, 'mixed with another product → the higher fee');
+  assert.equal(codFeeOf(sanitizeCodSettings({ ...s, codFeeProducts: { fee: 150, products: ['7'] } }), 500, ['7', '9']), 150, 'mixed, own fee higher → the own fee');
+  assert.equal(codFeeOf(s, 500, ['9']), 100, 'not picked → the normal fee');
+  assert.equal(codFeeOf(s, 500), 100, 'products not known → the normal fee');
+  assert.equal(codFeeOf({ ...s, codFeeEnabled: false }, 500, ['7']), 0, 'fee switch off → nothing, own fee too');
+  assert.deepEqual(codCharges(s, 500, null, ['7']), { shipping: 0, codFee: 40, total: 40 });
+  assert.equal(codFeeOf(sanitizeCodSettings({ ...s, codFeeProducts: { fee: 0, products: ['7'] } }), 500, ['7']), 0, 'own fee 0 → free COD for them');
+  assert.deepEqual(sanitizeCodSettings({}).codFeeProducts, { fee: 0, products: [] }, 'none by default');
+  assert.deepEqual(sanitizeCodSettings({ codFee: 90 }, s).codFeeProducts, s.codFeeProducts, 'kept when not in the patch');
 });

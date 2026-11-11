@@ -24,6 +24,8 @@ import {
 } from '../utils/cod.shared.js';
 import { computeBox, decimalsFor, formatWeight, tierLabel, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 import { COMBO_WEIGHT_CONFIG_KEY, COMBO_WEIGHT_DISCOUNT_TITLE } from './combo-weight-shopify.server';
+import { PACKS_CONFIG_KEY, PACKS_DISCOUNT_TITLE } from './packs-shopify.server';
+import { packDiscountsFor } from '../utils/packs-discount.shared.js';
 import {
   sanitizeShipping, quoteShipping, deliveryForShopper, deliverySummary, referencedCollections, dateLabel, slotLabel,
 } from '../utils/shipping.shared.js';
@@ -729,6 +731,69 @@ export async function comboWeightAdjustments(admin, { lines, comboWeightLive = f
   return result;
 }
 
+/* ───────────────────────── Packs ───────────────────────── */
+
+// A Pack (Buy 2 / Buy 3 ...) gets its price in Shopify checkout from the BRIX
+// Packs Function, which draft orders never run (and the _brix_pack_* markers
+// are stripped from the draft's lines). COD gives the same price itself: the
+// same trusted $app:packs_config and the same rule (packs-discount.shared.js),
+// as line discounts like the combo boxes. Only while BRIX Packs is ACTIVE in
+// Shopify, as in checkout. A Pack with no discount simply costs its price.
+async function loadPacksContext(admin) {
+  const data = await gql(admin, `#graphql
+    query CodPacks {
+      shop { metafield(namespace: "$app", key: "${PACKS_CONFIG_KEY}") { jsonValue } }
+      discountNodes(first: 100, query: "type:app") {
+        nodes { discount { __typename ... on DiscountAutomaticApp { title status } } }
+      }
+    }`);
+  const active = (data?.discountNodes?.nodes || []).some((n) => n.discount?.__typename === 'DiscountAutomaticApp'
+    && n.discount.title === PACKS_DISCOUNT_TITLE && n.discount.status === 'ACTIVE');
+  const config = data?.shop?.metafield?.jsonValue;
+  return { active, config: config && typeof config === 'object' && config.packs && typeof config.packs === 'object' ? config : null };
+}
+
+/**
+ * Pack discounts for the Pack lines of a COD order (lines already priced as a
+ * combo box are left alone). Returns { byLine: Map<lineIndex, amountMinor>,
+ * titles: Map<lineIndex, title>, amountMinor }.
+ */
+export async function packAdjustments(admin, { lines, currencyCode = 'INR', skip = new Map() }) {
+  const result = { byLine: new Map(), titles: new Map(), amountMinor: 0 };
+  const marked = lines.map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => line.properties?._brix_pack_id && !skip.has(index));
+  if (!marked.length) return result;
+  const { active, config } = await loadPacksContext(admin);
+  if (!active || !config) return result;
+  const variants = await loadComboVariants(admin, marked.map(({ line }) => line.variantId));
+  const decimals = decimalsFor(currencyCode);
+  const minorOf = new Map();
+  const plain = marked.map(({ line, index }) => {
+    const variant = variants.get(String(line.variantId));
+    const subtotalMinor = variant ? toMinor(variant.price, decimals) * line.quantity : 0;
+    minorOf.set(String(index), subtotalMinor);
+    return {
+      id: String(index),
+      quantity: line.quantity,
+      packId: line.properties._brix_pack_id,
+      packQuantity: line.properties._brix_pack_quantity,
+      packGroup: line.properties._brix_pack_group,
+      productId: variant?.productId || null,
+      variantId: String(line.variantId),
+      subtotalAmount: subtotalMinor / 10 ** decimals,
+      currencyCode,
+    };
+  });
+  for (const d of packDiscountsFor(config, plain)) {
+    const amount = d.percent != null ? Math.round((minorOf.get(d.id) * d.percent) / 100) : d.amount;
+    if (!(amount > 0)) continue;
+    result.byLine.set(Number(d.id), amount);
+    result.titles.set(Number(d.id), d.message);
+    result.amountMinor += amount;
+  }
+  return result;
+}
+
 // How Shopify reads a FIXED_AMOUNT line discount on a draft order (per unit or
 // per line) has not been confirmed on a store yet, so the first combo quote
 // checks what Shopify actually did and remembers the mode that matched.
@@ -742,7 +807,8 @@ function comboLineItems(lines, combo, mode) {
     const amountMinor = combo.byLine.get(index);
     if (!amountMinor) { out.push(item); return; }
     const title = combo.titles.get(index);
-    const discount = (minor) => ({ valueType: 'FIXED_AMOUNT', value: minor / factor, title, description: 'BRIX combo box' });
+    const description = combo.packLines?.has(index) ? 'BRIX Pack' : 'BRIX combo box';
+    const discount = (minor) => ({ valueType: 'FIXED_AMOUNT', value: minor / factor, title, description });
     if (mode === 'line' || item.quantity === 1) {
       out.push({ ...item, appliedDiscount: discount(amountMinor) });
       return;
@@ -766,7 +832,7 @@ const lineDiscountMinor = (calc, decimals) => (calc?.lineItems || [])
  * Refuses COD (never charges a different price) when neither mode matches.
  */
 async function comboPricedLineItems(admin, lines, combo) {
-  const expected = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0);
+  const expected = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0) + (combo.packMinor || 0);
   const modes = comboLineDiscountMode === 'unit' ? ['unit', 'line'] : ['line', 'unit'];
   for (const mode of modes) {
     const lineItems = comboLineItems(lines, combo, mode);
@@ -776,7 +842,7 @@ async function comboPricedLineItems(admin, lines, combo) {
       return lineItems;
     }
   }
-  console.error('[cod] combo box discount did not price as expected; refusing COD for this box.');
+  console.error('[cod] combo box / Pack discount did not price as expected; refusing COD for this cart.');
   throw new CodError('combo_price_mismatch', "Cash on Delivery can't be used for this box right now. Please pay online.", { status: 422 });
 }
 
@@ -969,7 +1035,7 @@ export async function quoteCod(admin, {
   shipping = null, destination = null, delivery = null, strictDelivery = false, now = new Date(),
 }) {
   if (lines.some((l) => isCheckoutOnlyLine(l.properties))) {
-    throw new CodError('checkout_only', 'This cart has a Pack or free gift that is only available with online payment.', { status: 422 });
+    throw new CodError('checkout_only', 'This cart has a free gift that is only available with online payment.', { status: 422 });
   }
   const advanced = settings.shippingMode === 'advanced' && shipping ? shipping : null;
   const where = destination || (pincode ? { pincode } : null);
@@ -978,7 +1044,15 @@ export async function quoteCod(admin, {
   if (productError) throw new CodError(productError.code, productError.message, { status: 422 });
   const format = moneyFormatter(currencyCode);
   const combo = await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode });
-  const hasBoxes = combo.boxes.length > 0;
+  // Packs: their price as line discounts too, priced and checked the same way.
+  const packs = await packAdjustments(admin, { lines, currencyCode, skip: combo.byLine });
+  for (const [index, amount] of packs.byLine) {
+    combo.byLine.set(index, amount);
+    combo.titles.set(index, packs.titles.get(index));
+  }
+  combo.packLines = packs.byLine;
+  combo.packMinor = packs.amountMinor;
+  const hasBoxes = combo.boxes.length > 0 || packs.amountMinor > 0;
 
   const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
   // The cart's own discounts (settings.cartDiscounts, default on): Shopify's
@@ -1027,7 +1101,8 @@ export async function quoteCod(admin, {
         : 'That delivery day or time is no longer available. Please pick another.', { status: 409 });
     }
   }
-  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : null);
+  // The order's products: some may have their own COD fee (codFeeProducts).
+  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : null, [...info.values()].map((v) => v.productId));
   const input = { ...base };
   input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode, ship?.selected?.name || null);
   if (charges.total > 0) calc = await calculate(admin, input);
@@ -1037,9 +1112,10 @@ export async function quoteCod(admin, {
   // from Shopify's own total, so the rows always add up to what is charged).
   const factor = 10 ** combo.decimals;
   const comboDiscount = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0) / factor;
+  const packDiscount = packs.amountMinor / factor;
   const itemsOriginal = (calc.lineItems || []).reduce((sum, li) => sum + amountOf(li.originalTotalSet), 0);
   const otherDiscounts = hasBoxes
-    ? Math.max(0, Math.round((itemsOriginal - comboDiscount + charges.total + (calc.taxesIncluded ? 0 : amountOf(calc.totalTaxSet)) - amountOf(calc.totalPriceSet)) * factor) / factor)
+    ? Math.max(0, Math.round((itemsOriginal - comboDiscount - packDiscount + charges.total + (calc.taxesIncluded ? 0 : amountOf(calc.totalTaxSet)) - amountOf(calc.totalPriceSet)) * factor) / factor)
     : amountOf(calc.totalDiscountsSet);
 
   // Which codes Shopify really used: by platformDiscounts when the API gives
@@ -1070,6 +1146,8 @@ export async function quoteCod(admin, {
     subtotal: amountOf(calc.subtotalPriceSet),
     discounts: otherDiscounts,
     comboDiscount,
+    // Pack price (Buy 2 / Buy 3 ...): the same discount Shopify checkout gives.
+    packDiscount,
     comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor })),
     shipping: charges.shipping,
     // Advanced shipping: the delivery options for this address and cart, and

@@ -50,7 +50,7 @@ const BUY_NOW_HTML = '<div data-shopify="payment-button" class="shopify-payment-
 // A Dawn-like product page. The theme's own JS sets the hidden variant id
 // WITHOUT firing an event and redraws the price (like Dawn), and its quantity
 // buttons fire `change`.
-function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '', shiprocket = false, noindex = false } = {}) {
+function productPage({ buyNow = true, block = false, pageType = 'product', custom = false, collections = '', shiprocket = false, srTwice = false, noindex = false } = {}) {
   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1">${noindex ? '<meta name="robots" content="noindex,nofollow">' : ''}
   <style>body{font-family:Arial,sans-serif;margin:0}main{max-width:1100px;margin:0 auto;padding:16px}
   .product{display:grid;grid-template-columns:1fr 1fr;gap:32px}@media (max-width:749px){.product{grid-template-columns:1fr}}
@@ -59,6 +59,8 @@ function productPage({ buyNow = true, block = false, pageType = 'product', custo
   <section class="shopify-section"><div class="product">
     <div class="media"></div>
     <div class="product__info-wrapper grid__item">
+      ${srTwice ? '<div class="sl-side-cart" style="display:none"><div class="shiprocket-headless" data-type="mini-cart"><button type="button" class="sr-headless-checkout"><span class="sr-checkout-visible2">CHECKOUT</span></button></div></div>' : ''}
+      ${srTwice ? '<div class="sticky-buy" style="display:none"><div class="shiprocket-headless" data-type="product"><button type="button" class="sr-headless-checkout"><span class="sr-checkout-visible2">BUY NOW with UPI / COD</span></button></div></div>' : ''}
       <h1>Cold Brew Kit</h1>
       <div id="price-template--main" class="price"><span class="price-item">Rs. 1,100.00</span></div>
       ${block ? '<div data-brix-pay-slot></div>' : ''}
@@ -86,6 +88,19 @@ function productPage({ buyNow = true, block = false, pageType = 'product', custo
   <script src="https://cdn.test/brix_cod.js" data-php="${PHP}" data-shop="demo.myshopify.com" data-currency="INR"${collections ? ` data-product-collections="${collections}"` : ''}></script></body></html>`;
 }
 
+// Silverline by Gopi Jewels (silverline925.in): Add to cart sits outside its
+// form in a one-line row with the quantity, tied to a HIDDEN form by
+// form="pdp-form"; no Shopify Buy it now; Shiprocket's Buy Now in another form.
+function silverlinePage() {
+  return productPage({ buyNow: false, shiprocket: false })
+    .replace(/<form action="\/cart\/add" id="product-form-main">[\s\S]*?<\/form>/, `<div class="pdp__buy"><span class="stockpill">In stock</span>
+        <div class="pdp__buy-row" style="display:flex;gap:10px"><div class="qty"><input type="number" name="quantity" value="1" form="pdp-form" style="width:50px"></div>
+        <button class="btn btn--solid" type="submit" form="pdp-form" style="flex:1">Add to cart</button></div>
+        <form method="post" action="/cart/add" id="product-form-installment"><input type="hidden" name="id" value="21"><div class="shiprocket-headless" data-type="product"><button type="button" class="sr-headless-checkout"><div class="sr-d-flex flex-center"><div class="sr-d-flex full-width flex-center"><div class="sr-button-text-container"><span class="sr-checkout-visible2">BUY NOW with UPI / COD</span></div></div></div></button></div></form></div>
+        <style>.shiprocket-headless .sr-checkout-visible2{display:none !important}.shiprocket-headless .sr-button-text-container::after{content:"BUY NOW" !important}</style>
+        <form method="post" action="/cart/add" id="pdp-form" hidden><input type="hidden" name="id" value="21"></form>`);
+}
+
 const handler = async (route) => {
   const req = route.request();
   const url = new URL(req.url());
@@ -94,7 +109,8 @@ const handler = async (route) => {
     return json({ id: 4242, tags: ['coffee'], variants: [{ id: 21, price: prices[0] }, { id: 22, price: prices[1] }] });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/products/')) {
-    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom') && !url.searchParams.has('sr'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '', shiprocket: url.searchParams.has('sr'), noindex: url.searchParams.has('unlisted') }) });
+    if (url.searchParams.has('sl')) return route.fulfill({ contentType: 'text/html', body: silverlinePage() });
+    return route.fulfill({ contentType: 'text/html', body: productPage({ buyNow: !url.searchParams.has('nobuynow') && !url.searchParams.has('custom') && !url.searchParams.has('sr'), block: url.searchParams.has('block'), pageType: url.searchParams.get('type') || 'product', custom: url.searchParams.has('custom'), collections: url.searchParams.get('collections') || '', shiprocket: url.searchParams.has('sr'), srTwice: url.searchParams.get('sr') === '2', noindex: url.searchParams.has('unlisted') }) });
   }
   if (url.origin === 'https://shop.test' && url.pathname.startsWith('/cart/')) {
     navigations.push(url.pathname);
@@ -336,6 +352,38 @@ await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
 await settle(page);
 s = await state(page);
 check('other collections: the saving still shows', /Save 10%/.test(s.online.text) && s.nativeText === 'Buy it now · Save 10%', `${s.online.text} | ${s.nativeText}`);
+await page.close();
+
+/* ── 11b2. this product left out of the prepaid discount by itself ───────── */
+config = { ...COD, productPayment: { ...PAYMENT, prepaid: { ...PREPAID, excludedProducts: ['4242'] } } };
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('excluded product: no "Save", no banner, Buy it now untouched, COD still offered', !/Save/.test(s.online.text) && !s.banner && s.nativeText === 'Buy it now' && Boolean(s.cod), JSON.stringify({ t: s.online.text, b: s.banner, n: s.nativeText }));
+await page.close();
+config = { ...COD, productPayment: { ...PAYMENT, prepaid: { ...PREPAID, excludedProducts: ['9999'] } } };
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('other products left out: the saving still shows here', /Save 10%/.test(s.online.text), s.online.text);
+await page.close();
+
+/* ── 11b3. this product has its own COD fee (₹40 instead of ₹100) ────────── */
+config = { ...COD, codFee: 100, codFeeProducts: { fee: 40, products: ['4242'] }, productPayment: PAYMENT };
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('own COD fee: this product → "+ ₹40 Cash on Delivery Fee", not ₹100', /Pay ₹1,100 \+ ₹40 Cash on Delivery Fee/.test(s.cod.text), s.cod.text);
+await page.close();
+config = { ...COD, codFee: 100, codFeeProducts: { fee: 40, products: ['9999'] }, productPayment: PAYMENT };
+page = await openPage();
+await page.locator('.bxpay-card').first().waitFor({ timeout: 5000 });
+await settle(page);
+s = await state(page);
+check('own COD fee for another product: this one pays the normal ₹100', /Pay ₹1,100 \+ ₹100 Cash on Delivery Fee/.test(s.cod.text), s.cod.text);
 await page.close();
 
 /* ── 11c. a % COD fee from an order value (₹50 below ₹1,000, 10% from it) ── */
@@ -642,6 +690,77 @@ await page.locator('.bxpay-card[data-method="online"]').click();
 await settle(page, 400);
 const srOnline = await srButton();
 check('payment options + Shiprocket selector: Pay Online shows it again, with the saving', srOnline.shown === true && /Save \d+%/.test(srOnline.text), JSON.stringify(srOnline));
+await page.close();
+
+// Two Shiprocket product Buy Nows (silverline925.in: a hidden one first, the
+// one on screen after it): every one gets the text and is hidden with COD
+// chosen; COD goes next to the one on screen; the cart drawer's stays as it is.
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowPlacement: 'below', buyNowText: 'Prepaid {price}', buyNowSelector: '.shiprocket-headless' }, productPayment: null };
+page = await openPage('?sr=2');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+const srTwo = await page.evaluate(() => {
+  const all = [...document.querySelectorAll('.shiprocket-headless[data-type="product"]')];
+  const slot = document.querySelector('[data-brix-cod-slot]');
+  return { texts: all.map((e) => e.textContent.trim()), drawer: document.querySelector('.shiprocket-headless[data-type="mini-cart"]').textContent.trim(),
+    nextToShown: all[1] && all[1].nextElementSibling === slot };
+});
+check('two Shiprocket Buy Nows: both get the text (the one on screen too), cart drawer\'s untouched, COD next to the one on screen',
+  srTwo.texts.length === 2 && srTwo.texts.every((t) => t === 'Prepaid ₹1,100') && srTwo.drawer === 'Checkout' && srTwo.nextToShown, JSON.stringify(srTwo));
+await page.close();
+// silverline925.in's setting: the selector is Shiprocket's button itself
+// (.sr-headless-checkout), whose data-type="mini-cart" sits on the wrapper,
+// in a theme drawer BRIX doesn't know by name: that one is never relabelled.
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowPlacement: 'below', buyNowText: 'Prepaid {price}', buyNowSelector: '.sr-headless-checkout' }, productPayment: null };
+page = await openPage('?sr=2');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ timeout: 5000 });
+await settle(page, 1000);
+const srBtn = await page.evaluate(() => ({
+  product: [...document.querySelectorAll('.shiprocket-headless[data-type="product"] .sr-headless-checkout')].map((e) => e.textContent.trim()),
+  carts: [...document.querySelectorAll('.shiprocket-headless[data-type="mini-cart"] .sr-headless-checkout')].map((e) => e.textContent.trim()),
+}));
+check('selector = Shiprocket\'s button (.sr-headless-checkout): product Buy Nows get the text, the cart drawer checkouts keep theirs',
+  srBtn.product.length === 2 && srBtn.product.every((t) => t === 'Prepaid ₹1,100') && srBtn.carts.length === 2 && srBtn.carts.every((t) => /^(CHECKOUT|Checkout)$/.test(t)), JSON.stringify(srBtn));
+await page.close();
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowSelector: '.shiprocket-headless' }, productPayment: PAYMENT };
+page = await openPage('?sr=2');
+await page.locator('.bxpay-card[data-method="cod"]').waitFor({ timeout: 5000 });
+await page.locator('.bxpay-card[data-method="cod"]').click();
+await settle(page, 400);
+const srTwoCod = await page.evaluate(() => [...document.querySelectorAll('.shiprocket-headless[data-type="product"]')].map((e) => e.hasAttribute('data-brix-pay-hidden')));
+check('two Shiprocket Buy Nows + payment options: COD chosen hides both', srTwoCod.length === 2 && srTwoCod.every(Boolean), JSON.stringify(srTwoCod));
+await page.locator('.bxpay-card[data-method="online"]').click();
+await settle(page, 400);
+const srTwoOnline = await page.evaluate(() => [...document.querySelectorAll('.shiprocket-headless[data-type="product"]')].map((e) => ({ hidden: e.hasAttribute('data-brix-pay-hidden'), text: e.textContent.trim() })));
+check('two Shiprocket Buy Nows + payment options: Pay Online shows them, both with the saving', srTwoOnline.every((x) => !x.hidden && /Save \d+%/.test(x.text)), JSON.stringify(srTwoOnline));
+await page.close();
+
+// Silverline: with no Buy it now class, COD goes after the Add to cart row
+// (it used to go inside the hidden form and never showed).
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowPlacement: 'below' }, productPayment: null };
+page = await openPage('?sl=1');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ state: 'attached', timeout: 5000 });
+await settle(page, 600);
+const slSpot = await page.evaluate(() => {
+  const slot = document.querySelector('[data-brix-cod-slot]');
+  const row = document.querySelector('.pdp__buy-row');
+  return { inHiddenForm: Boolean(slot.closest('form[hidden]')), afterRow: row.nextElementSibling === slot,
+    shown: slot.getBoundingClientRect().height > 0, fullWidth: Math.abs(slot.getBoundingClientRect().width - row.getBoundingClientRect().width) < 2 };
+});
+check('Add to cart outside a hidden form (Silverline), no class: COD shows after the Add to cart row, full width',
+  !slSpot.inHiddenForm && slSpot.afterRow && slSpot.shown && slSpot.fullWidth, JSON.stringify(slSpot));
+await page.close();
+
+// Silverline with the client's settings: the class is Shiprocket's button.
+config = { ...COD, productButton: { ...COD.productButton, replaceBuyNow: false, buyNowPlacement: 'below', buyNowText: 'Prepaid {prepaid_price}', buyNowSelector: '.sr-headless-checkout' }, productPayment: null };
+page = await openPage('?sl=1');
+await page.locator('[data-brix-cod-slot] [data-brix-cod-btn]').waitFor({ state: 'attached', timeout: 5000 });
+await settle(page, 1000);
+const slSr = await page.evaluate(() => ({ text: document.querySelector('.sr-headless-checkout').textContent.trim(),
+  painted: getComputedStyle(document.querySelector('.sr-button-text-container'), '::after').content,
+  codShown: document.querySelector('[data-brix-cod-slot]').getBoundingClientRect().height > 0 }));
+check('Silverline + class .sr-headless-checkout: the label Shiprocket paints with CSS (.sr-button-text-container::after "BUY NOW", text span hidden) reads "Prepaid ₹1,100"',
+  slSr.text === 'Prepaid ₹1,100' && slSr.painted === '"Prepaid ₹1,100"' && slSr.codShown, JSON.stringify(slSr));
 await page.close();
 
 // Above / Below Shopify's Buy it now.

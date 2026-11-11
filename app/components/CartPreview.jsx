@@ -13,7 +13,7 @@ import { useCurrency } from './CurrencyContext';
 import { fillPriceTags } from '../utils/price-tags.shared';
 import { sanitizeContinueShopping, continueShoppingStyle } from '../utils/continue-shopping.shared.js';
 import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
-import { couponIconHtml, couponSubtitleStyle, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
+import { couponIconHtml, couponSubtitleStyle, drawerCouponLayout, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 import { footerExtras } from '../utils/cart-footer-extras.shared';
 import { milestonePositions, progressFill, fillMoneyTag } from '../utils/progress-layout.shared.js';
@@ -552,7 +552,7 @@ function SingleCouponCard({ coupon, template }) {
 
 function CouponSliderPreview({ cs }) {
   const displayCoupons = cs.selectedCoupons.length > 0 ? cs.selectedCoupons : MOCK_PREVIEW_COUPONS;
-  const isGrid = cs.layout === 'grid';
+  const isGrid = drawerCouponLayout(cs) === 'grid';
   const isVertical = cs.alignment === 'vertical';
   const isSingle = displayCoupons.length === 1;
   // Merchant's card size (storefront: cart_drawer_inline.js renderCouponSection).
@@ -638,7 +638,7 @@ function UpsellVariantSelect({ product, value, onChange, small }) {
   );
 }
 
-function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadge, onAdd }) {
+function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadge, onAdd, phone = false }) {
   const { formatMoney } = useCurrency();
   // Chosen variant per product; default = first in-stock variant.
   const [picked, setPicked] = useState({});
@@ -677,6 +677,8 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   }
   const isHorizontal = upsell.direction === 'horizontal';
   const isGrid = upsell.layout === 'grid';
+  // Slider (one product at a time): storefront cc-upsell-card--row.
+  const isListSlider = upsell.layout === 'carousel' && upsell.listSlider === true;
   const formatPrice = (p) => formatMoney(Number(p || 0));
   // Same colours as the storefront (cart_drawer_inline.js renderUpsell).
   const ownButton = upsell.useCheckoutButtonColors === false;
@@ -684,6 +686,23 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
   const btnText = ownButton ? (upsell.buttonTextColor || '#ffffff') : checkoutText;
   const titleColor = upsell.productTitleColor || '#1e293b';
   const priceColor = upsell.priceColor || '#10b981';
+
+  // Slider in the phone view: no arrows, full width, moves on its own like
+  // the storefront (cart_drawer_inline.js ccAutoSlideUpsell); a touch pauses it.
+  const autoSlide = phone && isListSlider && products.length >= 2;
+  const pausedUntil = useRef(0);
+  useEffect(() => {
+    if (!autoSlide) return undefined;
+    const t = setInterval(() => {
+      const el = rowRef.current;
+      if (!el || Date.now() < pausedUntil.current) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 5) return;
+      const step = el.clientWidth + 8;
+      el.scrollTo({ left: el.scrollLeft + step > max + 5 ? 0 : el.scrollLeft + step, behavior: 'smooth' });
+    }, 3500);
+    return () => clearInterval(t);
+  }, [autoSlide]);
 
   return (
     <div className="cart-preview-upsell-section">
@@ -697,7 +716,37 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
       {lockBadge && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>{lockBadge}</div>
       )}
-      {isHorizontal ? (
+      {isListSlider ? (
+        // One full-width row per slide (picture, name + price + size, Add),
+        // arrows outside it in the side padding; mirrors cart_drawer_inline.js.
+        <div style={{ position: 'relative', padding: products.length >= 2 && !phone ? '0 22px' : 0 }}>
+          {products.length >= 2 && !phone && ['left', 'right'].map((side) => (
+            <button
+              key={side}
+              type="button"
+              aria-label={side === 'left' ? 'Scroll left' : 'Scroll right'}
+              onClick={(e) => { e.stopPropagation(); const el = rowRef.current; if (el) el.scrollBy({ left: (side === 'left' ? -1 : 1) * (el.clientWidth + 8), behavior: 'smooth' }); }}
+              style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', [side]: -4, zIndex: 2, width: 24, height: 24, borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}
+            >{side === 'left' ? '←' : '→'}</button>
+          ))}
+          <div ref={rowRef} data-upsell-slider="list" onPointerDown={() => { pausedUntil.current = Date.now() + 6000; }} style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', scrollSnapType: 'x mandatory' }}>
+            {products.map((product) => (
+              <div key={product.id} data-upsell-card="row" style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'start', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 8px', background: '#fff', border: '1px solid #e1e3e5', borderRadius: '9px' }}>
+                <div style={{ width: '44px', height: '44px', flexShrink: 0, borderRadius: '6px', backgroundColor: '#f1f2f3', ...(product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}) }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '11px', fontWeight: 600, lineHeight: 1.3, color: titleColor, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{product.title}</div>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: priceColor, marginTop: '2px' }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+                  <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} small />
+                  {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
+                </div>
+                <button onClick={addProduct(product)} style={{ flexShrink: 0, padding: '6px 10px', borderRadius: '6px', border: 'none', fontSize: '10px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: btnBg, color: btnText }}>
+                  {upsell.buttonText}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : isHorizontal ? (
         <div style={{ position: 'relative' }}>
         {/* ‹ › on the left and right edges of the row (like the storefront), only when it can scroll */}
         {!isGrid && products.length > 2 && ['left', 'right'].map((side) => (
@@ -726,24 +775,57 @@ function UpsellPreview({ upsell, checkoutBg, checkoutText, allProducts, lockBadg
           ))}
         </div>
         </div>
-      ) : (
-        products.map((product) => (
-          <div key={product.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 0' }}>
-            <div style={{
-              width: '40px', height: '40px', background: '#f1f2f3', borderRadius: '7px', flexShrink: 0,
-              ...(product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}),
-            }} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: 500, color: titleColor }}>{product.title}</div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: priceColor }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
-              <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} />
+      ) : isGrid ? (
+        // Vertical + Grid = the storefront's one column of cards
+        // (cart_drawer_inline.js cc-layout-grid: picture on top, name, size,
+        // price and Add on one row), at the preview's two-thirds scale.
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+          {products.map((product) => (
+            <div key={product.id} data-upsell-card="grid" style={{ border: '1px solid #e1e3e5', borderRadius: '8px', background: '#fff', padding: '8px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ width: '66px', height: '66px', marginBottom: '6px', backgroundColor: '#f8fafc', borderRadius: '6px', flexShrink: 0, ...(product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}) }} />
+              <div style={{ fontSize: '10px', fontWeight: 700, lineHeight: 1.2, marginBottom: '4px', color: titleColor }}>{product.title}</div>
+              <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} small />
               {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: priceColor }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+                <button onClick={addProduct(product)} style={{ padding: '3px 8px', borderRadius: '4px', border: 'none', fontSize: '9px', fontWeight: 600, cursor: 'pointer', backgroundColor: btnBg, color: btnText }}>
+                  {upsell.buttonText}
+                </button>
+              </div>
             </div>
-            <button onClick={addProduct(product)} style={{ padding: '5px 12px', borderRadius: '5px', border: 'none', fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', backgroundColor: btnBg, color: btnText }}>
-              {upsell.buttonText}
-            </button>
+          ))}
+        </div>
+      ) : (
+        // Vertical + Carousel = the storefront's tall product cards sliding
+        // sideways (cart_drawer_inline.js cc-upsell-card--v: 176px cards,
+        // 100px picture, centred name and price, full-width button at the
+        // bottom), at the preview's two-thirds scale, with the edge arrows.
+        <div style={{ position: 'relative' }}>
+          {products.length >= 2 && ['left', 'right'].map((side) => (
+            <button
+              key={side}
+              type="button"
+              aria-label={side === 'left' ? 'Scroll left' : 'Scroll right'}
+              onClick={(e) => { e.stopPropagation(); rowRef.current?.scrollBy({ left: side === 'left' ? -126 : 126, behavior: 'smooth' }); }}
+              style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', [side]: -8, zIndex: 2, width: 24, height: 24, borderRadius: '50%', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 1px 3px rgba(0,0,0,.08)' }}
+            >{side === 'left' ? '←' : '→'}</button>
+          ))}
+          <div ref={rowRef} data-upsell-slider="vertical" style={{ display: 'flex', gap: '9px', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', scrollSnapType: 'x proximity', padding: '2px 1px 4px' }}>
+            {products.map((product) => (
+              <div key={product.id} data-upsell-card="vertical" style={{ width: '118px', minHeight: '196px', flexShrink: 0, scrollSnapAlign: 'start', boxSizing: 'border-box', padding: '10px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '11px', boxShadow: '0 2px 7px rgba(0,0,0,.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                <div style={{ width: '66px', height: '66px', marginBottom: '8px', flexShrink: 0, backgroundColor: '#f1f2f3', borderRadius: '6px', ...(product.image ? { backgroundImage: `url(${product.image})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center' } : {}) }} />
+                <div style={{ fontSize: '10px', fontWeight: 600, lineHeight: 1.3, color: titleColor, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', width: '100%' }}>{product.title}</div>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: priceColor, marginTop: '4px' }}>{formatPrice(variantOf(product)?.price ?? product.price)}</div>
+                <UpsellVariantSelect product={product} value={variantOf(product)?.id} onChange={pickVariant(product)} small />
+                {upsell.showReviews && <UpsellReviewStars productId={product.id} />}
+                <div style={{ flex: 1 }} />
+                <button onClick={addProduct(product)} style={{ width: '100%', marginTop: '6px', padding: '6px 4px', borderRadius: '999px', border: 'none', fontSize: '10px', fontWeight: 700, cursor: 'pointer', backgroundColor: btnBg, color: btnText }}>
+                  {upsell.buttonText}
+                </button>
+              </div>
+            ))}
           </div>
-        ))
+        </div>
       )}
     </div>
   );
@@ -847,6 +929,12 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   const banner = body.imageBanner;
   const bannerAt = bannerSlot(banner.placement, { progressShown: showProgressBar, progressPosition: pb.position });
   const bannerEditing = activeSection === 'imageBanner';
+  // Sticky upsell at the bottom sits right on the footer (storefront:
+  // margin-top:auto, and over the list's bottom padding when nothing follows it).
+  const afterBottomUpsell = (showProgressBar && pb.position === 'bottom')
+    || (showCouponSlider && cs.position === 'bottom')
+    || (['beforeBottomBar', 'afterBottomBar', 'end'].includes(bannerAt) && (bannerVisible(banner) || bannerEditing))
+    || (isEmpty && body.emptyCart.showRecommendations && !up.showWhenEmpty);
   const renderBanner = (slot) => (slot === bannerAt && (bannerVisible(banner) || bannerEditing) ? (
     <HighlightZone sectionId="imageBanner" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
       <PreviewImageBanner banner={banner} device={previewDevice} editing={bannerEditing} />
@@ -1038,7 +1126,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {/* Upsell — TOP */}
                   {showUpsell && up.position === 'top' && (
                     <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', top: 0, zIndex: 5, background: '#fff', boxShadow: '0 6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
+                      <UpsellPreview phone={!isDesktop} upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
 
@@ -1072,8 +1160,8 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
                   {/* Upsell — BOTTOM */}
                   {showUpsell && up.position === 'bottom' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', bottom: 0, zIndex: 5, background: '#fff', boxShadow: '0 -6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
-                      <UpsellPreview upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', bottom: -lay.bodyPadding, marginTop: 'auto', marginBottom: afterBottomUpsell ? 0 : -lay.bodyPadding, zIndex: 5, background: '#fff', boxShadow: '0 -6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
+                      <UpsellPreview phone={!isDesktop} upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
                   )}
 

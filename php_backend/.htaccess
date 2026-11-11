@@ -17,6 +17,6 @@
   #   - AGENCY_DASHBOARD_INTERNAL_SECRET must be byte-identical to the
   #     value set on the Agency Dashboard (Fly secret of the same name).
   #   - AGENCY_DASHBOARD_URL is that app's public base URL, no trailing slash.
-  SetEnv AGENCY_DASHBOARD_INTERNAL_SECRET "REPLACE_WITH_SHARED_SECRET"
+  SetEnv AGENCY_DASHBOARD_INTERNAL_SECRET "24a6f7e698655643d42af07fedc68fa18c3a59a20c70629e639da67a92d789ac"
   SetEnv AGENCY_DASHBOARD_URL "https://REPLACE_WITH_AGENCY_DASHBOARD_HOST"
 </IfModule>

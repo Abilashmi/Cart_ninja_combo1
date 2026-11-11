@@ -15,6 +15,7 @@ import { ColorField } from './ColorField';
 import { CustomizableLockedSection } from '../plan/PlanGate';
 import { usePlan } from '../PlanContext';
 import { CouponStyleFields } from '../shared/CouponStyleFields';
+import { drawerCouponLayout } from '../../utils/coupon-style.shared.js';
 
 const COUPON_ICON_MAP = {
   discount: DiscountCodeIcon,
@@ -196,8 +197,9 @@ function CouponStylesTab() {
               { label: 'Grid (2 columns)', value: 'grid' },
               { label: 'Carousel', value: 'carousel' },
             ]}
-            value={couponSlider.layout}
-            onChange={(v) => updateCouponSlider({ layout: v })}
+            value={drawerCouponLayout(couponSlider)}
+            onChange={(v) => updateCouponSlider({ layout: v, layoutPicked: true })}
+            helpText="Grid shows 2 coupons side by side, filling the width. Carousel slides with arrows."
           />
           <Select
             label="Alignment"

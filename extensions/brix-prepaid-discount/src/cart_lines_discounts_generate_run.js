@@ -55,12 +55,18 @@ export function cartLinesDiscountsGenerateRun(input) {
   if ((input?.enteredDiscountCodes || []).some((entry) => BOX_CODE.test(String(entry?.code || '').trim().toUpperCase()))) return NONE;
 
   // Free reward gifts (BRIX Progress Bar) are already free, combo box lines
-  // (_brix_combo_id) already carry the box price, and products in a
-  // collection the merchant left out never get it: all are left out of the
-  // discount and of the minimum.
+  // (_brix_combo_id) already carry the box price, and products the merchant
+  // left out (by collection or one by one: config.excludedProducts, numeric
+  // ids) never get it: all are left out of the discount and of the minimum.
   const gifts = lines.filter((line) => String(line.reward?.value ?? '') === 'true' || marked(line.combo)).map((line) => line.id);
+  const leftOutProducts = new Set((Array.isArray(config.excludedProducts) ? config.excludedProducts : []).map(String));
+  const productNumber = (line) => {
+    const match = /(\d+)$/.exec(String(line.merchandise?.product?.id ?? ''));
+    return match ? match[1] : '';
+  };
   const excluded = lines
-    .filter((line) => (line.merchandise?.product?.inCollections || []).some((membership) => membership.isMember))
+    .filter((line) => (line.merchandise?.product?.inCollections || []).some((membership) => membership.isMember)
+      || leftOutProducts.has(productNumber(line)))
     .map((line) => line.id);
   const left = gifts.concat(excluded.filter((id) => !gifts.includes(id)));
   const paid = lines.filter((line) => !left.includes(line.id));

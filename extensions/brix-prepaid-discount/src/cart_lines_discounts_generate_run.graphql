@@ -13,6 +13,7 @@ query Input($collectionIds: [ID!]) {
         __typename
         ... on ProductVariant {
           product {
+            id
             inCollections(ids: $collectionIds) {
               isMember
             }

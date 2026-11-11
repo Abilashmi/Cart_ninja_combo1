@@ -552,7 +552,7 @@
     "srcHash": "f23f7ca1"
   },
   "error.cod.checkout_only": {
-    "status": "ai",
+    "status": "needs-review",
     "srcHash": "44e84ab5"
   },
   "error.cod.combo_price_mismatch": {
@@ -928,7 +928,7 @@
     "srcHash": "56206962"
   },
   "storefront.cod.not_with_packs": {
-    "status": "ai",
+    "status": "needs-review",
     "srcHash": "e9137bf3"
   },
   "storefront.cod.order_confirmed": {
@@ -958,6 +958,10 @@
   "storefront.cod.otp_intro": {
     "status": "ai",
     "srcHash": "473ffdef"
+  },
+  "storefront.cod.pack_discount": {
+    "status": "ai",
+    "srcHash": "46434c3b"
   },
   "storefront.cod.packed_shipped": {
     "status": "ai",

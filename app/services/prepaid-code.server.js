@@ -41,9 +41,9 @@ async function gql(admin, query, variables) {
 }
 
 /**
- * The offer a code may carry: { percent, minSubtotal, maxDiscount, excludedCollections }
+ * The offer a code may carry: { percent, minSubtotal, maxDiscount, excludedCollections, excludedProducts }
  * only when saved, on the plan and verified in Shopify; else null.
- * excludedCollections: numeric ids of the collections left out (verified).
+ * excludedCollections / excludedProducts: numeric ids of the collections and products left out (verified).
  */
 export function prepaidOffer(settings, runtime, planLive) {
   const verified = runtime?.prepaid;
@@ -52,7 +52,9 @@ export function prepaidOffer(settings, runtime, planLive) {
   if (!Number.isFinite(percent) || percent < 1 || percent > 50) return null;
   const excludedCollections = (Array.isArray(verified.excludedCollections) ? verified.excludedCollections : [])
     .map(String).filter((id) => /^\d+$/.test(id));
-  return { percent, minSubtotal: Math.max(0, Number(verified.minSubtotal) || 0), maxDiscount: Math.max(0, Number(verified.maxDiscount) || 0), excludedCollections };
+  const excludedProducts = (Array.isArray(verified.excludedProducts) ? verified.excludedProducts : [])
+    .map(String).filter((id) => /^\d+$/.test(id));
+  return { percent, minSubtotal: Math.max(0, Number(verified.minSubtotal) || 0), maxDiscount: Math.max(0, Number(verified.maxDiscount) || 0), excludedCollections, excludedProducts };
 }
 
 const toVariantGid = (id) => `gid://shopify/ProductVariant/${id}`;
@@ -103,10 +105,11 @@ export async function createPrepaidCode(admin, { offer, items, gifts = [], rewar
     query BrixPrepaidPrices($ids: [ID!]!) {
       nodes(ids: $ids) { ... on ProductVariant { id price product { id collections(first: 250) { nodes { id } } } } }
     }`, { ids: [...new Set([...quantities.keys(), ...giftIds])].map(toVariantGid) });
-  // Like the Function: products in an excluded collection get nothing.
+  // Like the Function: products left out (one by one, or by collection) get nothing.
   const excluded = new Set(((offer && offer.excludedCollections) || []).map(String));
-  const isExcluded = (node) => (node?.product?.collections?.nodes || [])
-    .some((c) => excluded.has(String(c?.id || '').split('/').pop()));
+  const excludedProducts = new Set(((offer && offer.excludedProducts) || []).map(String));
+  const isExcluded = (node) => excludedProducts.has(String(node?.product?.id || '').split('/').pop())
+    || (node?.product?.collections?.nodes || []).some((c) => excluded.has(String(c?.id || '').split('/').pop()));
   let subtotalMinor = 0; // the prepaid saving's base (excluded collections left out)
   let paidMinor = 0; // every paid line, for gift milestones and the code's minimum
   let paidCount = 0;

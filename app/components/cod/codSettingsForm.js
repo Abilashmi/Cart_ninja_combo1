@@ -123,6 +123,8 @@ export function toForm(s) {
     codFee: numText(s.codFee),
     codFeePercent: numText(s.codFeePercent),
     codFeePercentFrom: numText(s.codFeePercentFrom),
+    codFeeOwnProducts: s.codFeeProducts?.products || [],
+    codFeeOwnAmount: s.codFeeProducts?.products?.length ? numText(s.codFeeProducts.fee) : '',
     showCodFee: s.showCodFee !== false,
     codFeeLabel: s.codFeeLabel,
     shippingFee: numText(s.shippingFee),
@@ -198,6 +200,7 @@ export function toSettings(f) {
     codFee: Number(f.codFee) || 0,
     codFeePercent: Number(f.codFeePercent) || 0,
     codFeePercentFrom: Number(f.codFeePercentFrom) || 0,
+    codFeeProducts: { fee: Number(f.codFeeOwnAmount) || 0, products: f.codFeeOwnProducts || [] },
     showCodFee: f.showCodFee,
     codFeeLabel: f.codFeeLabel,
     shippingFee: Number(f.shippingFee) || 0,
@@ -274,7 +277,7 @@ export function toSettings(f) {
 export function formErrors(f) {
   const e = {};
   const money = (key) => { if (f[key] !== '' && !(Number(f[key]) >= 0)) e[key] = 'Enter an amount of 0 or more.'; };
-  ['codFee', 'codFeePercentFrom', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder', 'couponMaxDiscount'].forEach(money);
+  ['codFee', 'codFeePercentFrom', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder', 'couponMaxDiscount', 'codFeeOwnAmount'].forEach(money);
   if (f.codFeePercent !== '' && !(Number(f.codFeePercent) >= 0 && Number(f.codFeePercent) <= COD_FEE_PERCENT_MAX)) e.codFeePercent = `Enter 0 to ${COD_FEE_PERCENT_MAX}%, or leave it empty.`;
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
   if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0) && !(Number(f.codFeePercent) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';

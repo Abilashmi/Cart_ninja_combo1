@@ -216,6 +216,32 @@ for (const [width, template] of [[1280, 'template2'], [375, 'template2'], [1280,
   await close(page);
 }
 
+/* 3b. Coupon layout: Grid picked in the Cart Editor = 2 equal columns filling
+   the width, no arrows; 'grid' saved without layoutPicked (the old default)
+   keeps the sliding row every live store shows. */
+for (const width of [1280, 375]) {
+  const page = await openDrawer({ width, data: { coupon_status: 1, coupon_data: couponData({ layout: 'grid', layoutPicked: true, cardWidth: 132 }) } });
+  const m = await page.evaluate(() => {
+    const list = document.getElementById('cc-coupon-list').getBoundingClientRect();
+    const cards = [...document.querySelectorAll('.cc-coupon-card')].map((c) => c.getBoundingClientRect());
+    return { n: cards.length, list: { l: list.left, r: list.right }, cards: cards.map((c) => ({ l: c.left, r: c.right, t: c.top, w: c.width })),
+      arrows: document.querySelectorAll('.cc-coupon-section .cc-nav-btn').length, page: document.documentElement.scrollWidth > innerWidth + 1 };
+  });
+  const [a, b] = m.cards;
+  const tag = `coupons grid (${width}px)`;
+  check(`${tag}: two cards side by side on one row`, m.n === 2 && Math.abs(a.t - b.t) < 1 && b.l > a.r - 1, JSON.stringify(m.cards));
+  check(`${tag}: equal columns filling the row (centred, not 132px from the left)`, Math.abs(a.w - b.w) < 1 && a.l - m.list.l < 1 && m.list.r - b.r < 1 && a.w > 132, JSON.stringify(m));
+  check(`${tag}: no slide arrows, no page scroll`, m.arrows === 0 && !m.page);
+  if (width === 375) await page.screenshot({ path: path.join(shotDir, 'coupons-grid-375.png') });
+  await close(page);
+}
+{
+  const page = await openDrawer({ width: 1280, data: { coupon_status: 1, coupon_data: couponData({ layout: 'grid', cardWidth: 132 }) } });
+  const m = await page.evaluate(() => ({ w: Math.round(document.querySelector('.cc-coupon-card').getBoundingClientRect().width), arrows: document.querySelectorAll('.cc-coupon-section .cc-nav-btn').length }));
+  check('coupons: an unpicked "grid" (old default) keeps the sliding row with arrows', m.w === 132 && m.arrows === 2, JSON.stringify(m));
+  await close(page);
+}
+
 /* 4. Upsell colours and title */
 {
   const upsell = {

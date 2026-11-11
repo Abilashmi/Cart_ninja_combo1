@@ -41,7 +41,7 @@ const SETTINGS = { productPayment: { enabled: true, online: { enabled: true }, p
 const VERIFIED = { prepaid: { verified: true, percent: 10, minSubtotal: 0, currency: 'INR' } };
 
 test('the offer comes only from saved + verified settings on a live plan', () => {
-  assert.deepEqual(prepaidOffer(SETTINGS, VERIFIED, true), { percent: 10, minSubtotal: 0, maxDiscount: 0, excludedCollections: [] });
+  assert.deepEqual(prepaidOffer(SETTINGS, VERIFIED, true), { percent: 10, minSubtotal: 0, maxDiscount: 0, excludedCollections: [], excludedProducts: [] });
   assert.equal(prepaidOffer(SETTINGS, VERIFIED, false), null, 'plan off');
   assert.equal(prepaidOffer(SETTINGS, { prepaid: { verified: false, percent: 10 } }, true), null, 'not verified in Shopify');
   assert.equal(prepaidOffer(SETTINGS, {}, true), null, 'never synced');
@@ -50,7 +50,7 @@ test('the offer comes only from saved + verified settings on a live plan', () =>
   const onlineOff = { productPayment: { ...SETTINGS.productPayment, online: { enabled: false } } };
   assert.equal(prepaidOffer(onlineOff, VERIFIED, true), null, 'Pay Online off');
   // Shopify's verified numbers win over the saved ones.
-  assert.deepEqual(prepaidOffer(SETTINGS, { prepaid: { verified: true, percent: 12.5, minSubtotal: 999 } }, true), { percent: 12.5, minSubtotal: 999, maxDiscount: 0, excludedCollections: [] });
+  assert.deepEqual(prepaidOffer(SETTINGS, { prepaid: { verified: true, percent: 12.5, minSubtotal: 999 } }, true), { percent: 12.5, minSubtotal: 999, maxDiscount: 0, excludedCollections: [], excludedProducts: [] });
 });
 
 test('a one-time code: X% of the Shopify prices + one paisa, a fixed amount on the items, never with order discounts', async () => {
@@ -92,6 +92,16 @@ test('items in an excluded collection are left out of the code, like the Functio
   assert.deepEqual(input.minimumRequirement, { subtotal: { greaterThanOrEqualToSubtotal: '201.00' } });
   const only = fakeAdmin({ prices: { 42: '500.00' }, collections: { 42: ['77'] } });
   assert.deepEqual(await createPrepaidCode(only, { offer: { percent: 10, minSubtotal: 0, excludedCollections: ['77'] }, items: [{ variantId: '42', quantity: 1 }], now: NOW, random: fixedRandom }), { code: null }, 'only excluded items → no code');
+});
+
+test('items of an excluded product are left out of the code, like the Function', async () => {
+  const admin = fakeAdmin({ prices: { 41: '201.00', 42: '500.00' }, products: { 42: '88' } });
+  const r = await createPrepaidCode(admin, { offer: { percent: 10, minSubtotal: 0, excludedCollections: [], excludedProducts: ['88'] }, items: [{ variantId: '41', quantity: 1 }, { variantId: '42', quantity: 1 }], now: NOW, random: fixedRandom });
+  assert.equal(r.amount, '20.11', '10% of ₹201 only, + one paisa');
+  const input = admin.calls.find((c) => c.op === 'BrixPrepaidCode').variables.input;
+  assert.deepEqual(input.customerGets.items.products.productVariantsToAdd, ['gid://shopify/ProductVariant/41']);
+  const rt = { prepaid: { ...VERIFIED.prepaid, excludedProducts: ['88', 'x', 7] } };
+  assert.deepEqual(prepaidOffer(SETTINGS, rt, true).excludedProducts, ['88', '7']);
 });
 
 test('the offer carries the verified excluded collections', () => {

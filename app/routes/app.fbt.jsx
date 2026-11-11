@@ -898,6 +898,16 @@ function FBTEditor({ onDiscard }) {
   const [aiConfigured,      setAiConfigured]      = useState(Boolean(fbtConfig.aiEnabled));
   const [placement,         setPlacement]         = useState('all');
   const [widgetPlacement,   setWidgetPlacement]   = useState(fbtConfig.widgetPlacement || 'above_cart');
+  // "Custom selector" placement: the selector must parse, or the storefront
+  // falls back to below Add to Cart (fbt_widget_render.js doPlace).
+  const selectorError = (() => {
+    if (widgetPlacement !== 'selector') return undefined;
+    const sel = String(fbtLayout.widgetSelector || '').trim();
+    if (!sel) return 'Enter a CSS selector, for example .product__description';
+    if (typeof document === 'undefined') return undefined;
+    try { document.createDocumentFragment().querySelector(sel); return undefined; }
+    catch { return 'This is not a valid CSS selector.'; }
+  })();
   const [productStates,     setProductStates]     = useState(() => defaultProductStates(interactionStyle, pickFbtLayout(fbtConfig).startSelected));
   const [hasChanges,        setHasChanges]        = useState(false);
   const [toastActive,       setToastActive]       = useState(false);
@@ -2264,16 +2274,42 @@ function FBTEditor({ onDiscard }) {
                         helpText={
                           widgetPlacement === 'above_cart' ? 'Pinned above Add to Cart — position locked on storefront.' :
                           widgetPlacement === 'below_cart' ? 'Pinned below Add to Cart — position locked on storefront.' :
+                          widgetPlacement === 'selector' ? 'Shown next to the element on your product page that matches the selector below. Use this when your theme has no spot for app blocks.' :
                           'Add the block yourself anywhere on the product page via the theme editor.'
                         }
                         options={[
                           { label: 'Above the Add to Cart button', value: 'above_cart' },
                           { label: 'Below the Add to Cart button', value: 'below_cart' },
                           { label: 'Custom (place it yourself in the theme editor)', value: 'custom' },
+                          { label: 'Custom selector (CSS class or ID)', value: 'selector' },
                         ]}
                         value={widgetPlacement}
                         onChange={(v) => { setWidgetPlacement(v); mark(); }}
                       />
+                      {widgetPlacement === 'selector' && (
+                        <>
+                          <TextField
+                            label="CSS selector"
+                            value={fbtLayout.widgetSelector || ''}
+                            onChange={setLayoutKey('widgetSelector')}
+                            maxLength={200}
+                            autoComplete="off"
+                            monospaced
+                            placeholder=".product__description or #product-price"
+                            error={selectorError}
+                            helpText="A class starts with a dot (.product-info), an ID with # (#price). In your browser, right-click the spot on a product page and choose Inspect to find it. If nothing matches, the widget shows below Add to Cart."
+                          />
+                          <Select
+                            label="Show the widget"
+                            options={[
+                              { label: 'Below that element', value: 'after' },
+                              { label: 'Above that element', value: 'before' },
+                            ]}
+                            value={fbtLayout.widgetSelectorPosition || 'after'}
+                            onChange={setLayoutKey('widgetSelectorPosition')}
+                          />
+                        </>
+                      )}
                     </BlockStack>
                   </AccordionSection>
                 </BlockStack>

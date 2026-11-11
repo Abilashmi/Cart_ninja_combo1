@@ -302,7 +302,7 @@ const GROUPS = [
   {
     title: 'Charges & rules',
     items: [
-      { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom'], toggle: 'codFeeEnabled' },
+      { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom', 'codFeeOwnAmount'], toggle: 'codFeeEnabled' },
       { id: 'eligibility', label: 'Eligibility', icon: FilterIcon, preview: 'drawer', fields: ['minOrder', 'maxOrder', 'unlistedPicks'] },
       { id: 'fraud', label: 'Fraud protection', icon: ShieldCheckMarkIcon, preview: 'sheet', fields: ['dailyLimitPerPhone', 'blockedPincodes'] },
     ],
@@ -866,6 +866,24 @@ export default function CodCustomizePage() {
                       autoComplete="off"
                     />
                   </FormLayout.Group>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">Products with their own fee</Text>
+                    <RefPicker type="product" value={form.codFeeOwnProducts} max={COD_PICK_MAX.products} onChange={set('codFeeOwnProducts')} />
+                    {form.codFeeOwnProducts.length > 0 && (
+                      <TextField
+                        label="Their COD fee"
+                        type="number"
+                        min={0}
+                        prefix={data.currencyCode}
+                        value={form.codFeeOwnAmount}
+                        onChange={set('codFeeOwnAmount')}
+                        placeholder="0"
+                        error={errors.codFeeOwnAmount}
+                        helpText={`An order of only these products pays ${money(Number(form.codFeeOwnAmount) || 0)} instead of the fee above. Mixed with other products, the order pays the higher of the two fees.`}
+                        autoComplete="off"
+                      />
+                    )}
+                  </BlockStack>
                   <Checkbox
                     label="Show fee to customers"
                     helpText={form.showCodFee ? 'Its own line in the order summary, and under the COD button.' : 'Still charged, but shown inside one "Delivery charges" line, and not on the COD button.'}

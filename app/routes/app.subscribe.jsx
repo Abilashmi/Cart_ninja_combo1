@@ -6,7 +6,7 @@ import {
 import { CheckCircleIcon, XCircleIcon, TargetIcon, EyeCheckMarkIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import { getShopPlan, getShopBillingInterval, setPendingPlanKey, confirmPlanFromWebhook } from "../services/plan-permissions.server";
-import { getPromoTrialDays, redeemPromoCode } from "../services/promo.server";
+import { getPromoTrialDays, getShopTrialDays, redeemPromoCode } from "../services/promo.server";
 import { PLANS, PLAN_KEYS, FEATURES, trialDaysFor, getOrderRange } from "../config/plans";
 
 // Ordered feature rows shown on every plan card, pulled from the single
@@ -57,16 +57,17 @@ async function isPartnerDevelopmentStore(admin) {
 
 export async function loader({ request }) {
     const { admin, session } = await authenticate.admin(request);
-    const [planKey, promoTrialDays, interval] = await Promise.all([
+    const [planKey, promoTrialDays, shopTrialDays, interval] = await Promise.all([
         getShopPlan(session.shop, admin),
         getPromoTrialDays(session.shop),
+        getShopTrialDays(session.shop),
         getShopBillingInterval(session.shop),
     ]);
     // getShopPlan already defaults an unapproved shop to 'free', which is
     // exactly its real feature access now that /app.jsx no longer forces
     // approval before using the app — so that's shown as the current plan
     // here too, not treated as "no plan selected yet."
-    return { currentPlanKey: planKey, currentInterval: planKey === 'free' ? 'monthly' : interval, promoTrialDays };
+    return { currentPlanKey: planKey, currentInterval: planKey === 'free' ? 'monthly' : interval, promoTrialDays, shopTrialDays };
 }
 
 export async function action({ request }) {
@@ -226,10 +227,15 @@ export async function action({ request }) {
 
     // Every merchant gets the standard trial by default: 7 days, monthly or
     // yearly (TRIAL_DAYS). A redeemed promo code overrides it with whatever that
-    // code was configured with (e.g. 30 days) — see app/services/promo.server.js. No new trial while replacing a yearly
-    // plan the merchant is already paying for.
-    const promoTrialDays = await getPromoTrialDays(shop);
-    const trialDays = replacingAnnual ? 0 : trialDaysFor(promoTrialDays);
+    // code was configured with (e.g. 30 days) — see app/services/promo.server.js. A shop
+    // with its own trial (shops.trial_days_override) gets that instead of the 7
+    // days. No new trial while replacing a yearly plan the merchant is already
+    // paying for.
+    const [promoTrialDays, shopTrialDays] = await Promise.all([
+        getPromoTrialDays(shop),
+        getShopTrialDays(shop),
+    ]);
+    const trialDays = replacingAnnual ? 0 : trialDaysFor(promoTrialDays, shopTrialDays);
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -316,12 +322,6 @@ function ordersLine(planKey) {
     return `${range} orders / month`;
 }
 
-function limitLine(planKey) {
-    const cap = PLANS[planKey].orderCap;
-    if (cap === null) return 'No order limit — your storefront features never pause. No extra charges.';
-    return `Past ${cap.toLocaleString('en-US')} orders your storefront features pause until next month. No extra charges.`;
-}
-
 const CARD_BADGES = {
     free: 'Free To Start With',
     lite: 'Your First Sales',
@@ -333,7 +333,7 @@ const CARD_BADGES = {
 };
 
 export default function SubscribePage() {
-    const { currentPlanKey, currentInterval = 'monthly', promoTrialDays: initialPromoTrialDays } = useLoaderData();
+    const { currentPlanKey, currentInterval = 'monthly', promoTrialDays: initialPromoTrialDays, shopTrialDays = 0 } = useLoaderData();
     // Monthly or yearly prices on the cards (yearly = 10 × monthly, same
     // 7-day trial, no per-order / AI overage: see orderCapBehavior in config/plans.js).
     const [billing, setBilling] = useState(currentInterval === 'annual' ? 'annual' : 'monthly');
@@ -359,8 +359,9 @@ export default function SubscribePage() {
     const isPromoEligible = promoTrialDays > 0;
     // Every merchant gets a trial by default — a redeemed code only matters
     // when it changes the length from the standard one.
-    const effectiveTrialDays = trialDaysFor(promoTrialDays);
-    const standardTrialDays = trialDaysFor(0);
+    // A shop with its own trial (shopTrialDays) sees that as its standard one.
+    const effectiveTrialDays = trialDaysFor(promoTrialDays, shopTrialDays);
+    const standardTrialDays = trialDaysFor(0, shopTrialDays);
 
     // Fires once the promo redemption fetcher settles. On success the modal
     // stays open showing the acknowledgment (how many days were just
@@ -550,17 +551,6 @@ export default function SubscribePage() {
                                     </button>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 20 }}>
-                                        <Text as="p" variant="bodyXs" tone="subdued">
-                                            {limitLine(planKey)}
-                                        </Text>
-                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                                            <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
-                                                <Icon source={CheckCircleIcon} tone="success" />
-                                            </span>
-                                            <Text as="p" variant="bodyXs" fontWeight="semibold">
-                                                {`AI BRIX — ${p.aiBrixCredits} credits / month`}
-                                            </Text>
-                                        </div>
                                         <Text as="p" variant="bodyXs" fontWeight="bold" tone="subdued">Every feature included:</Text>
                                         {FEATURE_ROWS.map((featureKey) => {
                                             const state = FEATURES[featureKey].states[planKey];
@@ -587,6 +577,14 @@ export default function SubscribePage() {
                                                 </Text>
                                             </div>
                                         )}
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                                            <span style={{ display: 'flex', alignItems: 'center', width: 16, height: 16, flexShrink: 0, marginTop: 1 }}>
+                                                <Icon source={CheckCircleIcon} tone="success" />
+                                            </span>
+                                            <Text as="p" variant="bodyXs" fontWeight="semibold">
+                                                {`AI BRIX — ${p.aiBrixCredits} credits / month`}
+                                            </Text>
+                                        </div>
                                     </div>
                                 </div>
 

@@ -180,6 +180,37 @@ function ExcludedCollections({ value, onChange }) {
   );
 }
 
+function ExcludedProducts({ value, onChange }) {
+  const list = Array.isArray(value) ? value : [];
+  const pick = async () => {
+    const shopify = typeof window !== 'undefined' ? window.shopify : null;
+    if (!shopify?.resourcePicker) return;
+    try {
+      const selected = await shopify.resourcePicker({ type: 'product', multiple: true, filter: { variants: false }, selectionIds: list.map((p) => ({ id: p.id })) });
+      if (!selected) return;
+      onChange(selected.slice(0, PREPAID_EXCLUDE_MAX).map((p) => ({ id: p.id, title: p.title || '' })));
+    } catch {
+      shopify.toast.show('Could not open the picker. Please try again.', { isError: true });
+    }
+  };
+  return (
+    <BlockStack gap="200">
+      <Text as="p">Leave out these products</Text>
+      {list.length > 0 && (
+        <InlineStack gap="200">
+          {list.map((p) => (
+            <Tag key={p.id} onRemove={() => onChange(list.filter((x) => x.id !== p.id))}>{p.title || `Product ${p.id.split('/').pop()}`}</Tag>
+          ))}
+        </InlineStack>
+      )}
+      <InlineStack><Button onClick={pick}>{list.length ? 'Change products' : 'Choose products'}</Button></InlineStack>
+      <Text as="p" variant="bodySm" tone="subdued">
+        These products never get the prepaid discount: no offer on their product page, and checkout (Shopify or Shiprocket) leaves them out. Other products in the same order still get it.
+      </Text>
+    </BlockStack>
+  );
+}
+
 function PrepaidStatus({ status, dirty, enabled }) {
   if (!enabled) return null;
   if (dirty) return <Banner tone="info">Save to set up these changes in Shopify checkout.</Banner>;
@@ -194,7 +225,7 @@ function PrepaidStatus({ status, dirty, enabled }) {
   if (status.verified) {
     return (
       <Banner tone="success" title="Active in Shopify checkout">
-        {`${status.percent}% off online payments${status.maxDiscount > 0 ? ` (up to ${status.maxDiscount} ${status.currency || ''})`.replace(' )', ')') : ''}${status.minSubtotal > 0 ? ` on orders from ${status.minSubtotal} ${status.currency || ''}`.trimEnd() : ''}${status.excludedCollections?.length ? `, not on ${status.excludedCollections.length} excluded collection${status.excludedCollections.length === 1 ? '' : 's'}` : ''}. Shoppers see the offer on product pages.`}
+        {`${status.percent}% off online payments${status.maxDiscount > 0 ? ` (up to ${status.maxDiscount} ${status.currency || ''})`.replace(' )', ')') : ''}${status.minSubtotal > 0 ? ` on orders from ${status.minSubtotal} ${status.currency || ''}`.trimEnd() : ''}${status.excludedProducts?.length ? `, not on ${status.excludedProducts.length} excluded product${status.excludedProducts.length === 1 ? '' : 's'}` : ''}${status.excludedCollections?.length ? `${status.excludedProducts?.length ? ' or' : ', not on'} ${status.excludedCollections.length} excluded collection${status.excludedCollections.length === 1 ? '' : 's'}` : ''}. Shoppers see the offer on product pages.`}
       </Banner>
     );
   }
@@ -283,6 +314,7 @@ export function PrepaidSection({ form, setPP, errors, currencyCode, status, dirt
                 />
               </FormLayout.Group>
               <TextField label="Discount title" value={p.title} onChange={setPP(['prepaid', 'title'])} maxLength={PAY_TEXT_LIMITS.title} error={errors.ppTitle} helpText="Its name in Shopify checkout and on the order." autoComplete="off" />
+              <ExcludedProducts value={p.excludedProducts} onChange={setPP(['prepaid', 'excludedProducts'])} />
               <ExcludedCollections value={p.excludedCollections} onChange={setPP(['prepaid', 'excludedCollections'])} />
               <Checkbox label={'Show a "Save X%" badge'} checked={p.showBadge} onChange={setPP(['prepaid', 'showBadge'])} helpText="On the Pay Online card and its Buy button." />
               <Checkbox label="Show the exact savings amount" checked={p.showSavingsAmount} onChange={setPP(['prepaid', 'showSavingsAmount'])} helpText={'"(save ₹110)" next to the online price.'} />
