@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup, TextField, Banner, Tabs, Divider, Badge, Box, Thumbnail, SkeletonBodyText, Spinner, Icon, RangeSlider } from '@shopify/polaris';
-import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon } from '@shopify/polaris-icons';
+import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon, StarIcon, CashDollarIcon } from '@shopify/polaris-icons';
 import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
@@ -12,6 +12,8 @@ import {
 } from '../../utils/packs.shared.js';
 
 const PREVIEW_ZOOM = 0.8;
+// Badge shapes (customization.badge.style), drawn live by packs_widget.js.
+const BADGE_STYLES = [['pill', 'Pill'], ['square', 'Square'], ['outline', 'Outline'], ['ribbon', 'Ribbon'], ['tag', 'Tag'], ['seal', 'Seal']];
 const STEPS = ['Product', 'Pack type', 'Configure', 'Template', 'Customize', 'Review'];
 const STEP_KEYS = ['product', 'type', 'configure', 'design', 'customize', 'review'];
 const REVIEW_STEP = STEPS.length - 1;
@@ -475,6 +477,17 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 .pz-group{display:flex;flex-direction:column;gap:10px}
 .pz-group-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8a8f97}
 .pz-colors{display:flex;flex-direction:column;border:1px solid #eceef0;border-radius:10px;overflow:hidden}
+.pz-badge-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pz-badge-style{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 6px;font:inherit;background:#fff;border:1px solid #c9cccf;border-radius:10px;cursor:pointer}
+.pz-badge-style:hover{background:#f6f6f7}
+.pz-badge-style[aria-pressed=true]{border-color:#111111;box-shadow:inset 0 0 0 1px #111111}
+.pz-badge-style-label{font-size:12px;font-weight:600;color:#3b3f45}
+.pz-badge-sample{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.2px;text-transform:uppercase;line-height:1.4}
+.pz-badge-sample[data-badge-style="square"]{border-radius:3px}
+.pz-badge-sample[data-badge-style="outline"]{background:transparent!important;padding:0}
+.pz-badge-sample[data-badge-style="ribbon"]{border-radius:0;padding:3px 16px 3px 9px;clip-path:polygon(0 0,100% 0,calc(100% - 8px) 50%,100% 100%,0 100%)}
+.pz-badge-sample[data-badge-style="tag"]{border-radius:3px 0 0 3px;padding:3px 14px 3px 9px;clip-path:polygon(0 0,calc(100% - 9px) 0,100% 50%,calc(100% - 9px) 100%,0 100%)}
+.pz-badge-sample[data-badge-style="seal"]{padding:4px 12px;transform:rotate(-6deg);box-shadow:0 2px 6px rgba(0,0,0,.25)}
 .pz-color{display:flex;align-items:center;gap:10px;padding:8px 10px;background:#fff;border-bottom:1px solid #f1f2f4}
 .pz-color:last-child{border-bottom:0}
 .pz-swatch{position:relative;width:28px;height:28px;border-radius:8px;border:1px solid rgba(0,0,0,.14);box-shadow:inset 0 0 0 2px #fff;flex-shrink:0;cursor:pointer;overflow:hidden}
@@ -730,9 +743,11 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     { id: 'content', label: 'Content', icon: TextBlockIcon, description: 'The heading, subtext and promo text shoppers read.', prefixes: ['content.heading', 'content.subheading', 'content.promoText'] },
     { id: 'colors', label: 'Colors', icon: PaintBrushFlatIcon, description: 'Match the widget to your brand and theme.', prefixes: ['colors.'] },
     { id: 'typography', label: 'Typography', icon: TextFontIcon, description: 'Text sizes, weight and heading alignment.', prefixes: ['typography.'] },
-    { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.'] },
-    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Style the Add to Cart and Buy Now buttons.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow'] },
+    { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.', 'content.hideVariants'] },
+    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Choose which buttons show (Add to Cart, Buy Now, COD) and style them.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow', 'content.showAddToCart', 'content.showCod', 'content.codText', 'content.showThemeButtons', 'content.themeAddsPack', 'content.matchThemeButtons'] },
+    { id: 'badge', label: 'Badges', icon: StarIcon, description: 'The label on a pack ("Most Popular"): shape, corner, colors and text.', prefixes: ['badge.', 'colors.badge'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
+    { id: 'price', label: 'Amounts', icon: CashDollarIcon, description: 'How prices are drawn: weight, struck-through price, and your own words.', prefixes: ['price.'] },
     { id: 'image', label: 'Image', icon: ImageIcon, description: 'Photo size and position in the item slots.', prefixes: ['images.'] },
     { id: 'placement', label: 'Placement', icon: LayoutBuyButtonIcon, description: 'Where the Pack appears on the product page.', prefixes: ['placement.'] },
   ];
@@ -834,9 +849,23 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     ),
     buttons: (
       <BlockStack gap="400">
+        <FieldGroup title="Match your theme">
+          <Toggle label="Use my theme's button style" helpText="The Pack's buttons copy your theme's own Add to cart and Buy it now buttons: colors, border, corner radius, text size, weight and font. The text stays what you write below. You'll see the result on your store, not in this preview, and it overrides the button colors and shape set here." checked={form.customization.content.matchThemeButtons === true} onChange={(value) => updateCustom('content', 'matchThemeButtons', value)} />
+        </FieldGroup>
+        <FieldGroup title="Your theme's own buttons">
+          <Toggle label="Keep my theme's buttons visible" helpText="Shows the theme's Add to cart, Buy it now (including Shiprocket / GoKwik buttons), quantity box and variant picker next to the Pack, instead of hiding them. They add a single item as usual, not the Pack. To avoid doubles, switch off the Pack's own Add to Cart / Buy Now below." checked={form.customization.content.showThemeButtons === true} onChange={(value) => updateCustom('content', 'showThemeButtons', value)} />
+          {form.customization.content.showThemeButtons === true && (
+            <Toggle label="Theme's Add to cart adds the selected Pack" helpText="When a shopper picks “Pack of 2” and taps your theme's Add to cart, the whole Pack (its quantity, variants and discount) goes in the cart instead of one plain item. Buy it now / Shiprocket / GoKwik buttons belong to other apps, so they still buy a single item." checked={form.customization.content.themeAddsPack !== false} onChange={(value) => updateCustom('content', 'themeAddsPack', value)} />
+          )}
+        </FieldGroup>
         <FieldGroup title="Add to Cart">
-          {contentField('cta', 'Button label', 40)}
-          <div className="pz-colors">{colorField('button', 'Background')}{colorField('buttonText', 'Text')}{colorField('addBorder', 'Border', 'buttons')}</div>
+          <Toggle label="Show an Add to Cart button" helpText="Turn off if you only want Buy Now and / or COD. If every button is off, Add to Cart still shows so shoppers can always buy." checked={form.customization.content.showAddToCart !== false} onChange={(value) => updateCustom('content', 'showAddToCart', value)} />
+          {form.customization.content.showAddToCart !== false && (
+            <>
+              {contentField('cta', 'Button label', 40)}
+              <div className="pz-colors">{colorField('button', 'Background')}{colorField('buttonText', 'Text')}{colorField('addBorder', 'Border', 'buttons')}</div>
+            </>
+          )}
         </FieldGroup>
         <FieldGroup title="Buy Now">
           <Toggle label="Show a Buy Now button" helpText="Checks out only this Pack — whatever else is in the shopper’s cart stays there for later. While it’s on, your theme’s own Buy it now button is hidden on this product." checked={form.customization.content.showBuyNow !== false} onChange={(value) => updateCustom('content', 'showBuyNow', value)} />
@@ -846,6 +875,15 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
               <div className="pz-colors">{colorField('buyNowBackground', 'Background', 'buttons')}{colorField('buyNowText', 'Text', 'buttons')}{colorField('buyNowBorder', 'Border', 'buttons')}</div>
               <Segmented label="Arrangement" options={[['side_by_side', 'Side by side'], ['stacked', 'Stacked']]} value={form.customization.buttons.layout} onChange={(value) => updateCustom('buttons', 'layout', value)} />
               <Segmented label="Order" options={[['add_first', 'Add to Cart first'], ['buy_first', 'Buy Now first']]} value={form.customization.buttons.order} onChange={(value) => updateCustom('buttons', 'order', value)} />
+            </>
+          )}
+        </FieldGroup>
+        <FieldGroup title="Cash on Delivery">
+          <Toggle label="Show a Buy with COD button" helpText="Appears in its own row under the other buttons and opens BRIX COD Checkout for just this Pack. Shows only on stores where BRIX COD is turned on for product pages. While it's on, BRIX COD's own product-page button is hidden on this product." checked={form.customization.content.showCod === true} onChange={(value) => updateCustom('content', 'showCod', value)} />
+          {form.customization.content.showCod === true && (
+            <>
+              {contentField('codText', 'Button label', 40)}
+              <div className="pz-colors">{colorField('codBackground', 'Background', 'buttons')}{colorField('codText', 'Text', 'buttons')}{colorField('codBorder', 'Border', 'buttons')}</div>
             </>
           )}
         </FieldGroup>
@@ -890,6 +928,9 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     ),
     layout: (
       <BlockStack gap="400">
+        <FieldGroup title="Item pickers">
+          <Toggle label="Hide the variant pickers" helpText="Show only the offer cards (Single, Pack of 2, …). Every item in the Pack is the variant selected on the product page, so keep your theme's variant picker visible. On a Mix & Match pack this means every item is that same variant, since shoppers can no longer pick a different one for each item. Save the pack for the change to reach your store." checked={form.customization.content.hideVariants === true} onChange={(value) => updateCustom('content', 'hideVariants', value)} />
+        </FieldGroup>
         <FieldGroup title="Border">
           {sizeField('borders', 'radius', 'Corner radius')}
           {sizeField('borders', 'width', 'Border width')}
@@ -909,6 +950,63 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         <FieldGroup title="Wording">
           <Segmented label="Shown as" disabled={!form.customization.savings.visible} options={[['save_amount', 'Amount'], ['save_percent', 'Percentage']]} value={form.customization.savings.mode} onChange={(value) => updateCustom('savings', 'mode', value)} />
           <TextField label="Word to use" disabled={!form.customization.savings.visible} value={form.customization.savings.label} maxLength={24} placeholder="Save" helpText={`e.g. “${form.customization.savings.label || 'Save'} ${form.customization.savings.mode === 'save_percent' ? '10%' : fmt(24)}”`} onChange={(value) => updateCustom('savings', 'label', value)} autoComplete="off" />
+        </FieldGroup>
+        <FieldGroup title="Look">
+          <Segmented label="Shown as" disabled={!form.customization.savings.visible} options={[['text', 'Plain text'], ['chip', 'Filled chip']]} value={form.customization.savings.style} onChange={(value) => updateCustom('savings', 'style', value)} />
+          {form.customization.savings.visible && form.customization.savings.style === 'chip' && (
+            <div className="pz-colors">{colorField('chipBackground', 'Chip background', 'savings')}{colorField('chipText', 'Chip text', 'savings')}</div>
+          )}
+          {form.customization.savings.visible && form.customization.savings.style !== 'chip' && (
+            <Text as="p" variant="bodySm" tone="subdued">The text color is “Savings text” under Colors.</Text>
+          )}
+        </FieldGroup>
+      </BlockStack>
+    ),
+    badge: (
+      <BlockStack gap="400">
+        <Text as="p" variant="bodySm" tone="subdued">The text of each badge (for example “Most Popular”) is set per pack on the Configure step. Everything here is how those badges look.</Text>
+        <FieldGroup title="Shape">
+          <div className="pz-badge-styles" role="group" aria-label="Badge style">
+            {BADGE_STYLES.map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={form.customization.badge.style === id} className="pz-badge-style" onClick={() => updateCustom('badge', 'style', id)}>
+                <span className="pz-badge-sample" data-badge-style={id} style={{ background: form.customization.colors.badge, color: form.customization.badge.textColor || form.customization.colors.text }}>{id === 'outline' ? <span style={{ border: '1.5px solid currentColor', borderRadius: 999, padding: '1px 8px' }}>Popular</span> : 'Popular'}</span>
+                <span className="pz-badge-style-label">{label}</span>
+              </button>
+            ))}
+          </div>
+          <Segmented label="Where it sits" options={[['auto', 'Auto'], ['top_left', 'Left'], ['top_right', 'Right'], ['inline', 'Inline']]} value={form.customization.badge.position} onChange={(value) => updateCustom('badge', 'position', value)} />
+        </FieldGroup>
+        <FieldGroup title="Colors">
+          <div className="pz-colors">{colorField('badge', 'Background')}{colorField('textColor', 'Text', 'badge')}</div>
+          <Text as="p" variant="bodySm" tone="subdued">Leave the text color empty to use the widget’s text color. Outline badges draw their border in the text color.</Text>
+        </FieldGroup>
+        <FieldGroup title="Text">
+          {sizeField('badge', 'size', 'Text size (0 = automatic)')}
+          <Segmented label="Font weight" options={[[400, 'Regular'], [500, 'Medium'], [600, 'Semi'], [700, 'Bold'], [800, 'Black']]} value={Number(form.customization.badge.fontWeight)} onChange={(value) => updateCustom('badge', 'fontWeight', value)} />
+          <Toggle label="Uppercase text" checked={form.customization.badge.uppercase} onChange={(value) => updateCustom('badge', 'uppercase', value)} />
+        </FieldGroup>
+      </BlockStack>
+    ),
+    price: (
+      <BlockStack gap="400">
+        <FieldGroup title="Your words around the amount">
+          <TextField label="Before the amount" value={form.customization.price.prefix} maxLength={12} placeholder="e.g. Rs. or From" onChange={(value) => updateCustom('price', 'prefix', value)} autoComplete="off" error={customCheck.errors.find((message) => message.startsWith('price.prefix '))} />
+          <TextField label="After the amount" value={form.customization.price.suffix} maxLength={24} placeholder="e.g. / pack or only" onChange={(value) => updateCustom('price', 'suffix', value)} autoComplete="off" error={customCheck.errors.find((message) => message.startsWith('price.suffix '))} />
+          <Segmented label="Currency sign" options={[['show', 'Show'], ['hide', 'Hide']]} value={form.customization.price.symbol} onChange={(value) => updateCustom('price', 'symbol', value)} />
+          <Text as="p" variant="bodySm" tone="subdued">{`Preview: ${form.customization.price.prefix ? `${form.customization.price.prefix} ` : ''}${form.customization.price.symbol === 'hide' ? '1,599' : fmt(1599)}${form.customization.price.suffix ? ` ${form.customization.price.suffix}` : ''}`}</Text>
+        </FieldGroup>
+        <FieldGroup title="Style">
+          <Segmented label="Amount weight" options={[[0, 'Auto'], [400, 'Regular'], [600, 'Semi'], [700, 'Bold'], [800, 'Black']]} value={Number(form.customization.price.weight)} onChange={(value) => updateCustom('price', 'weight', value)} />
+          <Text as="p" variant="bodySm" tone="subdued">Amount color and size are under Colors and Typography.</Text>
+        </FieldGroup>
+        <FieldGroup title="Struck-through price">
+          <Toggle label="Show the price before the discount" helpText="The crossed-out amount next to each offer’s price." checked={form.customization.price.showWas !== false} onChange={(value) => updateCustom('price', 'showWas', value)} />
+          {form.customization.price.showWas !== false && (
+            <>
+              <div className="pz-colors">{colorField('wasColor', 'Color', 'price')}</div>
+              <Text as="p" variant="bodySm" tone="subdued">Leave empty for the faded look.</Text>
+            </>
+          )}
         </FieldGroup>
       </BlockStack>
     ),

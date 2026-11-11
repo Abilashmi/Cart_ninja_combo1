@@ -390,8 +390,20 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null 
 export const DEFAULT_CUSTOMIZATION = {
   // showBuyNow: the widget's own Buy Now button (checks out only the Pack, in a
   // cart of its own). While it's on, the theme's Buy it now button is hidden.
-  content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '', buyNow: 'Buy Now', showBuyNow: true },
-  savings: { visible: true, mode: 'save_amount', label: 'Save' },
+  // showAddToCart / showBuyNow / showCod: which buttons the widget shows (all three
+  // off falls back to Add to Cart on the storefront, so a Pack is never unbuyable).
+  // showCod is off by default: COD needs BRIX COD Checkout to be live for the store.
+  content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '', buyNow: 'Buy Now', showBuyNow: true, showAddToCart: true, showCod: false, codText: 'Buy with COD', showThemeButtons: false, themeAddsPack: true, hideVariants: false, matchThemeButtons: false },
+  // style 'chip' draws the savings as a filled pill (like "SAVE Rs. 500") instead of plain text.
+  savings: { visible: true, mode: 'save_amount', label: 'Save', style: 'text', chipBackground: '#008060', chipText: '#ffffff' },
+  // Tier badges ("Most Popular"). style: pill | square | outline | ribbon | tag | seal.
+  // position: auto (cards: top-left corner, rows: beside the name) | top_left | top_right | inline.
+  // textColor '' = the widget's text color; size 0 = automatic (10px on cards, 11px on rows).
+  badge: { style: 'pill', position: 'auto', textColor: '', size: 0, uppercase: true, fontWeight: 700 },
+  // How amounts are drawn. weight 0 = follow Typography; wasColor '' = the old faded look;
+  // prefix / suffix are the merchant's own words around the amount ("From", "/ pack");
+  // symbol 'hide' shows the number without the currency sign (use prefix for "Rs.").
+  price: { weight: 0, wasColor: '', showWas: true, prefix: '', suffix: '', symbol: 'show' },
   colors: { primary: '#008060', background: '#ffffff', cardBackground: '#ffffff', selectedCard: '#e6f4f1', border: '#dfe3e8', text: '#202223', price: '#202223', discount: '#008060', badge: '#fff4d6', button: '#008060', buttonText: '#ffffff' },
   borders: { radius: 8, width: 1, style: 'solid', shadow: false },
   typography: { headingSize: 20, packTitleSize: 15, priceSize: 18, descriptionSize: 13, fontWeight: 600, alignment: 'left' },
@@ -402,6 +414,7 @@ export const DEFAULT_CUSTOMIZATION = {
   buttons: {
     layout: 'side_by_side', order: 'add_first', radius: 8, fontSize: 15, fontWeight: 700, paddingY: 13, borderWidth: 2, uppercase: false,
     addBorder: '#008060', buyNowBackground: '#ffffff', buyNowText: '#008060', buyNowBorder: '#008060',
+    codBackground: '#ffffff', codText: '#008060', codBorder: '#008060',
   },
   images: { enabled: true, size: 'medium', position: 'top' },
   design: { preset: 'slots' },
@@ -436,10 +449,14 @@ const num = (min, max) => ({ type: 'number', min, max });
 const oneOf = (...values) => ({ type: 'enum', values });
 const bool = () => ({ type: 'boolean' });
 const color = () => ({ type: 'color' });
+// A color that may also be left empty ("follow the default").
+const colorOrEmpty = () => ({ type: 'color', empty: true });
 
 export const CUSTOMIZATION_SCHEMA = {
-  content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160), buyNow: str(40), showBuyNow: bool() },
-  savings: { visible: bool(), mode: oneOf('save_amount', 'save_percent'), label: str(24) },
+  content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160), buyNow: str(40), showBuyNow: bool(), showAddToCart: bool(), showCod: bool(), codText: str(40), showThemeButtons: bool(), themeAddsPack: bool(), hideVariants: bool(), matchThemeButtons: bool() },
+  savings: { visible: bool(), mode: oneOf('save_amount', 'save_percent'), label: str(24), style: oneOf('text', 'chip'), chipBackground: color(), chipText: color() },
+  badge: { style: oneOf('pill', 'square', 'outline', 'ribbon', 'tag', 'seal'), position: oneOf('auto', 'top_left', 'top_right', 'inline'), textColor: colorOrEmpty(), size: num(0, 20), uppercase: bool(), fontWeight: oneOf(400, 500, 600, 700, 800) },
+  price: { weight: oneOf(0, 400, 500, 600, 700, 800), wasColor: colorOrEmpty(), showWas: bool(), prefix: str(12), suffix: str(24), symbol: oneOf('show', 'hide') },
   colors: Object.fromEntries(Object.keys(DEFAULT_CUSTOMIZATION.colors).map((key) => [key, color()])),
   borders: { radius: num(0, 32), width: num(0, 6), style: oneOf('solid', 'dashed', 'dotted'), shadow: bool() },
   typography: { headingSize: num(12, 40), packTitleSize: num(11, 28), priceSize: num(12, 36), descriptionSize: num(10, 24), fontWeight: oneOf(400, 500, 600, 700), alignment: oneOf('left', 'center', 'right') },
@@ -447,6 +464,7 @@ export const CUSTOMIZATION_SCHEMA = {
   buttons: {
     layout: oneOf('side_by_side', 'stacked'), order: oneOf('add_first', 'buy_first'), radius: num(0, 40), fontSize: num(11, 24), fontWeight: oneOf(400, 500, 600, 700),
     paddingY: num(6, 24), borderWidth: num(0, 4), uppercase: bool(), addBorder: color(), buyNowBackground: color(), buyNowText: color(), buyNowBorder: color(),
+    codBackground: color(), codText: color(), codBorder: color(),
   },
   images: { enabled: bool(), size: oneOf('small', 'medium', 'large'), position: oneOf('top', 'left') },
   design: { preset: oneOf(...PACK_DESIGNS.map((design) => design.id)) },
@@ -495,6 +513,8 @@ export function sanitizeCustomization(input) {
         if (typeof raw !== 'string') { errors.push(`${label} must be text.`); continue; }
         if (raw.length > rule.max) { errors.push(`${label} must be ${rule.max} characters or fewer.`); continue; }
         parsed = raw;
+      } else if (rule.type === 'color' && rule.empty && raw === '') {
+        parsed = '';
       } else if (rule.type === 'color') {
         if (typeof raw !== 'string' || !HEX.test(raw.trim())) { errors.push(`${label} must be a hex color like #008060.`); continue; }
         parsed = raw.trim();
@@ -557,7 +577,7 @@ export function applyDesign(customization, designId) {
   const design = PACK_DESIGNS.find((item) => item.id === designId) || PACK_DESIGNS[0];
   const current = mergeCustomization(customization);
   const next = { ...current, design: { preset: design.id } };
-  for (const group of ['colors', 'borders', 'typography', 'spacing', 'buttons']) {
+  for (const group of ['colors', 'borders', 'typography', 'spacing', 'buttons', 'badge', 'price']) {
     next[group] = { ...DEFAULT_CUSTOMIZATION[group], ...(design.style[group] || {}) };
   }
   return next;

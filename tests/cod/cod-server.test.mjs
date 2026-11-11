@@ -117,6 +117,11 @@ function fakeAdmin(opts = {}) {
           shop: { metafield: opts.comboConfig === null ? null : { jsonValue: opts.comboConfig || COMBO_CONFIG } },
           discountNodes: { nodes: [{ discount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Combo Weight', status: opts.comboStatus || 'ACTIVE' } }] },
         };
+      } else if (op === 'CodPacksConfig') {
+        data = {
+          shop: { metafield: opts.packsConfig ? { jsonValue: opts.packsConfig } : null },
+          discountNodes: { nodes: [{ discount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Packs', status: opts.packsStatus || 'ACTIVE' } }] },
+        };
       } else if (op === 'CodComboVariants') {
         data = { nodes: variables.ids.map((id) => (variants[id] ? {
           id, price: String(variants[id].price),
@@ -260,6 +265,44 @@ test('quote: priced by Shopify, COD fee added as the shipping line, rules applie
     cod.quoteCod(fakeAdmin(), { settings: settingsOn({ excludedProductTags: ['coffee'] }), lines, surface: 'drawer' }),
     (e) => e.code === 'product_excluded',
   );
+});
+
+// A Pack on product 1 (the fake store's product): Buy 1 no discount, Buy 2 10% off, Buy 3 ₹100 off.
+const PACKS_CONFIG = {
+  version: 1, currency: 'INR',
+  packs: { 3: { id: 3, version: 1, productId: '1', variantId: '11', template: 'same_variant', variantScope: 'all', allowedVariantIds: [], tiers: [
+    { quantity: 1, discountType: 'none', discountValue: 0 },
+    { quantity: 2, discountType: 'percentage', discountValue: 10 },
+    { quantity: 3, discountType: 'fixed', discountValue: 100 },
+  ] } },
+};
+const packLine = (quantity, packQuantity, over = {}) => ({ variantId: '11', quantity, properties: { _brix_pack_id: '3', _brix_pack_quantity: String(packQuantity), _brix_pack_version: '1', _brix_pack_group: 'g1', ...over } });
+
+test('Packs: COD prices the tier like checkout (percentage and fixed) and tags the order', async () => {
+  const percent = await cod.quoteCod(fakeAdmin({ packsConfig: PACKS_CONFIG }), { settings: settingsOn({ codFeeEnabled: false, shippingFee: 0 }), lines: [packLine(2, 2)], surface: 'product' });
+  assert.equal(percent.quote.comboDiscount, 179.8); // 10% of 2 x 899
+  assert.equal(percent.quote.comboDiscounts[0].kind, 'pack');
+  assert.equal(percent.quote.total, 1618.2);
+
+  const fixed = await cod.quoteCod(fakeAdmin({ packsConfig: PACKS_CONFIG }), { settings: settingsOn({ codFeeEnabled: false, shippingFee: 0 }), lines: [packLine(3, 3)], surface: 'product' });
+  assert.equal(fixed.quote.comboDiscount, 100);
+  assert.equal(fixed.quote.total, 2597); // 3 x 899 - 100
+
+  // Buy 1 has no discount but is still a verified Pack.
+  const single = await cod.quoteCod(fakeAdmin({ packsConfig: PACKS_CONFIG }), { settings: settingsOn({ codFeeEnabled: false, shippingFee: 0 }), lines: [packLine(1, 1)], surface: 'product' });
+  assert.equal(single.quote.comboDiscount, 0);
+  assert.equal(single.quote.total, 899);
+});
+
+test('Packs: COD refuses a Pack it cannot price exactly like checkout', async () => {
+  const refused = (admin, lines) => assert.rejects(cod.quoteCod(admin, { settings: settingsOn(), lines, surface: 'product' }), (e) => e.code === 'checkout_only');
+  await refused(fakeAdmin(), [packLine(2, 2)]); // no Packs config at all
+  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG, packsStatus: 'EXPIRED' }), [packLine(2, 2)]); // checkout discount not active
+  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG }), [packLine(3, 2)]); // 3 units are not whole packs of 2
+  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG }), [packLine(2, 5)]); // no tier of 5
+  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG }), [packLine(2, 2, { _brix_pack_id: '99' })]); // unknown Pack
+  await refused(fakeAdmin({ packsConfig: { ...PACKS_CONFIG, currency: 'USD' } }), [packLine(3, 3)]); // fixed amount in another currency
+  await refused(fakeAdmin({ packsConfig: { ...PACKS_CONFIG, packs: { 3: { ...PACKS_CONFIG.packs[3], productId: '777' } } } }), [packLine(2, 2)]); // line is not that Pack's product
 });
 
 test('quote: Pack / free-gift lines and sold-out items are refused', async () => {

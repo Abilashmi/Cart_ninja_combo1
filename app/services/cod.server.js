@@ -19,11 +19,12 @@ import { BASE_PHP_URL } from '../utils/api-helpers';
 import { sendOtpSms, smsProviderStatus } from './cod-sms.server';
 import { sendCodPurchaseEvents, sendCodRefundEvent } from './cod-tracking.server';
 import {
-  DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
+  DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isRewardGiftLine,
   maskPhone, splitName, provinceCodeFor, moneyFormatter, codRuleCollections, codShownOnProduct, unlistedCodAllowed,
 } from '../utils/cod.shared.js';
 import { computeBox, decimalsFor, formatWeight, tierLabel, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 import { COMBO_WEIGHT_CONFIG_KEY, COMBO_WEIGHT_DISCOUNT_TITLE } from './combo-weight-shopify.server';
+import { PACKS_CONFIG_KEY, PACKS_DISCOUNT_TITLE } from './packs-shopify.server';
 import {
   sanitizeShipping, quoteShipping, deliveryForShopper, deliverySummary, referencedCollections, dateLabel, slotLabel,
 } from '../utils/shipping.shared.js';
@@ -656,6 +657,124 @@ async function loadComboVariants(admin, variantIds, collectionIds = []) {
   return result;
 }
 
+/* ───────────────────────── Packs (tier offers) ───────────────────────── */
+
+// A Pack's price in Shopify checkout comes from the BRIX Packs Function, which
+// reads only the app-owned shop metafield `$app:packs_config` and the lines'
+// _brix_pack_* properties (extensions/brix-packs-discount). Draft orders don't
+// run it (the _brix* markers are stripped), so COD applies the same tier
+// discount itself, from the same trusted config and the same rules, as line
+// discounts on the draft. A Pack line COD can't verify (config missing, the
+// checkout discount not ACTIVE, another product or variant, a quantity that is
+// no tier, a fixed amount in another currency) makes `unverified` true and the
+// quote refuses: COD never charges a price checkout wouldn't.
+
+async function loadPacksContext(admin) {
+  const data = await gql(admin, `#graphql
+    query CodPacksConfig {
+      shop { metafield(namespace: "$app", key: "${PACKS_CONFIG_KEY}") { jsonValue } }
+      discountNodes(first: 100, query: "type:app") {
+        nodes { discount { __typename ... on DiscountAutomaticApp { title status } } }
+      }
+    }`);
+  const active = (data?.discountNodes?.nodes || []).some((n) => n.discount?.__typename === 'DiscountAutomaticApp'
+    && n.discount.title === PACKS_DISCOUNT_TITLE && n.discount.status === 'ACTIVE');
+  const config = data?.shop?.metafield?.jsonValue;
+  return { active, config: config && typeof config === 'object' && config.packs && typeof config.packs === 'object' ? config : null };
+}
+
+const positiveInt = (value) => {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+/**
+ * Pack tier discounts for the Pack lines of a COD order, shaped like
+ * comboWeightAdjustments' result so both feed the same draft-order pricing:
+ * { byLine: Map<lineIndex, amountMinor>, titles, descriptions, boxes, decimals, unverified }.
+ */
+export async function packAdjustments(admin, { lines, currencyCode = 'INR' }) {
+  const result = { byLine: new Map(), titles: new Map(), descriptions: new Map(), boxes: [], decimals: decimalsFor(currencyCode), unverified: false };
+  const marked = lines.map((line, index) => ({ line, index })).filter(({ line }) => line.properties?._brix_pack_id);
+  if (!marked.length) return result;
+  const { active, config } = await loadPacksContext(admin);
+  if (!active || !config) { result.unverified = true; return result; }
+  const variants = await loadComboVariants(admin, marked.map(({ line }) => line.variantId));
+  const { decimals } = result;
+  const factor = 10 ** decimals;
+
+  // Group the marked lines into packs (one add-to-cart = one group token), like the Function.
+  const groups = new Map();
+  for (const entry of marked) {
+    const props = entry.line.properties;
+    const packQuantity = positiveInt(props._brix_pack_quantity);
+    const pack = Object.values(config.packs).find((item) => String(item?.id) === String(props._brix_pack_id));
+    const variant = variants.get(String(entry.line.variantId));
+    if (!packQuantity || !pack || !Array.isArray(pack.tiers) || !variant || variant.productId !== String(pack.productId)) { result.unverified = true; continue; }
+    if (pack.variantScope !== 'all') {
+      const allowed = Array.isArray(pack.allowedVariantIds) && pack.allowedVariantIds.length ? pack.allowedVariantIds : [String(pack.variantId)];
+      if (!allowed.some((id) => String(id) === String(entry.line.variantId))) { result.unverified = true; continue; }
+    }
+    const key = `${pack.id}:${packQuantity}:${props._brix_pack_group || entry.index}`;
+    if (!groups.has(key)) groups.set(key, { pack, packQuantity, entries: [] });
+    groups.get(key).entries.push({ ...entry, subtotalMinor: toMinor(variant.price, decimals) * entry.line.quantity });
+  }
+
+  for (const { pack, packQuantity, entries } of groups.values()) {
+    const tier = pack.tiers.find((item) => Number(item.quantity) === packQuantity);
+    const total = entries.reduce((sum, e) => sum + e.line.quantity, 0);
+    // No such tier, or a quantity that isn't a whole number of packs: checkout gives no
+    // discount here while the shopper was shown a Pack price, so COD refuses instead.
+    if (!tier || total <= 0 || total % packQuantity !== 0) { result.unverified = true; continue; }
+    if (tier.discountType === 'none') continue;
+    const value = Number(tier.discountValue);
+    if (!Number.isFinite(value) || value <= 0) { result.unverified = true; continue; }
+    const packCount = total / packQuantity;
+    const groupSubtotal = entries.reduce((sum, e) => sum + e.subtotalMinor, 0);
+    if (!(groupSubtotal > 0)) { result.unverified = true; continue; }
+
+    const shares = new Map();
+    if (tier.discountType === 'percentage') {
+      if (value > 100) { result.unverified = true; continue; }
+      for (const e of entries) shares.set(e.index, Math.round((e.subtotalMinor * value) / 100));
+    } else if (tier.discountType === 'fixed') {
+      // Fixed amounts are in the shop currency; checkout applies them only in that currency.
+      if (!config.currency || config.currency !== currencyCode) { result.unverified = true; continue; }
+      const totalDiscount = Math.min(Math.round(value * factor) * packCount, groupSubtotal);
+      let remaining = totalDiscount;
+      entries.forEach((e, i) => {
+        const share = i === entries.length - 1 ? remaining : Math.min(remaining, Math.floor((totalDiscount * e.subtotalMinor) / groupSubtotal));
+        remaining -= share;
+        shares.set(e.index, share);
+      });
+    } else { result.unverified = true; continue; }
+
+    const title = `Pack: Buy ${packQuantity}`;
+    let groupDiscount = 0;
+    for (const [index, amountMinor] of shares) {
+      if (amountMinor <= 0) continue;
+      result.byLine.set(index, amountMinor);
+      result.titles.set(index, title);
+      result.descriptions.set(index, 'BRIX Pack');
+      groupDiscount += amountMinor;
+    }
+    if (groupDiscount > 0) {
+      result.boxes.push({ templateId: `pack:${pack.id}`, kind: 'pack', title, weight: '', amountMinor: groupDiscount, subtotalMinor: groupSubtotal, lineKeys: entries.map((e) => e.index) });
+    }
+  }
+  return result;
+}
+
+function mergeAdjustments(first, second) {
+  return {
+    byLine: new Map([...first.byLine, ...second.byLine]),
+    titles: new Map([...first.titles, ...second.titles]),
+    descriptions: new Map([...(first.descriptions || []), ...(second.descriptions || [])]),
+    boxes: [...first.boxes, ...second.boxes],
+    decimals: first.decimals,
+  };
+}
+
 function comboQualifies(template, variant) {
   if (!variant?.productId) return false;
   // Same rule as the checkout Function: "not part of the box offer" never counts.
@@ -742,7 +861,8 @@ function comboLineItems(lines, combo, mode) {
     const amountMinor = combo.byLine.get(index);
     if (!amountMinor) { out.push(item); return; }
     const title = combo.titles.get(index);
-    const discount = (minor) => ({ valueType: 'FIXED_AMOUNT', value: minor / factor, title, description: 'BRIX combo box' });
+    const description = combo.descriptions?.get(index) || 'BRIX combo box';
+    const discount = (minor) => ({ valueType: 'FIXED_AMOUNT', value: minor / factor, title, description });
     if (mode === 'line' || item.quantity === 1) {
       out.push({ ...item, appliedDiscount: discount(amountMinor) });
       return;
@@ -968,7 +1088,7 @@ export async function quoteCod(admin, {
   settings, lines, coupon, pincode, surface, currencyCode = 'INR', comboWeightLive = false, cartCodes = [], cartAttributes = {},
   shipping = null, destination = null, delivery = null, strictDelivery = false, now = new Date(),
 }) {
-  if (lines.some((l) => isCheckoutOnlyLine(l.properties))) {
+  if (lines.some((l) => isRewardGiftLine(l.properties))) {
     throw new CodError('checkout_only', 'This cart has a Pack or free gift that is only available with online payment.', { status: 422 });
   }
   const advanced = settings.shippingMode === 'advanced' && shipping ? shipping : null;
@@ -977,7 +1097,12 @@ export async function quoteCod(admin, {
   const productError = productRuleError(settings, info, surface);
   if (productError) throw new CodError(productError.code, productError.message, { status: 422 });
   const format = moneyFormatter(currencyCode);
-  const combo = await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode });
+  const packs = await packAdjustments(admin, { lines, currencyCode });
+  // A Pack COD can't price exactly like checkout does is refused, never charged differently.
+  if (packs.unverified) {
+    throw new CodError('checkout_only', 'This Pack can only be bought with online payment right now.', { status: 422 });
+  }
+  const combo = mergeAdjustments(await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode }), packs);
   const hasBoxes = combo.boxes.length > 0;
 
   const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
@@ -1070,7 +1195,7 @@ export async function quoteCod(admin, {
     subtotal: amountOf(calc.subtotalPriceSet),
     discounts: otherDiscounts,
     comboDiscount,
-    comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor })),
+    comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor, ...(b.kind ? { kind: b.kind } : {}) })),
     shipping: charges.shipping,
     // Advanced shipping: the delivery options for this address and cart, and
     // which one is picked (null under simple shipping).
@@ -1215,9 +1340,11 @@ export async function placeCodOrder(admin, {
 
   const clearAttempt = () => php('cod_orders.php', { action: 'abandon', shop, idem_key: idemKey }).catch(() => {});
 
-  const boxes = quote.comboDiscounts || [];
+  const allBoxes = quote.comboDiscounts || [];
+  const boxes = allBoxes.filter((b) => b.kind !== 'pack');
+  const packTiers = allBoxes.filter((b) => b.kind === 'pack');
   const tags = [...new Set([
-    'COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []),
+    'COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []), ...(packTiers.length ? ['brix-pack'] : []),
     ...(option ? [`brix-ship-${option.kind.replace(/_/g, '-')}`] : []), ...settings.orderTags,
   ])];
   // Advanced shipping: what was booked, for the merchant and their courier.
@@ -1228,7 +1355,7 @@ export async function placeCodOrder(admin, {
     ...(ship.slot ? [{ key: 'brix_delivery_slot', value: slotLabel(ship.slot) }] : []),
     ...(!ship.date && option.eta ? [{ key: 'brix_delivery_eta', value: option.eta.from === option.eta.to ? option.eta.from : `${option.eta.from} to ${option.eta.to}` }] : []),
   ] : [];
-  const reserved = new Set(['brix_combo_weight', ...deliveryAttributes.map((a) => a.key)]);
+  const reserved = new Set(['brix_combo_weight', 'brix_pack', ...deliveryAttributes.map((a) => a.key)]);
   const customAttributes = [
     { ...COD_MARKER },
     { key: 'payment_method', value: 'Cash on Delivery' },
@@ -1237,6 +1364,10 @@ export async function placeCodOrder(admin, {
     ...(boxes.length ? [{
       key: 'brix_combo_weight',
       value: boxes.map((b) => `combo ${b.templateId}: ${b.title}, ${b.weight}, -${b.amount.toFixed(2)}`).join('; ').slice(0, 250),
+    }] : []),
+    ...(packTiers.length ? [{
+      key: 'brix_pack',
+      value: packTiers.map((b) => `${b.templateId}: ${b.title}, -${b.amount.toFixed(2)}`).join('; ').slice(0, 250),
     }] : []),
     ...deliveryAttributes,
     ...Object.entries(attributes || {})

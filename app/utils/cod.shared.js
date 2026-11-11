@@ -596,6 +596,16 @@ export function splitName(full) {
 export function isCheckoutOnlyLine(properties) {
   const props = properties || {};
   if (props._brix_pack_id) return true;
+  return isRewardGiftLine(props);
+}
+
+/**
+ * A free reward gift (its price comes from a Shopify Function that only runs in
+ * Shopify checkout). Pack lines are NOT in here: COD prices a Pack's tier itself
+ * (cod.server.js packAdjustments) when the Pack widget's COD button sends them.
+ */
+export function isRewardGiftLine(properties) {
+  const props = properties || {};
   return props._brixReward === 'true' || props._brixReward === true;
 }
 

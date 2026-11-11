@@ -1533,6 +1533,12 @@
     return html;
   }
 
+  // The quote's "box" discount is a Pack's tier when every entry says so (cod.server.js packAdjustments).
+  function isPackQuote(q) {
+    var list = q.comboDiscounts || [];
+    return list.length > 0 && list.every(function (b) { return b.kind === 'pack'; });
+  }
+
   Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
     var prevBody = this.sh.querySelector('.bd');
@@ -1540,7 +1546,7 @@
     var rows = '<div class="rows">' +
       '<div><span>' + esc(bxT('storefront.cod.items', 'Items')) + '</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
       // Weight combo box price: the same discount Shopify checkout gives (cod.server.js).
-      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>' + esc(bxT('storefront.cod.combo_discount', 'Combo box discount')) + '</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
+      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>' + esc(isPackQuote(q) ? bxT('storefront.cod.pack_discount', 'Pack discount') : bxT('storefront.cod.combo_discount', 'Combo box discount')) + '</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
       discountRows(q, fmt) +
       chargeRows(this.cfg, q, fmt) +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>' + esc(bxT('storefront.cod.taxes', 'Taxes')) + '</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
