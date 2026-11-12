@@ -2440,35 +2440,29 @@
     });
   }
 
-  // A Pack (packs_widget.js) tapped through Shiprocket's own product Buy Now.
-  // Shiprocket can't run the Packs Function, so the server makes one one-time
-  // code worth the Pack saving + the prepaid saving on the Pack price
-  // (api.cod.prepaid-code.jsx checks both) and Shiprocket opens with just the
-  // Pack's items and that code. No Shiprocket, no code or an error:
-  // opts.fallback (the Pack's own Buy Now, Shopify checkout, where the Pack
-  // Function gives the Pack price). If Shiprocket itself fails to open, a
-  // Shopify cart link with the same code. BRIX's own Shiprocket switch isn't
-  // needed: the tap came from Shiprocket's button (Silverline runs Shiprocket's
-  // app directly, with the switch off).
+  // A Pack (packs_widget.js) tapped through Shiprocket's own product Buy Now:
+  // the Pack goes in the cart with its _brix_pack_* properties, then Shiprocket
+  // opens for the cart and applies the Pack's automatic discount itself. No
+  // discount code is made. Shiprocket missing: Shopify checkout (the Pack
+  // Function gives the Pack price). The cart add failing: opts.fallback (the
+  // Pack's own Buy Now). BRIX's own Shiprocket switch isn't needed: the tap
+  // came from Shiprocket's button (Silverline runs Shiprocket's app directly).
   function payOnlinePack(items, opts) {
     var fallback = function () { payingOnline = false; if (opts && typeof opts.fallback === 'function') opts.fallback(); };
-    var withProps = items.map(function (it) { return { variantId: Number(it.variantId), quantity: Number(it.quantity) || 1, properties: it.properties || {} }; });
-    var list = withProps.map(function (it) { return { variantId: it.variantId, quantity: it.quantity }; });
     if (payingOnline) return false;
+    if (!window.BrixCheckout || typeof window.BrixCheckout.checkoutCart !== 'function') return false;
     payingOnline = true;
     setTimeout(function () { payingOnline = false; }, 10000);
-    (function () {
-      if (!window.BrixCheckout || typeof window.BrixCheckout.checkoutItems !== 'function') { fallback(); return; }
-      api('prepaid-code', { items: withProps }).then(function (json) {
-        if (!json || !json.success || !json.code) { fallback(); return; }
-        window.BrixCheckout.checkoutItems({
-          items: list,
-          coupon: json.code,
-          fallbackUrl: ROOT + 'cart/' + list.map(function (it) { return it.variantId + ':' + it.quantity; }).join(',') + '?discount=' + encodeURIComponent(json.code),
+    var lines = items.map(function (it) { return { id: Number(it.variantId), quantity: Number(it.quantity) || 1, properties: it.properties || {} }; });
+    window.fetch(ROOT + 'cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ items: lines }) })
+      .then(function (res) {
+        if (!res.ok) { fallback(); return; }
+        window.BrixCheckout.checkoutCart({
+          allowPacks: true,
+          fallbackUrl: ROOT + 'checkout',
           onOpen: function () { payingOnline = false; if (opts && typeof opts.onOpen === 'function') opts.onOpen(); },
         });
       }, fallback);
-    })();
     return true;
   }
 

@@ -12,7 +12,7 @@ const tiers = [
 const pack = { id: 7, version: 4, variantId: '200', template: 'same_variant', packType: 'same_variant', variantScope: 'selected', allowedVariantIds: ['200'], productTitle: 'Pendant', variantTitle: 'Default', basePrice: 1599, available: true, maxQuantity: null, tiers, customization: { content: { heading: 'Choose Your Pack' } } };
 const body = { success: true, packs: [pack], currency: { code: 'INR', locale: 'en-IN' }, checkoutDiscount: { verified: true, state: 'active' }, preview: false };
 // BrixCod loads after the widget (as on a store), so the first price has to wait for it.
-const fakeCod = `setTimeout(function () { window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function () {},
+const fakeCod = `window.BrixCheckout = { checkoutCart: function () {} }; setTimeout(function () { window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function () {},
   setPackPrice: function (p) { window.__prices.push(p); },
   payOnlinePack: function (items, opts) { window.__paid.push(items); if (opts.onOpen) opts.onOpen(); return true; } }; }, 700);`;
 const browser = await chromium.launch();
@@ -50,7 +50,7 @@ assert.equal(s.paid[0][0].variantId, 200);
 assert.equal(s.paid[0][0].quantity, 2);
 assert.equal(s.paid[0][0].properties._brix_pack_id, '7');
 assert.equal(s.prices.at(-1), 2698);
-console.log('✓ Buy 2: BRIX opens Shiprocket with the Pack (2 items, Pack properties), label price ₹2,698');
+console.log('✓ Buy 2: BRIX hands the Pack (2 items, Pack properties) to Shiprocket, label price ₹2,698');
 
 // The cart drawer's Shiprocket checkout is never taken over.
 await tap('#mini');

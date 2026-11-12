@@ -496,11 +496,11 @@
   // admin preview) the text alone, tags removed.
   // Shiprocket's own product Buy Now (Silverline: button.sr-headless-checkout in
   // .shiprocket-headless[data-type=product]) buys the theme's single item at the
-  // full price: Shiprocket can't run the Packs Function. While a Pack with a
-  // saving (or more than one item) is selected, its tap is caught before
-  // Shiprocket's own handler and BRIX COD opens Shiprocket with the Pack's items
-  // and a one-time code for the Pack saving + prepaid saving (brix_cod.js
-  // payOnlinePack). Its label follows the Pack's price too (BrixCod.setPackPrice).
+  // full price. While a Pack with a saving (or more than one item) is selected,
+  // its tap is caught before Shiprocket's own handler: the Pack goes in the cart
+  // and Shiprocket opens for the cart, applying the Pack's automatic discount
+  // (brix_cod.js payOnlinePack). Its label follows the Pack's price too
+  // (BrixCod.setPackPrice).
   var SR_BUY_NOW = '.sr-headless-checkout, .shiprocket-headless';
   var SR_CART_PLACES = 'cart-drawer, cart-notification, #CartDrawer, #cart-drawer, .cart-drawer, .drawer--cart, #cc-root, [data-brix-cod-drawer], [data-brix-packs-root]';
   var srTakeover = null; // the selected Pack's Shiprocket hand-off, or null
@@ -1946,7 +1946,7 @@
         return;
       }
       var cod = window.BrixCod;
-      if (!cod || typeof cod.payOnlinePack !== 'function') { addToCart(true); return; }
+      if (!cod || typeof cod.payOnlinePack !== 'function' || !window.BrixCheckout) { addToCart(true); return; }
       var lines = buildItems(pack, tier);
       state.message = null;
       state.busy = 'buy';
@@ -1955,7 +1955,7 @@
       var reset = setTimeout(done, 12000);
       var started = cod.payOnlinePack(lines.map(function (line) { return { variantId: line.id, quantity: line.quantity, properties: line.properties }; }), {
         onOpen: done,
-        // No Shiprocket or no code: the Pack's own Buy Now (Shopify checkout gives the Pack price).
+        // The Pack couldn't go in the cart: the Pack's own Buy Now (Shopify checkout).
         fallback: function () { clearTimeout(reset); state.busy = false; addToCart(true); },
       });
       if (!started) done();
