@@ -1417,6 +1417,15 @@
       var showWas = priceCfg.showWas !== false;
       function numberText(value) { return hideSymbol ? money.plain(value) : money.format(value); }
       function priceText(value) { return (pricePrefix ? pricePrefix + ' ' : '') + numberText(value) + (priceSuffix ? ' ' + priceSuffix : ''); }
+      // Amount tags a merchant can use in button text: {price} the Pack's total, {was} the total
+      // before the discount, {saving}, {each} per item, {quantity} items, {pack} the offer's name.
+      function labelWithTags(text, pack, tier) {
+        var value = String(text == null ? '' : text);
+        if (!tier || value.indexOf('{') < 0) return value;
+        var totals = shownTier(pack, tier, state.tierIndex);
+        var values = { price: numberText(totals.price), was: numberText(totals.subtotal), saving: numberText(totals.savings), each: numberText(tier.quantity ? totals.price / tier.quantity : totals.price), quantity: String(tier.quantity), pack: tierName(tier) };
+        return value.replace(/{(price|was|saving|each|quantity|pack)}/g, function (match, key) { return values[key]; });
+      }
       // Texts left at the Pack's English defaults follow the shopper's language ('' = none).
       var heading = content.heading ? bxText(content.heading, 'storefront.packs.heading', 'Choose Your Pack') : '';
       var subheading = content.subheading ? bxText(content.subheading, 'storefront.packs.subheading', 'Buy more and save more.') : '';
@@ -1428,6 +1437,14 @@
       var section = el('section', { class: 'brix-packs-widget', dir: bxDir(), 'data-template': pack.template, 'data-design': design, 'data-layout': layout, 'data-mode': m.rules.sameVariant ? 'same' : 'mix', 'aria-label': heading || bxT('storefront.packs.packs', 'Packs') });
       applyCustomization(section, custom);
       if (!adminPreview && (matchThemeButtons(pack) || themeModeOn(pack))) applyThemeButtonLook(section);
+      // Colors the merchant chose on top of the theme's look ('' = the theme's own).
+      var themeColors = themeModeOn(pack) ? {
+        add: { backgroundColor: content.themeAddBg, color: content.themeAddText, borderColor: content.themeAddBorder },
+        buy: { backgroundColor: content.themeBuyBg, color: content.themeBuyText, borderColor: content.themeBuyBorder },
+      } : null;
+      if (themeColors) {
+        [['--brix-packs-button', themeColors.add.backgroundColor], ['--brix-packs-button-text', themeColors.add.color], ['--brix-packs-add-border', themeColors.add.borderColor], ['--brix-packs-buy-bg', themeColors.buy.backgroundColor], ['--brix-packs-buy-text', themeColors.buy.color], ['--brix-packs-buy-border', themeColors.buy.borderColor]].forEach(function (pair) { if (pair[1]) section.style.setProperty(pair[0], pair[1]); });
+      }
 
       section.appendChild(el('div', { class: 'brix-packs-head' }, [
         heading ? el('h2', { class: 'brix-packs-heading', text: heading }) : null,
@@ -1541,7 +1558,7 @@
       if (state.message) section.appendChild(el('div', { class: 'brix-packs-msg', role: state.message.type === 'error' ? 'alert' : 'status', 'data-type': state.message.type, text: state.message.text }));
 
       var addDisabled = Boolean(state.busy) || !tier || tierDisabled(pack, tier) || !ready;
-      var addButton = el('button', { type: 'button', class: 'brix-packs-add', 'data-fk': 'add-to-cart', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding\u2026') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart')) });
+      var addButton = el('button', { type: 'button', class: 'brix-packs-add', 'data-fk': 'add-to-cart', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding\u2026') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : labelWithTags(themeModeOn(pack) && content.themeAddLabel ? content.themeAddLabel : bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart'), pack, tier)) });
       // Which buttons show (content.showAddToCart / showBuyNow / showCod). Buy Now checks out
       // only this Pack; the shopper's cart is left as it was. COD opens the BRIX COD popup
       // for just this Pack. With every button switched off, Add to Cart stays so a Pack is
@@ -1556,8 +1573,8 @@
         if (wantCod) document.documentElement.setAttribute('data-brix-pack-cod', '1');
         else document.documentElement.removeAttribute('data-brix-pack-cod');
       }
-      var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now') }) : null;
-      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : bxText(content.codText, 'storefront.packs.cod', 'Buy with COD') }) : null;
+      var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : labelWithTags(themeModeOn(pack) && content.themeBuyLabel ? content.themeBuyLabel : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier) }) : null;
+      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : labelWithTags(bxText(content.codText, 'storefront.packs.cod', 'Buy with COD'), pack, tier) }) : null;
       // Theme buttons mode: swap in shells of the theme's own buttons (see themeModeOn). Whatever
       // can't be drawn from a real theme button keeps BRIX's own working button, and the theme
       // editor says so.
@@ -1567,11 +1584,11 @@
         var themeAdd = wantAdd ? findThemeAdd() : null;
         var themeBuy = wantBuy ? findThemeBuy() : null;
         if (themeAdd) {
-          addButton = themeProxy(themeAdd, 'add', state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding…') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : themeLabel(themeAdd, bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart'))), addDisabled, function () { addToCart(false); });
+          addButton = themeProxy(themeAdd, 'add', state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding…') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : (content.themeAddLabel ? labelWithTags(content.themeAddLabel, pack, tier) : themeLabel(themeAdd, labelWithTags(bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart'), pack, tier)))), addDisabled, function () { addToCart(false); });
           themed.push(addButton);
         } else if (wantAdd) themeNote = "couldn't find your theme's Add to cart button, so the Pack uses BRIX's own button.";
         if (themeBuy) {
-          buyButton = themeProxy(themeBuy, 'buy', state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout…') : themeLabel(themeBuy, bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now')), addDisabled, function () { addToCart(true); });
+          buyButton = themeProxy(themeBuy, 'buy', state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout…') : (content.themeBuyLabel ? labelWithTags(content.themeBuyLabel, pack, tier) : themeLabel(themeBuy, labelWithTags(bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier))), addDisabled, function () { addToCart(true); });
           themed.push(buyButton);
         } else if (wantBuy) {
           // The theme has no Buy it now at all: show none. A wallet-only one can't buy a Pack: BRIX's own.
@@ -1591,7 +1608,11 @@
         codButton,
       ]));
       root.appendChild(section);
-      themed.forEach(syncThemeLook);
+      themed.forEach(function (node) {
+        syncThemeLook(node);
+        var chosen = themeColors && themeColors[node.getAttribute('data-brix-theme-button')];
+        if (chosen) Object.keys(chosen).forEach(function (prop) { if (chosen[prop]) node.style.setProperty(prop === 'backgroundColor' ? 'background-color' : prop === 'borderColor' ? 'border-color' : 'color', chosen[prop], 'important'); });
+      });
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
       restoreFocus(focusKey);

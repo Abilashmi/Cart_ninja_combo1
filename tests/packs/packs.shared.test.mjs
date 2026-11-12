@@ -310,3 +310,13 @@ test('buttonMode: new Packs use the theme buttons, older Packs keep the look the
   assert.equal(mergeCustomization({ content: { buttonMode: 'brix', matchThemeButtons: true } }).content.buttonMode, 'brix');
   assert.equal(sanitizeCustomization({ content: { buttonMode: 'nope' } }).value.content?.buttonMode, undefined);
 });
+
+test('theme button overrides: empty by default, valid colors and text kept, bad color rejected', () => {
+  const c = mergeCustomization(defaultCustomization()).content;
+  assert.equal(c.themeAddBg, '');
+  assert.equal(c.themeBuyLabel, '');
+  const ok = sanitizeCustomization({ content: { themeAddBg: '#ff0000', themeBuyLabel: 'Buy {price}' } });
+  assert.equal(ok.value.content.themeAddBg, '#ff0000');
+  assert.equal(ok.value.content.themeBuyLabel, 'Buy {price}');
+  assert.ok(sanitizeCustomization({ content: { themeAddBg: 'red-ish' } }).errors.length > 0);
+});

@@ -759,7 +759,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     { id: 'colors', label: 'Colors', icon: PaintBrushFlatIcon, description: 'Match the widget to your brand and theme.', prefixes: ['colors.'] },
     { id: 'typography', label: 'Typography', icon: TextFontIcon, description: 'Text sizes, weight and heading alignment.', prefixes: ['typography.'] },
     { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.', 'content.hideVariants'] },
-    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Choose which buttons show (Add to Cart, Buy Now, COD) and style them.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow', 'content.showAddToCart', 'content.showCod', 'content.codText', 'content.showThemeButtons', 'content.themeAddsPack', 'content.matchThemeButtons', 'content.buttonMode'] },
+    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Choose which buttons show (Add to Cart, Buy Now, COD) and style them.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow', 'content.showAddToCart', 'content.showCod', 'content.codText', 'content.showThemeButtons', 'content.themeAddsPack', 'content.matchThemeButtons', 'content.buttonMode', 'content.theme'] },
     { id: 'badge', label: 'Badges', icon: StarIcon, description: 'The label on a pack ("Most Popular"): shape, corner, colors and text.', prefixes: ['badge.', 'colors.badge'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
     { id: 'price', label: 'Amounts', icon: CashDollarIcon, description: 'How prices are drawn: weight, struck-through price, and your own words.', prefixes: ['price.'] },
@@ -867,7 +867,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         <FieldGroup title="Which buttons should the Pack show?">
           <Segmented label="Buttons" options={[['theme', "My theme's buttons"], ['brix', 'BRIX buttons'], ['cod', 'COD only']]} value={buttonChoice} onChange={setButtonChoice} />
           <Text as="p" variant="bodySm" tone="subdued">
-            {buttonChoice === 'theme' && "Add to cart and Buy it now are taken from your theme, so they look exactly like the rest of your product page, and they add the selected Pack. If your theme has no such button, BRIX's own is used. You see this on your store, not in this preview."}
+            {buttonChoice === 'theme' && "Add to cart and Buy it now are taken from your theme, so they look exactly like the rest of your product page, and they add the selected Pack. If your theme has no such button, BRIX's own is used. The preview shows your text and colors; the theme's own look appears on your store."}
             {buttonChoice === 'brix' && "BRIX's own Add to Cart and Buy Now, styled below."}
             {buttonChoice === 'cod' && 'Only the Buy with COD button shows. It needs BRIX COD to be turned on for product pages.'}
           </Text>
@@ -878,12 +878,23 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
             <Toggle label="Keep my theme's own buttons visible (older setting)" helpText="Shows the theme's own buttons next to the Pack, adding a single item. Turn off to use the choice above." checked onChange={() => updateCustom('content', 'showThemeButtons', false)} />
           )}
         </FieldGroup>
+        {buttonChoice === 'theme' && (
+          <FieldGroup title="Customize theme buttons (optional)">
+            <Text as="p" variant="bodySm" tone="subdued">Leave empty to keep exactly what your theme uses. Fill in only what you want to change.</Text>
+            <Text as="h3" variant="headingSm">Add to cart</Text>
+            <TextField label="Button text" value={form.customization.content.themeAddLabel || ''} maxLength={40} placeholder="Your theme's text" helpText="Amount tags you can use: {price} (Pack total), {was} (before discount), {saving}, {each} (per item), {quantity}, {pack} (offer name). Example: Buy now · {price}." onChange={(value) => updateCustom('content', 'themeAddLabel', value)} autoComplete="off" />
+            <div className="pz-colors">{colorField('themeAddBg', 'Background', 'content')}{colorField('themeAddText', 'Text', 'content')}{colorField('themeAddBorder', 'Border', 'content')}</div>
+            <Text as="h3" variant="headingSm">Buy now</Text>
+            <TextField label="Button text" value={form.customization.content.themeBuyLabel || ''} maxLength={40} placeholder="Your theme's text" helpText="Amount tags you can use: {price} (Pack total), {was} (before discount), {saving}, {each} (per item), {quantity}, {pack} (offer name). Example: Buy now · {price}." onChange={(value) => updateCustom('content', 'themeBuyLabel', value)} autoComplete="off" />
+            <div className="pz-colors">{colorField('themeBuyBg', 'Background', 'content')}{colorField('themeBuyText', 'Text', 'content')}{colorField('themeBuyBorder', 'Border', 'content')}</div>
+          </FieldGroup>
+        )}
         {buttonChoice === 'brix' && (
           <>
             <FieldGroup title="Add to Cart">
           {form.customization.content.showAddToCart !== false && (
             <>
-              {contentField('cta', 'Button label', 40)}
+              {contentField('cta', 'Button label', 40, 'Tags: {price}, {was}, {saving}, {each}, {quantity}, {pack}.')}
               <div className="pz-colors">{colorField('button', 'Background')}{colorField('buttonText', 'Text')}{colorField('addBorder', 'Border', 'buttons')}</div>
             </>
           )}
@@ -891,7 +902,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
             <FieldGroup title="Buy Now">
           {form.customization.content.showBuyNow !== false && (
             <>
-              {contentField('buyNow', 'Button label', 40)}
+              {contentField('buyNow', 'Button label', 40, 'Tags: {price}, {was}, {saving}, {each}, {quantity}, {pack}.')}
               <div className="pz-colors">{colorField('buyNowBackground', 'Background', 'buttons')}{colorField('buyNowText', 'Text', 'buttons')}{colorField('buyNowBorder', 'Border', 'buttons')}</div>
               <Segmented label="Arrangement" options={[['side_by_side', 'Side by side'], ['stacked', 'Stacked']]} value={form.customization.buttons.layout} onChange={(value) => updateCustom('buttons', 'layout', value)} />
               <Segmented label="Order" options={[['add_first', 'Add to Cart first'], ['buy_first', 'Buy Now first']]} value={form.customization.buttons.order} onChange={(value) => updateCustom('buttons', 'order', value)} />

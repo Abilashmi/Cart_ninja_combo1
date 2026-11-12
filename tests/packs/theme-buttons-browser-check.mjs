@@ -111,6 +111,37 @@ await check('theme Buy it now is a wallet (branded) -> BRIX Buy Now used, Add st
   await context.close();
 });
 
+await check('merchant overrides: own text with amount tags + own colors on the theme buttons; empty = the theme', async () => {
+  const { page, context } = await open('dawn', { buttonMode: 'theme', themeAddLabel: 'Add {quantity} for {price}', themeBuyLabel: 'Buy now, save {saving}', themeAddBg: '#ff0000', themeAddText: '#ffffff', themeBuyBorder: '#00ff00' });
+  await page.locator('[role="radio"]').nth(1).click();
+  assert.equal((await page.locator('.brix-packs-themebtn--add').textContent()).trim(), 'Add 2 for ₹152.00');
+  assert.equal((await page.locator('.brix-packs-themebtn--buy').textContent()).trim(), 'Buy now, save ₹8.00');
+  assert.equal(await page.locator('.brix-packs-themebtn--add').evaluate((n) => getComputedStyle(n).backgroundColor), 'rgb(255, 0, 0)');
+  assert.equal(await page.locator('.brix-packs-themebtn--buy').evaluate((n) => getComputedStyle(n).borderTopColor), 'rgb(0, 255, 0)');
+  // untouched fields still follow the theme
+  assert.equal(await page.locator('.brix-packs-themebtn--buy').evaluate((n) => getComputedStyle(n).backgroundColor), await page.locator('.shopify-payment-button > .shopify-payment-button__button--unbranded').evaluate((n) => getComputedStyle(n).backgroundColor));
+  await context.close();
+});
+
+await check('amount tags also work in BRIX mode button text', async () => {
+  const { page, context } = await open('dawn', { buttonMode: 'brix', cta: 'Add · {price}' });
+  assert.match(await page.locator('.brix-packs-add').textContent(), /Add · ₹80.00/);
+  await context.close();
+});
+
+await check('admin preview shows the merchant button text (tags filled) and colors in theme mode', async () => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.setContent('<div id="m"></div>');
+  await page.addScriptTag({ content: script });
+  const p = pack({ buttonMode: 'theme', themeAddLabel: 'Add {quantity} · {price}', themeBuyLabel: 'Buy now {saving} off', themeAddBg: '#ff0000' });
+  await page.evaluate((pk) => window.BrixPacksWidget.mount(document.getElementById('m'), { pack: pk, currency: { code: 'INR', locale: 'en-IN' }, checkoutDiscount: null }), p);
+  assert.match(await page.locator('.brix-packs-add').textContent(), /Add 1 · ₹80.00/);
+  assert.match(await page.locator('.brix-packs-buy').textContent(), /Buy now ₹0.00 off/);
+  assert.equal(await page.locator('.brix-packs-add').evaluate((n) => getComputedStyle(n).backgroundColor), 'rgb(255, 0, 0)');
+  await context.close();
+});
+
 await check('no theme button found -> BRIX Add button + warning, still functional', async () => {
   const { page, context, warnings, cartCalls } = await open('nobutton', { buttonMode: 'theme', showBuyNow: false });
   assert.equal(await page.locator('.brix-packs-themebtn').count(), 0);

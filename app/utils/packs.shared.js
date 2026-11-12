@@ -393,7 +393,7 @@ export const DEFAULT_CUSTOMIZATION = {
   // showAddToCart / showBuyNow / showCod: which buttons the widget shows (all three
   // off falls back to Add to Cart on the storefront, so a Pack is never unbuyable).
   // showCod is off by default: COD needs BRIX COD Checkout to be live for the store.
-  content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '', buyNow: 'Buy Now', showBuyNow: true, showAddToCart: true, showCod: false, codText: 'Buy with COD', showThemeButtons: false, themeAddsPack: true, hideVariants: false, matchThemeButtons: false, buttonMode: 'theme' },
+  content: { heading: 'Choose Your Pack', subheading: 'Buy more and save more.', cta: 'Add Pack to Cart', promoText: '', buyNow: 'Buy Now', showBuyNow: true, showAddToCart: true, showCod: false, codText: 'Buy with COD', showThemeButtons: false, themeAddsPack: true, hideVariants: false, matchThemeButtons: false, buttonMode: 'theme', themeAddLabel: '', themeBuyLabel: '', themeAddBg: '', themeAddText: '', themeAddBorder: '', themeBuyBg: '', themeBuyText: '', themeBuyBorder: '' },
   // style 'chip' draws the savings as a filled pill (like "SAVE Rs. 500") instead of plain text.
   savings: { visible: true, mode: 'save_amount', label: 'Save', style: 'text', chipBackground: '#008060', chipText: '#ffffff' },
   // Tier badges ("Most Popular"). style: pill | square | outline | ribbon | tag | seal.
@@ -453,7 +453,7 @@ const color = () => ({ type: 'color' });
 const colorOrEmpty = () => ({ type: 'color', empty: true });
 
 export const CUSTOMIZATION_SCHEMA = {
-  content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160), buyNow: str(40), showBuyNow: bool(), showAddToCart: bool(), showCod: bool(), codText: str(40), showThemeButtons: bool(), themeAddsPack: bool(), hideVariants: bool(), matchThemeButtons: bool(), buttonMode: oneOf('theme', 'brix') },
+  content: { heading: str(80), subheading: str(160), cta: str(40), promoText: str(160), buyNow: str(40), showBuyNow: bool(), showAddToCart: bool(), showCod: bool(), codText: str(40), showThemeButtons: bool(), themeAddsPack: bool(), hideVariants: bool(), matchThemeButtons: bool(), buttonMode: oneOf('theme', 'brix'), themeAddLabel: str(40), themeBuyLabel: str(40), themeAddBg: colorOrEmpty(), themeAddText: colorOrEmpty(), themeAddBorder: colorOrEmpty(), themeBuyBg: colorOrEmpty(), themeBuyText: colorOrEmpty(), themeBuyBorder: colorOrEmpty() },
   savings: { visible: bool(), mode: oneOf('save_amount', 'save_percent'), label: str(24), style: oneOf('text', 'chip'), chipBackground: color(), chipText: color() },
   badge: { style: oneOf('pill', 'square', 'outline', 'ribbon', 'tag', 'seal'), position: oneOf('auto', 'top_left', 'top_right', 'inline'), textColor: colorOrEmpty(), size: num(0, 20), uppercase: bool(), fontWeight: oneOf(400, 500, 600, 700, 800) },
   price: { weight: oneOf(0, 400, 500, 600, 700, 800), wasColor: colorOrEmpty(), showWas: bool(), prefix: str(12), suffix: str(24), symbol: oneOf('show', 'hide') },
