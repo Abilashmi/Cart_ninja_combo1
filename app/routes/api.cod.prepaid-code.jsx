@@ -1,4 +1,4 @@
-import { CodError, codErrorResponse, getCodSettingsWithRuntime } from '../services/cod.server';
+import { CodError, codErrorResponse, getCodSettingsWithRuntime, packAdjustments } from '../services/cod.server';
 import { COD_CORS_HEADERS, corsPreflight, limitByIp, loadCodContext, ok, parseShop, readJson } from '../services/cod-storefront.server';
 import { isShiprocketEnabled } from '../services/shop-integrations.server';
 import { cleanupExpiredCodes } from '../services/combo-box-code.server';
@@ -17,6 +17,9 @@ import { getDb } from '../services/db.server';
  * the product page's Pay Online and the cart drawers' Checkout (the cart's
  * paid lines) on a shop that checks out through Shiprocket
  * (prepaid-code.server.js). code: null = no live prepaid offer.
+ * Items with _brix_pack_* properties (the Pack widget, tapping Shiprocket's
+ * Buy Now) also get their Pack saving in the code, worked out here the same
+ * way as a Pack COD order (packAdjustments), never taken from the browser.
  */
 export async function action({ request }) {
   if (request.method === 'OPTIONS') return corsPreflight();
@@ -27,7 +30,11 @@ export async function action({ request }) {
     limitByIp(request, 'prepaid-code', 30, 10 * 60_000);
     const { lines, error } = normalizeLines(body.items);
     if (error) throw new CodError('invalid_items', error);
-    if (!(await isShiprocketEnabled(shop))) {
+    // A Pack tapped through Shiprocket's own Buy Now also comes from shops that
+    // run Shiprocket's app without BRIX's switch: its code is only ever worth
+    // the Pack saving + prepaid saving Shopify checkout gives anyway.
+    const packOrder = lines.some((line) => line.properties?._brix_pack_id);
+    if (!packOrder && !(await isShiprocketEnabled(shop))) {
       throw new CodError('not_shiprocket', 'This store does not check out through Shiprocket.', { status: 403 });
     }
 
@@ -43,9 +50,17 @@ export async function action({ request }) {
     ]);
     const offer = prepaidOffer(stored.settings, stored.runtime, ctx.planState === 'enabled' && !ctx.paused);
     const rewardTiers = progressBar ? buildRewardConfig(progressBar).tiers : null;
-    const result = await createPrepaidCode(ctx.admin, { offer, items: lines, gifts: giftLines.lines, rewardTiers, prepaid: body.prepaid !== false });
+    const packSavings = new Map();
+    if (packOrder) {
+      const packs = await packAdjustments(ctx.admin, { lines });
+      for (const [index, minor] of packs.byLine) {
+        const id = String(lines[index].variantId);
+        packSavings.set(id, (packSavings.get(id) || 0) + minor);
+      }
+    }
+    const result = await createPrepaidCode(ctx.admin, { offer, items: lines, gifts: giftLines.lines, rewardTiers, prepaid: body.prepaid !== false, packSavings });
     if (result.code) cleanupExpiredCodes(ctx.admin, shop, PREPAID_CODE_TITLE_PREFIX).catch(() => {});
-    return ok({ code: result.code, percent: result.percent ?? null, gifts: result.gifts || 0 });
+    return ok({ code: result.code, percent: result.percent ?? null, gifts: result.gifts || 0, pack: result.pack || null, amount: result.amount || null });
   } catch (error) {
     return codErrorResponse(error, COD_CORS_HEADERS);
   }

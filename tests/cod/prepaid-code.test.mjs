@@ -199,3 +199,33 @@ test('show only ("Create the discount" off): no Shiprocket code for the prepaid 
   const showOnly = { productPayment: { ...SETTINGS.productPayment, prepaid: { enabled: true, createDiscount: false, percent: 10 } } };
   assert.equal(prepaidOffer(showOnly, { prepaid: { verified: false, showOnly: true, percent: 10 } }, true), null);
 });
+
+test('Pack on Shiprocket: the code carries the Pack saving + X% of the Pack price', async () => {
+  // Buy 2 at ₹1,599 = ₹3,198, Pack saving ₹500 → ₹2,698; 18% of that = ₹485.64.
+  const admin = fakeAdmin({ prices: { 41: '1599.00' } });
+  const result = await createPrepaidCode(admin, {
+    offer: { percent: 18, minSubtotal: 0 }, items: [{ variantId: '41', quantity: 2 }], packSavings: new Map([['41', 50000]]), now: NOW, random: fixedRandom,
+  });
+  assert.equal(result.amount, '985.65'); // 500 + 485.64 + one paisa → Shiprocket total ₹2,212.35
+  assert.equal(result.pack, '500.00');
+  const input = admin.calls.find((c) => c.op === 'BrixPrepaidCode').variables.input;
+  assert.deepEqual(input.minimumRequirement, { subtotal: { greaterThanOrEqualToSubtotal: '3198.00' } });
+  assert.deepEqual(input.customerGets.items.products.productVariantsToAdd, ['gid://shopify/ProductVariant/41']);
+});
+
+test('Pack on Shiprocket without a prepaid offer, or on a product left out of it: still the Pack saving', async () => {
+  const none = await createPrepaidCode(fakeAdmin({ prices: { 41: '1599.00' } }), {
+    offer: null, items: [{ variantId: '41', quantity: 3 }], packSavings: new Map([['41', 100000]]), now: NOW, random: fixedRandom,
+  });
+  assert.equal(none.amount, '1000.01');
+  const admin = fakeAdmin({ prices: { 41: '1599.00' }, products: { 41: '77' } });
+  const excluded = await createPrepaidCode(admin, {
+    offer: { percent: 18, minSubtotal: 0, excludedProducts: ['77'] }, items: [{ variantId: '41', quantity: 2 }], packSavings: new Map([['41', 50000]]), now: NOW, random: fixedRandom,
+  });
+  assert.equal(excluded.amount, '500.01');
+  const input = admin.calls.find((c) => c.op === 'BrixPrepaidCode').variables.input;
+  assert.deepEqual(input.customerGets.items.products.productVariantsToAdd, ['gid://shopify/ProductVariant/41']);
+  // A Pack saving larger than the line is cut to the line's price (plus the paisa).
+  const capped = await createPrepaidCode(fakeAdmin({ prices: { 41: '100.00' } }), { offer: null, items: [{ variantId: '41', quantity: 1 }], packSavings: new Map([['41', 999999]]), now: NOW, random: fixedRandom });
+  assert.equal(capped.amount, '100.01');
+});

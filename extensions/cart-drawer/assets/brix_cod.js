@@ -2440,6 +2440,48 @@
     });
   }
 
+  // A Pack (packs_widget.js) tapped through Shiprocket's own product Buy Now.
+  // Shiprocket can't run the Packs Function, so the server makes one one-time
+  // code worth the Pack saving + the prepaid saving on the Pack price
+  // (api.cod.prepaid-code.jsx checks both) and Shiprocket opens with just the
+  // Pack's items and that code. No Shiprocket, no code or an error:
+  // opts.fallback (the Pack's own Buy Now, Shopify checkout, where the Pack
+  // Function gives the Pack price). If Shiprocket itself fails to open, a
+  // Shopify cart link with the same code. BRIX's own Shiprocket switch isn't
+  // needed: the tap came from Shiprocket's button (Silverline runs Shiprocket's
+  // app directly, with the switch off).
+  function payOnlinePack(items, opts) {
+    var fallback = function () { payingOnline = false; if (opts && typeof opts.fallback === 'function') opts.fallback(); };
+    var withProps = items.map(function (it) { return { variantId: Number(it.variantId), quantity: Number(it.quantity) || 1, properties: it.properties || {} }; });
+    var list = withProps.map(function (it) { return { variantId: it.variantId, quantity: it.quantity }; });
+    if (payingOnline) return false;
+    payingOnline = true;
+    setTimeout(function () { payingOnline = false; }, 10000);
+    (function () {
+      if (!window.BrixCheckout || typeof window.BrixCheckout.checkoutItems !== 'function') { fallback(); return; }
+      api('prepaid-code', { items: withProps }).then(function (json) {
+        if (!json || !json.success || !json.code) { fallback(); return; }
+        window.BrixCheckout.checkoutItems({
+          items: list,
+          coupon: json.code,
+          fallbackUrl: ROOT + 'cart/' + list.map(function (it) { return it.variantId + ':' + it.quantity; }).join(',') + '?discount=' + encodeURIComponent(json.code),
+          onOpen: function () { payingOnline = false; if (opts && typeof opts.onOpen === 'function') opts.onOpen(); },
+        });
+      }, fallback);
+    })();
+    return true;
+  }
+
+  // The selected Pack's total (shopper's currency) while a Pack widget takes
+  // over Shiprocket's Buy Now; null = the theme's variant x quantity as usual.
+  var packPrice = null;
+  function setPackPrice(price) {
+    var next = price != null && isFinite(price) && Number(price) > 0 ? Number(price) : null;
+    if (next === packPrice) return;
+    packPrice = next;
+    if (productMount && typeof productMount.relabel === 'function') productMount.relabel();
+  }
+
   // "Pay online" goes through the theme's own Checkout button, so anything
   // the theme or another app does on checkout (notes, terms box, checkout
   // apps) still happens. Clicking works while it's hidden by "Replace".
@@ -2989,7 +3031,7 @@
     if (!hosts.length) { var one = findBuyNow(form, cfg); if (one) hosts = [one]; }
     var targets = hosts.map(textTarget).filter(Boolean);
     if (!targets.length) return;
-    var price = productPrice(form, info);
+    var price = packPrice != null ? packPrice : productPrice(form, info);
     var fee = codFeeFor(cfg, price, info && info.id ? [info.id] : null);
     var online = price;
     var pre = paymentValue && paymentValue.prepaid;
@@ -3763,6 +3805,8 @@
     prepaidCartCode: prepaidCartCode,
     prepareCartCode: prepareCartCode,
     priceTagValues: priceTagValues,
+    payOnlinePack: payOnlinePack,
+    setPackPrice: setPackPrice,
   };
 
   function init() {

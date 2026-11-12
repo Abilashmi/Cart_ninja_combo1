@@ -88,12 +88,18 @@ export function coveredGifts(gifts, rewardTiers, { paidMinor, paidCount }) {
  *   Shiprocket can't run the reward Function either, so the same code also
  *   takes each covered gift's price off.
  * prepaid: false = Shopify showed no prepaid saving in the cart (then only gifts).
+ * packSavings: Map<variantId, minor> the Pack discount the server worked out
+ *   for these items (cod.server.js packAdjustments). The Packs Function can't
+ *   run in Shiprocket either, so the code carries the Pack saving too, and the
+ *   prepaid X% is worked out on the Pack price, as Shopify checkout does.
  * Returns { code, percent, amount, endsAt, gifts } (amount in the shop currency,
  * gifts = how many gift lines the code covers).
  */
-export async function createPrepaidCode(admin, { offer, items, gifts = [], rewardTiers = null, prepaid = true, now = Date.now(), random = crypto.randomBytes }) {
+export async function createPrepaidCode(admin, { offer, items, gifts = [], rewardTiers = null, prepaid = true, packSavings = null, now = Date.now(), random = crypto.randomBytes }) {
   const wantGifts = gifts.length > 0 && Array.isArray(rewardTiers) && rewardTiers.length > 0;
-  if (!offer && !wantGifts) return { code: null };
+  const packOf = (id) => Math.max(0, Math.round(Number(packSavings?.get?.(String(id))) || 0));
+  const wantPack = [...(packSavings?.keys?.() || [])].some((id) => packOf(id) > 0);
+  if (!offer && !wantGifts && !wantPack) return { code: null };
   const quantities = new Map();
   for (const item of items) {
     const id = String(item.variantId);
@@ -113,6 +119,8 @@ export async function createPrepaidCode(admin, { offer, items, gifts = [], rewar
   let subtotalMinor = 0; // the prepaid saving's base (excluded collections left out)
   let paidMinor = 0; // every paid line, for gift milestones and the code's minimum
   let paidCount = 0;
+  let packMinor = 0; // the Pack saving (never more than the lines it is on)
+  let prepaidBaseMinor = 0; // the prepaid saving's base after the Pack saving
   const variantIds = [];
   const paidVariantIds = [];
   const byId = new Map();
@@ -121,19 +129,23 @@ export async function createPrepaidCode(admin, { offer, items, gifts = [], rewar
     if (id) byId.set(id, node);
     const price = Number(node?.price);
     if (!quantities.has(id) || !Number.isFinite(price) || price <= 0) continue;
-    paidMinor += Math.round(price * 100) * quantities.get(id);
+    const lineMinor = Math.round(price * 100) * quantities.get(id);
+    const linePack = Math.min(packOf(id), lineMinor);
+    paidMinor += lineMinor;
     paidCount += quantities.get(id);
+    packMinor += linePack;
     paidVariantIds.push(id);
     if (isExcluded(node)) continue;
-    subtotalMinor += Math.round(price * 100) * quantities.get(id);
+    subtotalMinor += lineMinor;
+    prepaidBaseMinor += lineMinor - linePack;
     variantIds.push(id);
   }
 
   // Same as the Function: X%, but never more than the cap.
   let savingMinor = 0;
-  if (offer && prepaid !== false && subtotalMinor > 0 && !(offer.minSubtotal > 0 && subtotalMinor < Math.round(offer.minSubtotal * 100))) {
+  if (offer && prepaid !== false && prepaidBaseMinor > 0 && !(offer.minSubtotal > 0 && prepaidBaseMinor < Math.round(offer.minSubtotal * 100))) {
     const capMinor = offer.maxDiscount > 0 ? Math.round(offer.maxDiscount * 100) : Infinity;
-    savingMinor = Math.min(Math.round((subtotalMinor * offer.percent) / 100), capMinor);
+    savingMinor = Math.min(Math.round((prepaidBaseMinor * offer.percent) / 100), capMinor);
   }
 
   const giftLines = wantGifts ? gifts.map((g) => {
@@ -143,15 +155,18 @@ export async function createPrepaidCode(admin, { offer, items, gifts = [], rewar
   const covered = paidMinor > 0 ? coveredGifts(giftLines, rewardTiers, { paidMinor, paidCount }) : [];
   const giftMinor = covered.reduce((sum, g) => sum + Math.round(g.price * 100), 0);
 
-  if (savingMinor + giftMinor <= 0) return { code: null };
+  if (savingMinor + giftMinor + packMinor <= 0) return { code: null };
   // One paisa more than BRIX's own discounts give together (see above).
-  const amountMinor = savingMinor + giftMinor + 1;
+  const amountMinor = savingMinor + giftMinor + packMinor + 1;
   const amount = (amountMinor / 100).toFixed(2);
   // Without gifts: exactly the prepaid code as before. With gifts: on every
   // paid line + the gifts, and the cart's paid lines as the minimum, so the
   // code can't be used for the gift alone.
-  const entitled = covered.length ? [...new Set([...paidVariantIds, ...covered.map((g) => g.variantId)])] : variantIds;
-  const minimumMinor = covered.length ? paidMinor : subtotalMinor;
+  // With a Pack saving: on every paid line (a Pack product can be left out of
+  // the prepaid offer and still have its Pack saving), minimum their full price.
+  const wide = covered.length || packMinor > 0;
+  const entitled = wide ? [...new Set([...paidVariantIds, ...covered.map((g) => g.variantId)])] : variantIds;
+  const minimumMinor = wide ? paidMinor : subtotalMinor;
 
   const code = newBoxCode(random, 'PP');
   const endsAt = new Date(now + PREPAID_CODE_TTL_MS).toISOString();
@@ -184,5 +199,5 @@ export async function createPrepaidCode(admin, { offer, items, gifts = [], rewar
   if (errors.length || !data?.discountCodeBasicCreate?.codeDiscountNode?.id) {
     throw new Error(`discountCodeBasicCreate failed: ${JSON.stringify(errors).slice(0, 300)}`);
   }
-  return { code, percent: savingMinor > 0 ? offer.percent : null, amount, endsAt, gifts: covered.length };
+  return { code, percent: savingMinor > 0 ? offer.percent : null, amount, endsAt, gifts: covered.length, pack: (packMinor / 100).toFixed(2) };
 }

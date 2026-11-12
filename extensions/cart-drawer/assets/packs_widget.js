@@ -494,6 +494,49 @@
   // the merchant's text ({cod_price}, {price}, {cod_fee}) are filled instead of adding
   // the price. Without a price (COD settings not loaded yet, another currency, the
   // admin preview) the text alone, tags removed.
+  // Shiprocket's own product Buy Now (Silverline: button.sr-headless-checkout in
+  // .shiprocket-headless[data-type=product]) buys the theme's single item at the
+  // full price: Shiprocket can't run the Packs Function. While a Pack with a
+  // saving (or more than one item) is selected, its tap is caught before
+  // Shiprocket's own handler and BRIX COD opens Shiprocket with the Pack's items
+  // and a one-time code for the Pack saving + prepaid saving (brix_cod.js
+  // payOnlinePack). Its label follows the Pack's price too (BrixCod.setPackPrice).
+  var SR_BUY_NOW = '.sr-headless-checkout, .shiprocket-headless';
+  var SR_CART_PLACES = 'cart-drawer, cart-notification, #CartDrawer, #cart-drawer, .cart-drawer, .drawer--cart, #cc-root, [data-brix-cod-drawer], [data-brix-packs-root]';
+  var srTakeover = null; // the selected Pack's Shiprocket hand-off, or null
+  var srPrice = null;
+  var srWaits = 0;
+  var srTimer = null;
+  function pushPackPrice() {
+    clearTimeout(srTimer);
+    var cod = window.BrixCod;
+    if (cod && typeof cod.setPackPrice === 'function') { cod.setPackPrice(srPrice); return; }
+    if (srPrice != null && srWaits < 30) { srWaits += 1; srTimer = setTimeout(pushPackPrice, 500); } // BRIX COD still loading
+  }
+  function packShiprocket(handler, price) {
+    srTakeover = handler;
+    var next = handler && price != null ? price : null;
+    if (next === srPrice) return;
+    srPrice = next;
+    srWaits = 0;
+    pushPackPrice();
+  }
+  function shiprocketTap(event) {
+    if (!srTakeover) return;
+    var hit = event.target && event.target.closest ? event.target.closest(SR_BUY_NOW) : null;
+    if (!hit || hit.closest(SR_CART_PLACES)) return;
+    var typed = hit.closest('[data-type]');
+    var kind = String((typed && typed.getAttribute('data-type')) || '').toLowerCase();
+    if (kind === 'mini-cart' || kind === 'cart') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    srTakeover();
+  }
+  if (!window.__brixPacksShiprocketTap) {
+    window.__brixPacksShiprocketTap = true;
+    window.addEventListener('click', shiprocketTap, true);
+  }
+
   var COD_TAGS = /\{(cod_price|price|cod_fee)\}/g;
   function codButtonText(text, values, money) {
     // No COD amount known: drop the COD-only tags; {price} etc. are filled by labelWithTags.
@@ -1470,7 +1513,7 @@
       var gridScroll = oldGrid ? oldGrid.scrollTop : 0; // kept so tapping + doesn't jump the list to the top
       root.textContent = '';
       var pack = state.pack;
-      if (!pack || !state.data) return;
+      if (!pack || !state.data) { if (!adminPreview) packShiprocket(null, null); return; }
       var custom = pack.customization || {};
       var content = custom.content || {};
       if (codOn(pack) && !adminPreview) probeCod();
@@ -1641,6 +1684,10 @@
         if (wantCod) document.documentElement.setAttribute('data-brix-pack-cod', '1');
         else document.documentElement.removeAttribute('data-brix-pack-cod');
         hideBrixCodButton(wantCod);
+        // Shiprocket's Buy Now buys this Pack (see SR_BUY_NOW). A plain one-item tier
+        // (Buy 1, no saving) is left to Shiprocket as it is.
+        var srPack = tier && available && !tierDisabled(pack, tier) && (tier.quantity > 1 || shownTier(pack, tier, state.tierIndex).savings > 0);
+        packShiprocket(srPack ? shiprocketBuy : null, srPack && money && !money.hidden && !money.converted ? shownTier(pack, tier, state.tierIndex).price : null);
       }
       var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : labelWithTags(themeModeOn(pack) && content.themeBuyLabel ? content.themeBuyLabel : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier) }) : null;
       var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : labelWithTags(codButtonText(bxText(content.codText, 'storefront.packs.cod', 'Buy with COD'), codPrices(pack, tier), money), pack, tier) }) : null;
@@ -1887,6 +1934,33 @@
     // Buy with COD: the BRIX COD popup for just this Pack (the shopper's cart is untouched).
     // The lines carry the same _brix_pack_* properties as Add to Cart so COD can price the
     // tier like checkout does. "Pay online" inside the popup goes to the Buy Now checkout.
+    // Shiprocket's own Buy Now tapped with this Pack selected (see SR_BUY_NOW).
+    function shiprocketBuy() {
+      var pack = state.pack;
+      var tier = pack && pack.tiers[state.tierIndex];
+      if (!tier || state.busy) return;
+      var items = itemsFor(pack, tier);
+      if (readyCount(items) !== items.length) {
+        state.message = { type: 'error', text: hintText(model(pack), tier, items) };
+        render();
+        return;
+      }
+      var cod = window.BrixCod;
+      if (!cod || typeof cod.payOnlinePack !== 'function') { addToCart(true); return; }
+      var lines = buildItems(pack, tier);
+      state.message = null;
+      state.busy = 'buy';
+      render();
+      var done = function () { clearTimeout(reset); if (state.busy === 'buy') { state.busy = false; render(); } };
+      var reset = setTimeout(done, 12000);
+      var started = cod.payOnlinePack(lines.map(function (line) { return { variantId: line.id, quantity: line.quantity, properties: line.properties }; }), {
+        onOpen: done,
+        // No Shiprocket or no code: the Pack's own Buy Now (Shopify checkout gives the Pack price).
+        fallback: function () { clearTimeout(reset); state.busy = false; addToCart(true); },
+      });
+      if (!started) done();
+    }
+
     function codOrder() {
       var pack = state.pack;
       var tier = pack && pack.tiers[state.tierIndex];
@@ -1972,7 +2046,7 @@
       },
       // The theme's own Add to cart adds the selected Pack (content.themeAddsPack).
       addPack: function () { addToCart(false); },
-      destroy: function () { document.removeEventListener('click', onDocumentClick); root.textContent = ''; state.pack = null; },
+      destroy: function () { document.removeEventListener('click', onDocumentClick); root.textContent = ''; state.pack = null; if (!adminPreview) packShiprocket(null, null); },
     };
   }
 
