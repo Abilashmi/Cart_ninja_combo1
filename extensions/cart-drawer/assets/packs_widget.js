@@ -368,6 +368,78 @@
     return themeButtonsOn(pack) && content.themeAddsPack !== false;
   }
 
+  // content.buttonMode 'theme' (default for new Packs): the Pack's Add to cart / Buy Now are drawn
+  // from the theme's own buttons. We never move or trust a copied button's listeners: the theme's
+  // buttons stay where they are (hidden while a Pack shows, so nothing is doubled), a shell with the
+  // same classes and a snapshot of its computed look is drawn inside the Pack, and OUR click handler
+  // adds the Pack (every variant, with the _brix_pack_* properties) through /cart/add.js and tells
+  // the theme's cart with the usual cart events. A Pack saved before buttonMode existed follows
+  // matchThemeButtons (look only) as it did. No usable theme button = BRIX's own button + a warning.
+  function themeModeOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    if (!pack || themeButtonsOn(pack)) return false; // the theme's own buttons are kept visible: no second copy
+    return content.buttonMode ? content.buttonMode === 'theme' : content.matchThemeButtons === true;
+  }
+
+  // The theme's Add to cart: a submit button of the product form (or one tied to it by
+  // form="id"), never a payment button or one of ours.
+  function findThemeAdd() {
+    var form = productForm();
+    if (!form) return null;
+    var formId = form.getAttribute('id');
+    var candidates = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], button:not([type]), input[type="submit"]'));
+    if (formId) candidates = candidates.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
+    for (var i = 0; i < candidates.length; i += 1) {
+      var node = candidates[i];
+      if (root.contains(node) || node.closest('.shopify-payment-button, [data-shopify="payment-button"]')) continue;
+      return node;
+    }
+    return null;
+  }
+
+  // The theme's Buy it now, only when it is a plain text button we can draw faithfully. Branded
+  // wallet buttons (Shop Pay, PayPal, Google Pay) are Shopify-hosted and can't buy a Pack.
+  function findThemeBuy() {
+    var form = productForm();
+    if (!form) return null;
+    var nodes = form.querySelectorAll('.shopify-payment-button__button--unbranded');
+    for (var i = 0; i < nodes.length; i += 1) if (!root.contains(nodes[i])) return nodes[i];
+    return null;
+  }
+
+  function themeLabel(source, fallback) {
+    var text = String(source.value || source.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 40 || /sold out|unavailable|out of stock/i.test(text)) return fallback;
+    return text;
+  }
+
+  var THEME_LOOK_PROPS = ['backgroundColor', 'color', 'borderTopColor', 'borderTopWidth', 'borderTopStyle', 'borderTopLeftRadius', 'fontSize', 'fontWeight', 'fontFamily', 'textTransform', 'letterSpacing', 'lineHeight', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'boxShadow', 'minHeight'];
+
+  // Same classes as the theme's button (so its hover and focus styles apply), no other attributes
+  // (so no theme script or delegated listener recognises it), our own click handler.
+  function themeProxy(source, kind, label, disabled, onclick) {
+    var node = document.createElement('button');
+    node.className = String(source.className || '').replace(/\s+/g, ' ').trim() + ' brix-packs-themebtn brix-packs-themebtn--' + kind;
+    node.type = 'button';
+    node.setAttribute('data-fk', kind === 'add' ? 'add-to-cart' : 'buy-now');
+    node.setAttribute('data-brix-theme-button', kind);
+    node.textContent = label;
+    if (disabled) { node.disabled = true; node.setAttribute('aria-disabled', 'true'); }
+    node.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); if (!node.disabled) onclick(); });
+    node._brixSource = source;
+    return node;
+  }
+
+  // After the shell is in the page: where the theme's CSS is scoped to its own product form the
+  // shell would lose it, so any look that differs from the real button is copied across.
+  function syncThemeLook(node) {
+    var source = node._brixSource;
+    if (!source || !window.getComputedStyle) return;
+    var a = window.getComputedStyle(node);
+    var b = window.getComputedStyle(source);
+    THEME_LOOK_PROPS.forEach(function (prop) { if (a[prop] !== b[prop]) node.style[prop] = b[prop]; });
+  }
+
   function hideVariantsOn(pack) {
     var content = (pack && pack.customization && pack.customization.content) || {};
     return Boolean(pack) && content.hideVariants === true;
@@ -680,6 +752,10 @@
     '.brix-packs-actions .brix-packs-add,.brix-packs-actions .brix-packs-buy{margin-top:0;flex:1 1 0}',
     // The button area: Add to Cart / Buy Now (side by side or stacked), COD in its own full-width row below.
     'html[data-brix-pack-cod] [data-brix-cod-slot]{display:none !important}',
+    '.brix-packs-themebtn{display:block;width:100%;box-sizing:border-box;cursor:pointer;margin-top:var(--brix-packs-btn-gap)}',
+    '.brix-packs-themebtn[disabled]{opacity:.55;cursor:not-allowed}',
+    '.brix-packs-actions .brix-packs-themebtn,.brix-packs-actions-col>.brix-packs-themebtn{margin-top:0}',
+    '.brix-packs-actions .brix-packs-themebtn{flex:1 1 0;width:auto}',
     '.brix-packs-actions-col{display:flex;flex-direction:column;gap:10px;margin-top:var(--brix-packs-btn-gap)}',
     '.brix-packs-actions-col>.brix-packs-add,.brix-packs-actions-col>.brix-packs-buy,.brix-packs-actions-col>.brix-packs-actions{margin-top:0}',
     '@media (max-width:480px){.brix-packs-card .brix-packs-badge{left:6px;padding:2px 6px;letter-spacing:0}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-tier,.brix-packs-tier[data-image="1"]{column-gap:10px}.brix-packs-img[data-size]{width:52px;height:52px}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}.brix-packs-islot{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px 10px;padding:10px}.brix-packs-islot .brix-packs-slot-main{display:contents}.brix-packs-islot .brix-packs-fields,.brix-packs-islot .brix-packs-problem,.brix-packs-islot-name{grid-column:1/-1}.brix-packs-islot .brix-packs-fields{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}.brix-packs-islot-photo{width:36px;height:36px}}',
@@ -1351,7 +1427,7 @@
 
       var section = el('section', { class: 'brix-packs-widget', dir: bxDir(), 'data-template': pack.template, 'data-design': design, 'data-layout': layout, 'data-mode': m.rules.sameVariant ? 'same' : 'mix', 'aria-label': heading || bxT('storefront.packs.packs', 'Packs') });
       applyCustomization(section, custom);
-      if (!adminPreview && matchThemeButtons(pack)) applyThemeButtonLook(section);
+      if (!adminPreview && (matchThemeButtons(pack) || themeModeOn(pack))) applyThemeButtonLook(section);
 
       section.appendChild(el('div', { class: 'brix-packs-head' }, [
         heading ? el('h2', { class: 'brix-packs-heading', text: heading }) : null,
@@ -1482,12 +1558,35 @@
       }
       var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now') }) : null;
       var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : bxText(content.codText, 'storefront.packs.cod', 'Buy with COD') }) : null;
+      // Theme buttons mode: swap in shells of the theme's own buttons (see themeModeOn). Whatever
+      // can't be drawn from a real theme button keeps BRIX's own working button, and the theme
+      // editor says so.
+      var themed = [];
+      var themeNote = '';
+      if (!adminPreview && themeModeOn(pack)) {
+        var themeAdd = wantAdd ? findThemeAdd() : null;
+        var themeBuy = wantBuy ? findThemeBuy() : null;
+        if (themeAdd) {
+          addButton = themeProxy(themeAdd, 'add', state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding…') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : themeLabel(themeAdd, bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart'))), addDisabled, function () { addToCart(false); });
+          themed.push(addButton);
+        } else if (wantAdd) themeNote = "couldn't find your theme's Add to cart button, so the Pack uses BRIX's own button.";
+        if (themeBuy) {
+          buyButton = themeProxy(themeBuy, 'buy', state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout…') : themeLabel(themeBuy, bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now')), addDisabled, function () { addToCart(true); });
+          themed.push(buyButton);
+        } else if (wantBuy) themeNote = themeNote || "your theme's Buy it now is a wallet or missing button that can't buy a Pack, so the Pack uses BRIX's own Buy Now.";
+        section.setAttribute('data-brix-theme-buttons', themeNote ? (themed.length ? 'partial' : 'fallback') : 'theme');
+        if (themeNote) {
+          if (window.console && console.warn) console.warn('[BRIX Packs] ' + themeNote);
+          if (window.Shopify && window.Shopify.designMode) section.appendChild(el('p', { class: 'brix-packs-msg', role: 'status', 'data-type': 'info', text: 'BRIX Packs: ' + themeNote }));
+        }
+      }
       var mainButtons = [wantAdd ? addButton : null, buyButton].filter(Boolean);
       section.appendChild(el('div', { class: 'brix-packs-actions-col' }, [
         mainButtons.length > 1 ? el('div', { class: 'brix-packs-actions' }, mainButtons) : mainButtons[0] || null,
         codButton,
       ]));
       root.appendChild(section);
+      themed.forEach(syncThemeLook);
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
       restoreFocus(focusKey);

@@ -302,3 +302,11 @@ test('badge, savings chip, amount style, COD and button toggles: defaults and va
   assert.equal(merged.price.showWas, true);
   assert.equal(merged.content.showAddToCart, true);
 });
+
+test('buttonMode: new Packs use the theme buttons, older Packs keep the look they had', () => {
+  assert.equal(mergeCustomization(defaultCustomization()).content.buttonMode, 'theme');
+  assert.equal(mergeCustomization({ content: { heading: 'x' } }).content.buttonMode, 'brix');
+  assert.equal(mergeCustomization({ content: { matchThemeButtons: true } }).content.buttonMode, 'theme');
+  assert.equal(mergeCustomization({ content: { buttonMode: 'brix', matchThemeButtons: true } }).content.buttonMode, 'brix');
+  assert.equal(sanitizeCustomization({ content: { buttonMode: 'nope' } }).value.content?.buttonMode, undefined);
+});
