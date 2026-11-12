@@ -906,6 +906,9 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
         if(placement==='below_atc'){
           anchor.parentNode.insertBefore(el,anchor.nextSibling);
         }else{
+          // A BRIX Pack placed right on top of the buttons ("Below the Pack") stays
+          // with them: the coupon goes above the Pack, not between it and Add to cart.
+          while(anchor.previousElementSibling&&anchor.previousElementSibling.hasAttribute('data-brix-packs-root'))anchor=anchor.previousElementSibling;
           anchor.parentNode.insertBefore(el,anchor);
         }
       }

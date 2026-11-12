@@ -399,15 +399,30 @@
 
   // The theme's Add to cart: a submit button of the product form (or one tied to it by
   // form="id"), never a payment button or one of ours.
+  // Other widgets' buttons are never the theme's Add to cart (Silverline: the Frequently Bought
+  // Together box sits inside the Shiprocket form that productForm() finds, and its untyped
+  // "Add" buttons were taken for Add to cart).
+  var NOT_THEME_ADD = '.shopify-payment-button, [data-shopify="payment-button"], ps-fbt-widget, ps-coupon-slider, [data-brix-cod-slot], [data-brix-pay-cta], .shiprocket-headless';
   function findThemeAdd() {
     var form = productForm();
     if (!form) return null;
     var formId = form.getAttribute('id');
-    var candidates = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], button:not([type]), input[type="submit"]'));
-    if (formId) candidates = candidates.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
+    var list = function (nodes) { return Array.prototype.slice.call(nodes); };
+    // Real submit buttons first; an untyped <button> (Debut) only when there is none.
+    var candidates = list(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
+    if (formId) candidates = candidates.concat(list(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
+    // A submit tied by form="id" to another /cart/add form holding the selected variant
+    // (Silverline: <button type="submit" form="pdp-form"> outside pdp-form).
+    var variant = currentVariantId();
+    candidates = candidates.concat(list(document.querySelectorAll('[type="submit"][form]')).filter(function (node) {
+      var owner = node.form;
+      var idInput = owner && owner !== form && /\/cart\/add/.test(owner.getAttribute('action') || '') && owner.querySelector('[name="id"]');
+      return Boolean(idInput && idInput.value && variant && numericId(idInput.value) === variant);
+    }));
+    candidates = candidates.concat(list(form.querySelectorAll('button:not([type])')));
     for (var i = 0; i < candidates.length; i += 1) {
       var node = candidates[i];
-      if (root.contains(node) || node.closest('.shopify-payment-button, [data-shopify="payment-button"]')) continue;
+      if (root.contains(node) || node.closest(NOT_THEME_ADD)) continue;
       return node;
     }
     return null;
@@ -2216,24 +2231,13 @@
 
   // below_price: right after the product price. custom: inside the "BRIX Packs
   // position" app block. When neither is found, above the buy buttons.
-  // "Below the Pack": the block holding the theme's own Add to cart, so the Pack sits right on
-  // top of the buttons it hands the Pack to (Silverline: the coupon slider and stock pill sat
-  // between the Pack below the price and the buttons). The visible Add to cart for this
-  // product: findThemeAdd(), else a submit tied by form="id" to a /cart/add form holding the
-  // selected variant (Silverline's button sits outside pdp-form). Its form when it is inside
-  // one (Dawn: before the product form, never inside it), else its buy-buttons row, else its
-  // parent. null = the usual place.
+  // "Below the Pack": the block holding the theme's own Add to cart (findThemeAdd), so the Pack
+  // sits right on top of the buttons it hands the Pack to (Silverline: the coupon slider and
+  // stock pill sat between the Pack below the price and the buttons). Its form when it is
+  // inside one (Dawn: before the product form, never inside it), else its buy-buttons row,
+  // else its parent. null = the usual place.
   function themeButtonsAnchor() {
-    var shown = function (node) { return Boolean(node) && node.getClientRects().length > 0; };
     var button = findThemeAdd();
-    if (!shown(button)) {
-      button = Array.prototype.filter.call(document.querySelectorAll('[type="submit"][form], [name="add"]'), function (node) {
-        if (!shown(node) || root.contains(node) || node.closest('.shopify-payment-button, [data-shopify="payment-button"]')) return false;
-        var form = node.form;
-        var idInput = form && /\/cart\/add/.test(form.getAttribute('action') || '') && form.querySelector('[name="id"]');
-        return Boolean(idInput && idInput.value && numericId(idInput.value) === currentVariantId());
-      })[0] || null;
-    }
     if (!button) return null;
     var inForm = button.closest('form');
     var anchor = inForm ? (inForm.closest('product-form') || inForm) : (button.closest('.product-form__buttons, [class*="buy-row"], [class*="buy-buttons"], [class*="buy_buttons"]') || button.parentElement);
@@ -2425,7 +2429,12 @@
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
           setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), keepThemeFor(current)); // a theme re-render can bring them back
-          if (current && underThemeOn(current)) keepCodUnderShiprocket();
+          if (current && underThemeOn(current)) {
+            keepCodUnderShiprocket();
+            // Another app placed itself between the Pack and the buttons (Silverline: the coupon slider).
+            var buttonsBlock = themeButtonsAnchor();
+            if (buttonsBlock && root.nextElementSibling !== buttonsBlock) place(current);
+          }
           if (current && !root.isConnected) { place(current); } // a theme re-render replaced the block the Pack sat in
         }
       }, 700);
