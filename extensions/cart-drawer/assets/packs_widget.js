@@ -544,6 +544,24 @@
     event.stopImmediatePropagation();
     srTakeover();
   }
+  // "Below the Pack": BRIX COD's button right under Shiprocket's product Buy Now, so the
+  // buttons read Add to cart, Prepaid, COD. brix_cod.js places it from whichever Shiprocket
+  // element was on the page when it mounted (Silverline: above Prepaid on some loads, below
+  // FBT on others). Moved only when it isn't already there.
+  function keepCodUnderShiprocket() {
+    var shown = function (node) { return node.getClientRects().length > 0; };
+    var slot = Array.prototype.filter.call(document.querySelectorAll('[data-brix-cod-slot]'), shown)[0];
+    if (!slot) return;
+    var button = Array.prototype.filter.call(document.querySelectorAll('.sr-headless-checkout'), function (node) {
+      if (!shown(node) || node.closest(SR_CART_PLACES) || node.contains(slot)) return false;
+      var typed = node.closest('[data-type]');
+      var kind = String((typed && typed.getAttribute('data-type')) || '').toLowerCase();
+      return kind !== 'mini-cart' && kind !== 'cart';
+    })[0];
+    if (!button || !button.parentNode || button.nextElementSibling === slot) return;
+    button.parentNode.insertBefore(slot, button.nextSibling);
+  }
+
   if (!window.__brixPacksShiprocketTap) {
     window.__brixPacksShiprocketTap = true;
     window.addEventListener('click', shiprocketTap, true);
@@ -2303,6 +2321,7 @@
   function showFor(variantId) {
     var next = packForVariant(widget.packs(), variantId);
     setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next) && !hideVariantsOn(next), keepThemeFor(next));
+    if (next && underThemeOn(next)) keepCodUnderShiprocket();
     if (next) place(next);
     current = next;
     widget.show(next, variantId);
@@ -2377,6 +2396,7 @@
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
           setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), keepThemeFor(current)); // a theme re-render can bring them back
+          if (current && underThemeOn(current)) keepCodUnderShiprocket();
           if (current && !root.isConnected) { place(current); } // a theme re-render replaced the block the Pack sat in
         }
       }, 700);

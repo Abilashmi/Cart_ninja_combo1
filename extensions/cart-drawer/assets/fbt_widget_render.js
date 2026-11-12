@@ -579,6 +579,16 @@
         return first;
       }
 
+      /* The spot right after `node`, past a BRIX COD button that sits there
+         (brix_cod.js [data-brix-cod-slot]): COD stays with the buy buttons
+         whichever script placed itself first (Silverline: FBT after
+         Shiprocket's Buy Now landed between it and COD). */
+      function afterButtons(node){
+        var next=node.nextSibling;
+        while(next&&next.nodeType===1&&next.hasAttribute('data-brix-cod-slot'))next=next.nextSibling;
+        return next;
+      }
+
       function doPlace(apiPlacement){
         if(apiPlacement==='selector'){
           var target=findSelectorTarget();
@@ -588,7 +598,7 @@
             el.style.width='100%';
             el.style.margin=el.__psMargin||'16px 0';
             el.style.boxSizing='border-box';
-            target.parentNode.insertBefore(el,el.__psSelectorPos==='before'?target:target.nextSibling);
+            target.parentNode.insertBefore(el,el.__psSelectorPos==='before'?target:afterButtons(target));
             return true;
           }
           /* Not on the page (yet): stay hidden while placeWidget waits; once it
@@ -616,7 +626,7 @@
         if(apiPlacement==='above_cart'){
           anchor.parentNode.insertBefore(el,anchor);
         } else {
-          anchor.parentNode.insertBefore(el,anchor.nextSibling);
+          anchor.parentNode.insertBefore(el,afterButtons(anchor));
         }
         return true;
       }
