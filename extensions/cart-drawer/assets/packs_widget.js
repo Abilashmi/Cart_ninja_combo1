@@ -2216,10 +2216,39 @@
 
   // below_price: right after the product price. custom: inside the "BRIX Packs
   // position" app block. When neither is found, above the buy buttons.
+  // "Below the Pack": the block holding the theme's own Add to cart, so the Pack sits right on
+  // top of the buttons it hands the Pack to (Silverline: the coupon slider and stock pill sat
+  // between the Pack below the price and the buttons). The visible Add to cart for this
+  // product: findThemeAdd(), else a submit tied by form="id" to a /cart/add form holding the
+  // selected variant (Silverline's button sits outside pdp-form). Its form when it is inside
+  // one (Dawn: before the product form, never inside it), else its buy-buttons row, else its
+  // parent. null = the usual place.
+  function themeButtonsAnchor() {
+    var shown = function (node) { return Boolean(node) && node.getClientRects().length > 0; };
+    var button = findThemeAdd();
+    if (!shown(button)) {
+      button = Array.prototype.filter.call(document.querySelectorAll('[type="submit"][form], [name="add"]'), function (node) {
+        if (!shown(node) || root.contains(node) || node.closest('.shopify-payment-button, [data-shopify="payment-button"]')) return false;
+        var form = node.form;
+        var idInput = form && /\/cart\/add/.test(form.getAttribute('action') || '') && form.querySelector('[name="id"]');
+        return Boolean(idInput && idInput.value && numericId(idInput.value) === currentVariantId());
+      })[0] || null;
+    }
+    if (!button) return null;
+    var inForm = button.closest('form');
+    var anchor = inForm ? (inForm.closest('product-form') || inForm) : (button.closest('.product-form__buttons, [class*="buy-row"], [class*="buy-buttons"], [class*="buy_buttons"]') || button.parentElement);
+    return anchor && anchor.parentNode && !anchor.contains(root) ? anchor : null;
+  }
+
   function place(pack) {
     if (root.getAttribute('style')) root.removeAttribute('style'); // the embed's pre-placement spacing
     var slot = placementOf(pack) === 'custom' && document.querySelector('[data-brix-packs-slot]');
     if (slot) { if (root.parentNode !== slot) slot.appendChild(root); return; }
+    var buttons = underThemeOn(pack) ? themeButtonsAnchor() : null;
+    if (buttons) {
+      if (root.nextElementSibling !== buttons) buttons.parentNode.insertBefore(root, buttons);
+      return;
+    }
     var price = priceAnchor();
     if (price && price.parentNode) {
       if (price.nextElementSibling !== root) price.parentNode.insertBefore(root, price.nextSibling);
