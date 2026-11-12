@@ -718,20 +718,26 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const contentField = (key, label, maxLength, helpText) => <TextField label={label} value={form.customization.content[key]} maxLength={maxLength} showCharacterCount helpText={helpText} onChange={(value) => updateCustom('content', key, value)} autoComplete="off" />;
   // Sizes are sliders bounded by the same schema the server validates
   // against, so every position the merchant can drag to is a valid value.
-  // One choice instead of many switches: the theme's buttons, BRIX's own, or Cash on Delivery only.
+  // One choice instead of many switches: the theme's buttons, BRIX's own, Cash on Delivery only,
+  // or the theme's own buttons under the Pack (the Pack draws none; they buy the selected Pack).
   const buttonChoice = (() => {
     const c = form.customization.content;
+    if (c.showThemeButtons === true && c.themeAddsPack !== false) return 'under';
     if (c.showAddToCart === false && c.showBuyNow === false && c.showCod === true) return 'cod';
     return c.buttonMode === 'brix' ? 'brix' : 'theme';
   })();
   const setButtonChoice = (choice) => {
+    if (choice === 'under') {
+      updateCustom('content', 'showThemeButtons', true); updateCustom('content', 'themeAddsPack', true); updateCustom('content', 'showCod', false);
+      return;
+    }
+    updateCustom('content', 'showThemeButtons', false);
     if (choice === 'cod') {
       updateCustom('content', 'showAddToCart', false); updateCustom('content', 'showBuyNow', false); updateCustom('content', 'showCod', true);
       return;
     }
     updateCustom('content', 'showAddToCart', true); updateCustom('content', 'showBuyNow', true);
     updateCustom('content', 'buttonMode', choice); updateCustom('content', 'matchThemeButtons', choice === 'theme');
-    if (choice === 'theme') updateCustom('content', 'showThemeButtons', false);
   };
   const sizeField = (group, key, label) => {
     const { min, max } = CUSTOMIZATION_SCHEMA[group][key];
@@ -865,16 +871,17 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     buttons: (
       <BlockStack gap="400">
         <FieldGroup title="Which buttons should the Pack show?">
-          <Segmented label="Buttons" options={[['theme', "My theme's buttons"], ['brix', 'BRIX buttons'], ['cod', 'COD only']]} value={buttonChoice} onChange={setButtonChoice} />
+          <Segmented label="Buttons" options={[['theme', "My theme's buttons"], ['brix', 'BRIX buttons'], ['cod', 'COD only'], ['under', 'Below the Pack']]} value={buttonChoice} onChange={setButtonChoice} />
           <Text as="p" variant="bodySm" tone="subdued">
             {buttonChoice === 'theme' && "Add to cart and Buy it now are taken from your theme, so they look exactly like the rest of your product page, and they add the selected Pack. If your theme has no such button, BRIX's own is used. The preview shows your text and colors; the theme's own look appears on your store."}
             {buttonChoice === 'brix' && "BRIX's own Add to Cart and Buy Now, styled below."}
             {buttonChoice === 'cod' && 'Only the Buy with COD button shows. It needs BRIX COD to be turned on for product pages.'}
+            {buttonChoice === 'under' && "The Pack shows only the Pack choices. Your theme's own Add to cart, Shiprocket Buy Now and BRIX COD buttons stay under it and buy the selected Pack, with its price on the Prepaid and COD buttons. Your theme's quantity box is hidden."}
           </Text>
-          {buttonChoice !== 'cod' && (
+          {buttonChoice !== 'cod' && buttonChoice !== 'under' && (
             <Toggle label="Also show a Buy with COD button" helpText="In its own row under the other buttons. Shows only on stores where BRIX COD is turned on for product pages." checked={form.customization.content.showCod === true} onChange={(value) => updateCustom('content', 'showCod', value)} />
           )}
-          {form.customization.content.showThemeButtons === true && (
+          {form.customization.content.showThemeButtons === true && buttonChoice !== 'under' && (
             <Toggle label="Keep my theme's own buttons visible (older setting)" helpText="Shows the theme's own buttons next to the Pack, adding a single item. Turn off to use the choice above." checked onChange={() => updateCustom('content', 'showThemeButtons', false)} />
           )}
         </FieldGroup>
@@ -921,7 +928,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           )}
           </FieldGroup>
         )}
-        {buttonChoice !== 'theme' && (
+        {(buttonChoice === 'brix' || buttonChoice === 'cod') && (
           <FieldGroup title="Shape & text">
           {sizeField('buttons', 'radius', 'Corner radius')}
           {sizeField('buttons', 'borderWidth', 'Border width')}

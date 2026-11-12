@@ -377,6 +377,13 @@
     return themeButtonsOn(pack) && content.themeAddsPack !== false;
   }
 
+  // "Theme's buttons under the Pack": the theme's Add to cart adds the Pack, so the
+  // widget draws no buttons of its own. Shiprocket's Buy Now and BRIX COD's own
+  // product button take the selected Pack too (packShiprocket).
+  function underThemeOn(pack) {
+    return themeAddsPackOn(pack);
+  }
+
   // content.buttonMode 'theme' (default for new Packs): the Pack's Add to cart / Buy Now are drawn
   // from the theme's own buttons. We never move or trust a copied button's listeners: the theme's
   // buttons stay where they are (hidden while a Pack shows, so nothing is doubled), a shell with the
@@ -505,19 +512,22 @@
   var SR_CART_PLACES = 'cart-drawer, cart-notification, #CartDrawer, #cart-drawer, .cart-drawer, .drawer--cart, #cc-root, [data-brix-cod-drawer], [data-brix-packs-root]';
   var srTakeover = null; // the selected Pack's Shiprocket hand-off, or null
   var srPrice = null;
+  var srOrder = null; // BRIX COD's own button orders the Pack (theme's buttons under the Pack)
   var srWaits = 0;
   var srTimer = null;
   function pushPackPrice() {
     clearTimeout(srTimer);
     var cod = window.BrixCod;
-    if (cod && typeof cod.setPackPrice === 'function') { cod.setPackPrice(srPrice); return; }
+    if (cod && typeof cod.setPackPrice === 'function') { cod.setPackPrice(srPrice, srOrder); return; }
     if (srPrice != null && srWaits < 30) { srWaits += 1; srTimer = setTimeout(pushPackPrice, 500); } // BRIX COD still loading
   }
-  function packShiprocket(handler, price) {
+  function packShiprocket(handler, price, order) {
     srTakeover = handler;
     var next = handler && price != null ? price : null;
-    if (next === srPrice) return;
+    var nextOrder = next != null && order ? order : null;
+    if (next === srPrice && nextOrder === srOrder) return;
     srPrice = next;
+    srOrder = nextOrder;
     srWaits = 0;
     pushPackPrice();
   }
@@ -525,6 +535,8 @@
     if (!srTakeover) return;
     var hit = event.target && event.target.closest ? event.target.closest(SR_BUY_NOW) : null;
     if (!hit || hit.closest(SR_CART_PLACES)) return;
+    // BRIX COD's own button can sit inside Shiprocket's box (Silverline): never Shiprocket's tap.
+    if (event.target.closest('[data-brix-cod-slot], [data-brix-cod-btn], [data-brix-pay-cta]')) return;
     var typed = hit.closest('[data-type]');
     var kind = String((typed && typed.getAttribute('data-type')) || '').toLowerCase();
     if (kind === 'mini-cart' || kind === 'cart') return;
@@ -1675,9 +1687,10 @@
       // for just this Pack. With every button switched off, Add to Cart stays so a Pack is
       // never unbuyable.
       var available = pack.available !== false;
-      var wantBuy = buyNowOn(pack) && available;
-      var wantCod = codOn(pack) && available && (adminPreview || state.cod === true);
-      var wantAdd = content.showAddToCart !== false || (!wantBuy && !wantCod);
+      var under = underThemeOn(pack);
+      var wantBuy = !under && buyNowOn(pack) && available;
+      var wantCod = !under && codOn(pack) && available && (adminPreview || state.cod === true);
+      var wantAdd = !under && (content.showAddToCart !== false || (!wantBuy && !wantCod));
       // The Pack's own COD button replaces BRIX COD's product-page button (which would order
       // a single item at the full price instead of the Pack).
       if (!adminPreview) {
@@ -1687,7 +1700,7 @@
         // Shiprocket's Buy Now buys this Pack (see SR_BUY_NOW). A plain one-item tier
         // (Buy 1, no saving) is left to Shiprocket as it is.
         var srPack = tier && available && !tierDisabled(pack, tier) && (tier.quantity > 1 || shownTier(pack, tier, state.tierIndex).savings > 0);
-        packShiprocket(srPack ? shiprocketBuy : null, srPack && money && !money.hidden && !money.converted ? shownTier(pack, tier, state.tierIndex).price : null);
+        packShiprocket(srPack ? shiprocketBuy : null, srPack && money && !money.hidden && !money.converted ? shownTier(pack, tier, state.tierIndex).price : null, under ? codPackOrder : null);
       }
       var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : labelWithTags(themeModeOn(pack) && content.themeBuyLabel ? content.themeBuyLabel : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier) }) : null;
       var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : labelWithTags(codButtonText(bxText(content.codText, 'storefront.packs.cod', 'Buy with COD'), codPrices(pack, tier), money), pack, tier) }) : null;
@@ -1719,6 +1732,7 @@
         }
       }
       var mainButtons = [wantAdd ? addButton : null, buyButton].filter(Boolean);
+      if (under && adminPreview) section.appendChild(el('p', { class: 'brix-packs-msg', 'data-type': 'info', text: "On your store, your theme's Add to cart, Prepaid and COD buttons show under the Pack and buy the selected Pack." }));
       section.appendChild(el('div', { class: 'brix-packs-actions-col' }, [
         mainButtons.length > 1 ? el('div', { class: 'brix-packs-actions' }, mainButtons) : mainButtons[0] || null,
         codButton,
@@ -1934,6 +1948,24 @@
     // Buy with COD: the BRIX COD popup for just this Pack (the shopper's cart is untouched).
     // The lines carry the same _brix_pack_* properties as Add to Cart so COD can price the
     // tier like checkout does. "Pay online" inside the popup goes to the Buy Now checkout.
+    // BRIX COD's own product button tapped with this Pack selected (theme's buttons
+    // under the Pack): the Pack's items for the COD popup, or null with the hint shown.
+    function codPackOrder() {
+      var pack = state.pack;
+      var tier = pack && pack.tiers[state.tierIndex];
+      if (!tier || state.busy) return null;
+      var items = itemsFor(pack, tier);
+      if (readyCount(items) !== items.length) {
+        state.message = { type: 'error', text: hintText(model(pack), tier, items) };
+        render();
+        return null;
+      }
+      return {
+        items: buildItems(pack, tier).map(function (line) { return { variantId: line.id, quantity: line.quantity, properties: line.properties }; }),
+        onPayOnline: function () { addToCart(true); },
+      };
+    }
+
     // Shiprocket's own Buy Now tapped with this Pack selected (see SR_BUY_NOW).
     function shiprocketBuy() {
       var pack = state.pack;
@@ -2213,6 +2245,11 @@
   function setThemeControlsHidden(hidden, hidePayment, hidePicker, keepTheme) {
     // content.showThemeButtons: the merchant keeps the theme's own Add to cart, Buy it now,
     // quantity box and variant picker next to the Pack (they add a single variant as usual).
+    // keepTheme 'buttons': the theme's Add to cart adds the Pack, so only its buttons stay;
+    // the quantity box (the Pack sets the quantity) and picker follow the usual rule.
+    var hideQuantity = hidden && keepTheme !== 'all';
+    hidePicker = hidePicker && keepTheme !== 'all';
+    var pickerHidden = hidden;
     if (keepTheme) hidden = false;
     var form = productForm();
     if (!form) return;
@@ -2228,10 +2265,10 @@
       var box = input.closest(QUANTITY_SELECTORS.join(',')) || input.parentElement;
       if (!box) return;
       box = box.closest('.product-form__input') || box;
-      if (outside(box)) setHidden(box, hidden);
+      if (outside(box)) setHidden(box, hideQuantity);
     });
     Array.prototype.forEach.call(info.querySelectorAll(QUANTITY_SELECTORS.join(',')), function (box) {
-      if (outside(box)) setHidden(box.closest('.product-form__input') || box, hidden);
+      if (outside(box)) setHidden(box.closest('.product-form__input') || box, hideQuantity);
     });
     var buttons = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
     if (formId) buttons = buttons.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
@@ -2252,13 +2289,20 @@
       pickers.push(control.closest('fieldset, .product-form__input, .selector-wrapper') || control);
     });
     pickers.forEach(function (node) {
-      if (outside(node)) setHidden(node, hidden && Boolean(hidePicker));
+      if (outside(node)) setHidden(node, pickerHidden && Boolean(hidePicker));
     });
+  }
+
+  // false = hide the theme's buy controls; 'buttons' = keep its buttons (they buy the Pack);
+  // 'all' = keep everything (the older "theme's Add to cart adds one plain item").
+  function keepThemeFor(pack) {
+    if (!themeButtonsOn(pack)) return false;
+    return themeAddsPackOn(pack) ? 'buttons' : 'all';
   }
 
   function showFor(variantId) {
     var next = packForVariant(widget.packs(), variantId);
-    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next) && !hideVariantsOn(next), themeButtonsOn(next));
+    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next) && !hideVariantsOn(next), keepThemeFor(next));
     if (next) place(next);
     current = next;
     widget.show(next, variantId);
@@ -2298,15 +2342,25 @@
       // The theme's Add to cart (a click, or Enter in the form) adds the selected Pack when
       // the merchant kept the theme's buttons. Capture phase, so it runs before the theme's
       // own handler. Buy it now / Shiprocket / GoKwik buttons are other apps' and aren't touched.
+      // This product's add form: productForm(), or another /cart/add form holding the
+      // selected variant (Silverline: <button type="submit" form="pdp-form"> sits outside
+      // pdp-form, so productForm() finds a different form for the same product). A
+      // quick-add for another product holds another variant and is left alone.
+      function isProductForm(candidate, form) {
+        if (!candidate || candidate === form) return Boolean(candidate);
+        if (!/\/cart\/add/.test(candidate.getAttribute('action') || '')) return false;
+        var idInput = candidate.querySelector('[name="id"]');
+        return Boolean(idInput && idInput.value && numericId(idInput.value) === currentVariantId());
+      }
       function themeAdd(event) {
         if (!current || !themeAddsPackOn(current)) return false;
         var form = productForm();
         if (!form) return false;
         if (event.type === 'submit') {
-          if (event.target !== form) return false;
+          if (!isProductForm(event.target, form)) return false;
         } else {
           var button = event.target && event.target.closest ? event.target.closest('[name="add"], button[type="submit"], input[type="submit"]') : null;
-          if (!button || root.contains(button) || !(form.contains(button) || button.form === form)) return false;
+          if (!button || root.contains(button) || !(form.contains(button) || isProductForm(button.form, form))) return false;
           if (button.closest('.shopify-payment-button, [data-shopify="payment-button"]')) return false;
         }
         event.preventDefault();
@@ -2322,7 +2376,7 @@
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
-          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), themeButtonsOn(current)); // a theme re-render can bring them back
+          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), keepThemeFor(current)); // a theme re-render can bring them back
           if (current && !root.isConnected) { place(current); } // a theme re-render replaced the block the Pack sat in
         }
       }, 700);

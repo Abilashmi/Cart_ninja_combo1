@@ -2468,11 +2468,18 @@
 
   // The selected Pack's total (shopper's currency) while a Pack widget takes
   // over Shiprocket's Buy Now; null = the theme's variant x quantity as usual.
+  // order: the Pack widget's "theme's buttons under the Pack" mode, where this
+  // file's own product COD button orders the Pack: a function returning
+  // { items, onPayOnline } for the selected Pack (null = not ready; the widget
+  // shows why). Its label uses the Pack price then too.
   var packPrice = null;
-  function setPackPrice(price) {
+  var packOrder = null;
+  function setPackPrice(price, order) {
     var next = price != null && isFinite(price) && Number(price) > 0 ? Number(price) : null;
-    if (next === packPrice) return;
+    var nextOrder = next != null && typeof order === 'function' ? order : null;
+    if (next === packPrice && nextOrder === packOrder) return;
     packPrice = next;
+    packOrder = nextOrder;
     if (productMount && typeof productMount.relabel === 'function') productMount.relabel();
   }
 
@@ -3096,7 +3103,7 @@
     var keepsBuyNow = !replacing;
     productMount.relabel = function () {
       var el = slot.querySelector('[data-brix-cod-label]');
-      var price = productPrice(form, info);
+      var price = packOrder && packPrice != null ? packPrice : productPrice(form, info);
       var next = codLabel(cfg, text, price, here);
       if (el && el.textContent !== next) el.textContent = next;
       // A % COD fee follows the variant and quantity too.
@@ -3120,6 +3127,11 @@
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      if (packOrder) {
+        var pack = packOrder();
+        if (pack && pack.items && pack.items.length) open({ surface: 'product', items: pack.items, onPayOnline: pack.onPayOnline });
+        return;
+      }
       var sel = formSelection(form);
       if (!/^\d+$/.test(sel.variantId)) return;
       open({

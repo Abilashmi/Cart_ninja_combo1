@@ -13,7 +13,7 @@ const pack = { id: 7, version: 4, variantId: '200', template: 'same_variant', pa
 const body = { success: true, packs: [pack], currency: { code: 'INR', locale: 'en-IN' }, checkoutDiscount: { verified: true, state: 'active' }, preview: false };
 // BrixCod loads after the widget (as on a store), so the first price has to wait for it.
 const fakeCod = `window.BrixCheckout = { checkoutCart: function () {} }; setTimeout(function () { window.BrixCod = { isAvailable: function () { return Promise.resolve(true); }, open: function () {},
-  setPackPrice: function (p) { window.__prices.push(p); },
+  setPackPrice: function (p, order) { window.__prices.push(p); window.__order = order || null; },
   payOnlinePack: function (items, opts) { window.__paid.push(items); if (opts.onOpen) opts.onOpen(); return true; } }; }, 700);`;
 const browser = await chromium.launch();
 const page = await (await browser.newContext()).newPage();
@@ -67,4 +67,16 @@ s = await state();
 assert.deepEqual(s.sr, ['product']);
 assert.equal(s.prices.at(-1), null);
 console.log('✓ back to Buy 1: Shiprocket\'s own Buy Now and label again');
+
+// "Below the Pack" (showThemeButtons + themeAddsPack): no Pack buttons; BRIX COD's own button orders the Pack.
+pack.customization.content = { heading: 'Choose Your Pack', showThemeButtons: true, themeAddsPack: true, showCod: false };
+await page.goto('http://shop.test/products/pendant');
+await page.waitForSelector('.brix-packs-widget');
+await page.waitForFunction(() => window.BrixCod);
+assert.equal(await page.locator('.brix-packs-widget button:not([role=radio])').count(), 0, 'the Pack draws no buttons');
+await page.locator('[role="radio"]').nth(1).click();
+await page.waitForFunction(() => typeof window.__order === 'function');
+const order = await page.evaluate(() => { const o = window.__order(); return o && o.items.map((i) => [i.variantId, i.quantity, i.properties._brix_pack_id]); });
+assert.deepEqual(order, [[200, 2, '7']]);
+console.log("✓ Below the Pack: no Pack buttons; BRIX COD's button gets the Pack (2 items) and its price");
 await browser.close();
