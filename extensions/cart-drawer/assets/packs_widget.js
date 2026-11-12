@@ -252,13 +252,22 @@
     // Account → Price display → "Hide decimals in prices" (window.__brixWholePrices).
     var whole = null;
     try { whole = new Intl.NumberFormat(locale, { style: 'currency', currency: active, minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
+    function format(value) {
+      var amount = Number(value) * rate;
+      if (window.__brixWholePrices === true) return whole ? whole.format(Math.round(amount)) : active + ' ' + Math.round(amount);
+      return fmt ? fmt.format(amount) : active + ' ' + amount.toFixed(2);
+    }
     return {
       hidden: hidden,
       decimals: shopDecimals,
-      format: function (value) {
+      // Shown in another currency than the shop's (BRIX COD charges only the shop's).
+      converted: active !== shopCode,
+      format: format,
+      // Button prices: "₹2,798" for a whole amount, like BRIX COD's own buttons.
+      short: function (value) {
         var amount = Number(value) * rate;
-        if (window.__brixWholePrices === true) return whole ? whole.format(Math.round(amount)) : active + ' ' + Math.round(amount);
-        return fmt ? fmt.format(amount) : active + ' ' + amount.toFixed(2);
+        if (whole && Math.round(amount * 100) % 100 === 0) return whole.format(Math.round(amount));
+        return format(value);
       },
       // The number without the currency sign (customization.price.symbol = 'hide').
       plain: function (value) {
@@ -449,6 +458,49 @@
   function codOn(pack) {
     var content = (pack && pack.customization && pack.customization.content) || {};
     return Boolean(pack) && content.showCod === true;
+  }
+
+  // While the Pack's own COD button shows, BRIX COD's product-page button (one item at
+  // full price) is hidden. brix_cod.js styles its holder inline with
+  // display:block !important, which no stylesheet rule beats, so it is hidden inline
+  // too, and again when brix_cod.js mounts a new one; put back when the Pack's goes.
+  var codSlotHidden = false;
+  var codSlotWatch = null;
+  function syncBrixCodButton() {
+    var slots = document.querySelectorAll('[data-brix-cod-slot]');
+    for (var i = 0; i < slots.length; i += 1) {
+      var slot = slots[i];
+      if (codSlotHidden && !slot.hasAttribute('data-brix-pack-hid')) {
+        slot.setAttribute('data-brix-pack-hid', '');
+        slot.style.setProperty('display', 'none', 'important');
+      } else if (!codSlotHidden && slot.hasAttribute('data-brix-pack-hid')) {
+        slot.removeAttribute('data-brix-pack-hid');
+        slot.style.setProperty('display', 'block', 'important');
+      }
+    }
+  }
+  function hideBrixCodButton(hide) {
+    if (codSlotHidden === hide) return;
+    codSlotHidden = hide;
+    syncBrixCodButton();
+    if (hide && !codSlotWatch && window.MutationObserver) {
+      codSlotWatch = new MutationObserver(function () { if (codSlotHidden) syncBrixCodButton(); });
+      codSlotWatch.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  // "Buy with COD ₹2,798": the selected Pack's price + BRIX COD's fee for it
+  // (brix_cod.js priceTagValues, the fee rule the COD server charges). Price tags in
+  // the merchant's text ({cod_price}, {price}, {cod_fee}) are filled instead of adding
+  // the price. Without a price (COD settings not loaded yet, another currency, the
+  // admin preview) the text alone, tags removed.
+  var COD_TAGS = /\{(cod_price|price|cod_fee)\}/g;
+  function codButtonText(text, values, money) {
+    // No COD amount known: drop the COD-only tags; {price} etc. are filled by labelWithTags.
+    if (!values) return text.replace(/\s*\{(cod_price|cod_fee)\}/g, '').trim();
+    var fill = { price: money.short(values.price), cod_price: money.short(values.cod_price), cod_fee: money.short(values.cod_fee) };
+    if (text.search(COD_TAGS) !== -1) return text.replace(COD_TAGS, function (all, key) { return fill[key]; });
+    return text + ' ' + fill.cod_price;
   }
 
   // ── item selection (mirrors app/utils/packs.shared.js — keep in sync) ───────
@@ -1053,6 +1105,22 @@
       return calc(prices, tier, money.decimals);
     }
 
+    // The selected Pack's price and COD price for the Pack's COD button (null = not known).
+    function codPrices(pack, tier) {
+      var cod = window.BrixCod;
+      if (!tier || !money || money.hidden || money.converted || !cod || typeof cod.priceTagValues !== 'function') return null;
+      var price = shownTier(pack, tier, state.tierIndex).price;
+      var minor = Math.round(price * 100);
+      // A one-line cart of this product at the Pack price: no cart-level (prepaid) discount in it.
+      var values = cod.priceTagValues({
+        items: [{ product_id: root.getAttribute('data-product-id'), final_line_price: minor, properties: {} }],
+        total_price: minor,
+        cart_level_discount_applications: [],
+      }, price);
+      if (!values || values.cod_price == null || values.cod_fee == null) return null;
+      return { price: price, cod_fee: values.cod_fee, cod_price: values.cod_price };
+    }
+
     // A pack size is offered only if the Pack's variants can supply it.
     function tierDisabled(pack, tier) {
       if (pack.available === false) return true;
@@ -1572,9 +1640,10 @@
       if (!adminPreview) {
         if (wantCod) document.documentElement.setAttribute('data-brix-pack-cod', '1');
         else document.documentElement.removeAttribute('data-brix-pack-cod');
+        hideBrixCodButton(wantCod);
       }
       var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : labelWithTags(themeModeOn(pack) && content.themeBuyLabel ? content.themeBuyLabel : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier) }) : null;
-      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : labelWithTags(bxText(content.codText, 'storefront.packs.cod', 'Buy with COD'), pack, tier) }) : null;
+      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : labelWithTags(codButtonText(bxText(content.codText, 'storefront.packs.cod', 'Buy with COD'), codPrices(pack, tier), money), pack, tier) }) : null;
       // Theme buttons mode: swap in shells of the theme's own buttons (see themeModeOn). Whatever
       // can't be drawn from a real theme button keeps BRIX's own working button, and the theme
       // editor says so.
