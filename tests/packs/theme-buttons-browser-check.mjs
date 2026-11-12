@@ -84,7 +84,8 @@ await check('theme mode (Dawn-style): Add + Buy Now are theme shells with the th
 
 await check('theme Add adds the whole pack once (real variant, tier quantity, pack markers) and the theme form does not also submit', async () => {
   const { page, context, cartCalls } = await open('dawn', { buttonMode: 'theme' });
-  await page.locator('[role="radio"]').nth(1).click();
+  await page.waitForSelector('[role="radio"]');
+  await page.locator('[role="radio"]').nth(1).click({ timeout: 10000 });
   let added = null;
   await page.exposeFunction('seen', (d) => { added = d; });
   await page.evaluate(() => document.addEventListener('brix:packs:added', (e) => window.seen(e.detail)));

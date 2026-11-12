@@ -1573,7 +1573,12 @@
         if (themeBuy) {
           buyButton = themeProxy(themeBuy, 'buy', state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout…') : themeLabel(themeBuy, bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now')), addDisabled, function () { addToCart(true); });
           themed.push(buyButton);
-        } else if (wantBuy) themeNote = themeNote || "your theme's Buy it now is a wallet or missing button that can't buy a Pack, so the Pack uses BRIX's own Buy Now.";
+        } else if (wantBuy) {
+          // The theme has no Buy it now at all: show none. A wallet-only one can't buy a Pack: BRIX's own.
+          var themeForm = productForm();
+          if (!themeForm || !themeForm.querySelector('.shopify-payment-button, [data-shopify="payment-button"]')) buyButton = null;
+          else themeNote = themeNote || "your theme's Buy it now is a wallet button that can't buy a Pack, so the Pack uses BRIX's own Buy Now.";
+        }
         section.setAttribute('data-brix-theme-buttons', themeNote ? (themed.length ? 'partial' : 'fallback') : 'theme');
         if (themeNote) {
           if (window.console && console.warn) console.warn('[BRIX Packs] ' + themeNote);
