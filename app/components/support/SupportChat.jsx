@@ -1,8 +1,10 @@
 /* eslint-disable react/prop-types */
 // The BRIX support chat on every admin page (mounted once in routes/app.jsx).
-// A launcher in the bottom-right corner ("Need help setting up?" until the
-// merchant has chatted, then a round button with the unread count) opens it;
-// it never opens by itself (Built for Shopify 4.3.3). BRIX AI answers first,
+// A round chat button in the bottom-right corner (with the unread count)
+// opens it; until the store has chatted, a chat-style message bubble from the
+// team sits above it ("Need help setting up?" + the greeting + "Chat with
+// us", which opens the chat), there from page load (no pop-in) and hidden for good by its ×
+// (localStorage). The chat window never opens by itself (Built for Shopify 4.3.3). BRIX AI answers first,
 // "Talk to a person" hands the chat to the team, who answer from
 // /internal/chat. Server: routes/api.support-chat.jsx. Messages are masked
 // from Clarity's recordings.
@@ -17,11 +19,24 @@ const POLL_OPEN_MS = 4000;
 const POLL_WAITING_MS = 2000;
 const POLL_CLOSED_MS = 60000;
 const AI_WAIT_MS = 45000;
+const TEASER_CLOSED_KEY = 'brixChatTeaserClosed';
 
 const CSS = `
 .bxsc-launch{position:fixed;right:20px;bottom:var(--brix-sidekick-space,80px);z-index:9990;display:flex;align-items:center;gap:8px;border:0;cursor:pointer;background:#111;color:#fff;font:600 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;border-radius:999px;padding:12px 18px 12px 14px;box-shadow:0 8px 24px rgba(15,23,42,.25);transition:transform .15s}
 .bxsc-launch:hover{transform:translateY(-2px)}
 .bxsc-launch.round{width:52px;height:52px;padding:0;justify-content:center}
+.bxsc-teaser{position:fixed;right:20px;bottom:calc(var(--brix-sidekick-space,80px) + 64px);z-index:9990;width:300px;background:#fff;border-radius:16px 16px 4px 16px;box-shadow:0 12px 32px rgba(15,23,42,.22);padding:12px 14px 14px;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111;text-align:start}
+.bxsc-teaser-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.bxsc-av{width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden}
+.bxsc-av img{width:24px;height:24px;display:block}
+.bxsc-teaser-head b{font-size:13.5px;display:block}
+.bxsc-teaser-head small{display:flex;align-items:center;gap:5px;color:#6b7280;font-size:12px}
+.bxsc-teaser-x{margin-left:auto;border:0;background:transparent;color:#6b7280;width:28px;height:28px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.bxsc-teaser-x:hover{background:#f3f4f6;color:#111}
+.bxsc-teaser-x:focus-visible,.bxsc-teaser-go:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
+.bxsc-bubble{background:#f3f4f6;border-radius:4px 14px 14px 14px;padding:9px 12px}
+.bxsc-bubble strong{display:block;margin-bottom:2px}
+.bxsc-teaser-go{margin-top:10px;width:100%;border:0;border-radius:10px;background:#111;color:#fff;font:600 14px/1 inherit;padding:11px 12px;cursor:pointer}
 .bxsc-launch:focus-visible,.bxsc button:focus-visible,.bxsc textarea:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
 .bxsc-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:#e11d48;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid #fff}
 .bxsc{position:fixed;right:20px;bottom:var(--brix-sidekick-space,80px);z-index:9991;width:370px;height:min(560px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111}
@@ -50,7 +65,7 @@ const CSS = `
 .bxsc-send[disabled]{opacity:.45;cursor:default}
 .bxsc-err{color:#b42318;font-size:12.5px;padding:0 12px 8px}
 .bxsc-hint{font-size:11.5px;color:#6b7280;text-align:center;padding:0 12px 8px}
-@media (max-width:480px){.bxsc{right:8px;left:8px;width:auto;bottom:8px;height:calc(100vh - 16px)}.bxsc-launch{right:12px}}
+@media (max-width:480px){.bxsc{right:8px;left:8px;width:auto;bottom:8px;height:calc(100vh - 16px)}.bxsc-launch{right:12px}.bxsc-teaser{right:12px;width:min(300px,calc(100vw - 24px))}}
 `;
 
 const ChatIcon = ({ size = 20 }) => (
@@ -58,6 +73,9 @@ const ChatIcon = ({ size = 20 }) => (
     <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1.1-4.4A8 8 0 1 1 21 12z" />
   </svg>
 );
+
+// The BRIX bag mark (public/brix-mark.png, cut from the BRIX logo) in a white circle.
+const BrixAvatar = () => <span className="bxsc-av"><img src="/brix-mark.png" alt="" width="24" height="24" /></span>;
 
 async function call(method, body, after = 0) {
   const res = await fetch(method === 'GET' ? `${API}?after=${after}` : API, method === 'GET' ? undefined : {
@@ -93,14 +111,24 @@ export default function SupportChat() {
   const [sending, setSending] = useState(false);
   const [waitingSince, setWaitingSince] = useState(0);
   const [error, setError] = useState('');
+  // The message bubble's ×: hidden for good in this browser (read after mount, no SSR mismatch).
+  const [teaserClosed, setTeaserClosed] = useState(true);
+  useEffect(() => {
+    try { setTeaserClosed(window.localStorage.getItem(TEASER_CLOSED_KEY) === '1'); } catch { setTeaserClosed(false); }
+  }, []);
+  const closeTeaser = () => {
+    setTeaserClosed(true);
+    try { window.localStorage.setItem(TEASER_CLOSED_KEY, '1'); } catch { /* private window */ }
+  };
   const lastId = useRef(0);
   const bodyRef = useRef(null);
 
   const refresh = useCallback(async () => {
     try {
       const data = await call('GET', null, lastId.current);
-      setSettings(data.settings);
-      setConversation(data.conversation);
+      // Same as before = no re-render (polls run every few seconds).
+      setSettings((prev) => (JSON.stringify(prev) === JSON.stringify(data.settings) ? prev : data.settings));
+      setConversation((prev) => (JSON.stringify(prev) === JSON.stringify(data.conversation) ? prev : data.conversation));
       if (data.messages.length) {
         setMessages((list) => {
           const next = mergeMessages(list, data.messages);
@@ -178,18 +206,33 @@ export default function SupportChat() {
   return (
     <>
       <style>{CSS}</style>
+      {!open && firstTime && !teaserClosed && (
+        // The team's chat-style message above the button; "Chat with us" opens the chat.
+        <aside className="bxsc-teaser" aria-label={settings.teamName}>
+          <div className="bxsc-teaser-head">
+            <BrixAvatar />
+            <div>
+              <b>{settings.teamName}</b>
+              <small><span className={`bxsc-dot${settings.online ? '' : ' away'}`} />{settings.online ? t('admin.chat.online') : t('admin.chat.away')}</small>
+            </div>
+            <button type="button" className="bxsc-teaser-x" aria-label={t('admin.chat.dismiss')} onClick={closeTeaser}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </div>
+          <div className="bxsc-bubble"><strong>{settings.launcherText}</strong>{settings.greeting}</div>
+          <button type="button" className="bxsc-teaser-go" onClick={() => setOpen(true)}>{t('admin.chat.start')}</button>
+        </aside>
+      )}
       {!open && (
-        <button type="button" className={`bxsc-launch${firstTime ? '' : ' round'}`} onClick={() => setOpen(true)}
-          aria-label={firstTime ? settings.launcherText : t('admin.chat.open')}>
-          <ChatIcon size={firstTime ? 18 : 22} />
-          {firstTime && <span>{settings.launcherText}</span>}
-          {!firstTime && unread > 0 && <span className="bxsc-badge" aria-label={t('admin.chat.unread', { count: unread })}>{unread > 9 ? '9+' : unread}</span>}
+        <button type="button" className="bxsc-launch round" onClick={() => setOpen(true)} aria-label={t('admin.chat.open')}>
+          <ChatIcon size={22} />
+          {unread > 0 && <span className="bxsc-badge" aria-label={t('admin.chat.unread', { count: unread })}>{unread > 9 ? '9+' : unread}</span>}
         </button>
       )}
       {open && (
         <section className="bxsc" role="dialog" aria-label={settings.teamName} data-clarity-mask="true">
           <header className="bxsc-head">
-            <ChatIcon />
+            <BrixAvatar />
             <div>
               <b>{settings.teamName}</b>
               <small><span className={`bxsc-dot${settings.online ? '' : ' away'}`} />{settings.online ? t('admin.chat.online') : t('admin.chat.away')}</small>

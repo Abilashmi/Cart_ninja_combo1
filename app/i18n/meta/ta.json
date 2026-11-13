@@ -143,6 +143,10 @@
     "status": "ai",
     "srcHash": "91e91987"
   },
+  "admin.chat.dismiss": {
+    "status": "ai",
+    "srcHash": "829aebf4"
+  },
   "admin.chat.error": {
     "status": "ai",
     "srcHash": "4cde638d"
@@ -162,6 +166,10 @@
   "admin.chat.send": {
     "status": "ai",
     "srcHash": "f28e14cf"
+  },
+  "admin.chat.start": {
+    "status": "ai",
+    "srcHash": "ad0105b7"
   },
   "admin.chat.talk_to_team": {
     "status": "ai",

@@ -135,7 +135,13 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   }
 
   // ---------- inbox ----------
+  // Polls never overlap, and the list is redrawn only when something in it
+  // changed (its "x min ago" times once a minute).
+  var listBusy = false;
+  var listSig = '';
   function loadList() {
+    if (listBusy) return Promise.resolve();
+    listBusy = true;
     var query = '?list=1&filter=' + encodeURIComponent(state.filter) + '&q=' + encodeURIComponent(state.q);
     return api('GET', query).then(function (res) {
       if (!res.success) { if (res.error) showListError(res.error); return; }
@@ -145,11 +151,17 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       document.getElementById('waiting').textContent = res.waiting ? '(' + res.waiting + ')' : '';
       document.title = (res.waiting ? '(' + res.waiting + ') ' : '') + 'BRIX chat';
       drawList();
-    });
+    }).catch(function () { /* try again on the next poll */ }).then(function () { listBusy = false; });
   }
-  function showListError(msg) { var box = document.getElementById('items'); box.textContent = ''; box.appendChild(el('p', { class: 'err', style: 'padding:12px', text: msg })); }
-  function drawList() {
+  function showListError(msg) { listSig = ''; var box = document.getElementById('items'); box.textContent = ''; box.appendChild(el('p', { class: 'err', style: 'padding:12px', text: msg })); }
+  function drawList(force) {
+    var sig = [state.id, state.filter, Math.floor(Date.now() / 60000), JSON.stringify(state.list.map(function (c) {
+      return [c.id, c.status, c.needsTeam, c.aiPaused, c.unreadTeam, c.lastMessageAt, c.lastPreview, storeName(c)];
+    }))].join('|');
+    if (!force && sig === listSig) return;
+    listSig = sig;
     var box = document.getElementById('items');
+    var top = box.scrollTop;
     box.textContent = '';
     if (!state.list.length) { box.appendChild(el('p', { class: 'empty', text: state.filter === 'waiting' ? 'Nobody is waiting.' : 'No chats.' })); return; }
     state.list.forEach(function (c) {
@@ -165,63 +177,100 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
         el('div', {}, tags),
       ]));
     });
+    box.scrollTop = top;
   }
 
   // ---------- one chat ----------
+  // The chat's frame (header, messages, reply box) is built once per chat.
+  // Polls only append new messages and redraw the header / store details when
+  // they change, so the reply box is never replaced while someone types.
+  var chatBusy = false;
+  var headSig = '';
+  var infoSig = '';
   function openChat(id) {
+    if (id === state.id) return;
     state.id = id; state.conv = null; state.messages = []; state.lastId = 0;
-    drawList();
+    headSig = ''; infoSig = '';
+    buildChat();
+    drawList(true);
     loadChat(true).then(function () { api('POST', '', { intent: 'update', id: id, read: true }).then(loadList); });
   }
+  function buildChat() {
+    var box = document.getElementById('chat');
+    box.textContent = '';
+    var area = el('textarea', { id: 'reply', placeholder: 'Reply (Ctrl+Enter sends). Replying stops BRIX AI in this chat.', 'aria-label': 'Reply' });
+    area.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(); } });
+    var quick = el('select', { id: 'quick', 'aria-label': 'Quick replies', on: { change: function (e) { if (e.target.value) { area.value = (area.value ? area.value + '\\n' : '') + e.target.value; e.target.value = ''; area.focus(); } } } });
+    box.appendChild(el('div', { class: 'chat-head', id: 'chat-head' }));
+    box.appendChild(el('div', { class: 'msgs', id: 'msgs' }));
+    box.appendChild(el('div', { class: 'reply' }, [area, el('div', { class: 'row' }, [quick, el('button', { type: 'button', class: 'main', on: { click: sendReply }, text: 'Send' }), el('span', { class: 'err', id: 'reply-err' })])]));
+    fillQuick();
+  }
+  function fillQuick() {
+    var sel = document.getElementById('quick');
+    if (!sel) return;
+    sel.textContent = '';
+    sel.appendChild(el('option', { value: '', text: 'Quick replies…' }));
+    ((state.settings && state.settings.quickReplies) || []).forEach(function (q) { sel.appendChild(el('option', { value: q, text: q.length > 70 ? q.slice(0, 70) + '…' : q })); });
+  }
   function loadChat(full) {
-    if (!state.id) return Promise.resolve();
+    if (!state.id || chatBusy) return Promise.resolve();
+    chatBusy = true;
     var id = state.id;
     return api('GET', '?id=' + id + '&after=' + (full ? 0 : state.lastId)).then(function (res) {
       if (id !== state.id || !res.success) return;
-      var grew = res.messages.length > 0;
       state.conv = res.conversation;
-      res.messages.forEach(function (m) { if (!state.messages.some(function (x) { return x.id === m.id; })) state.messages.push(m); });
-      if (state.messages.length) state.lastId = state.messages[state.messages.length - 1].id;
-      drawChat(full || grew);
+      var fresh = res.messages.filter(function (m) { return !state.messages.some(function (x) { return x.id === m.id; }); });
+      appendMessages(fresh, full);
+      drawHead();
       drawInfo();
-      if (grew && !full && state.conv.unreadTeam) api('POST', '', { intent: 'update', id: id, read: true });
-    });
+      if (fresh.length && !full && state.conv.unreadTeam) api('POST', '', { intent: 'update', id: id, read: true });
+    }).catch(function () { /* try again on the next poll */ }).then(function () { chatBusy = false; });
   }
-  function drawChat(scroll) {
-    var box = document.getElementById('chat');
-    var c = state.conv;
-    var draft = box.querySelector('textarea') ? box.querySelector('textarea').value : '';
-    box.textContent = '';
-    if (!c) { box.appendChild(el('div', { class: 'empty', text: 'Pick a chat on the left.' })); return; }
-    var head = el('div', { class: 'chat-head' }, [
-      el('b', { text: storeName(c) }),
-      c.aiPaused
-        ? el('button', { type: 'button', class: 'plain', title: 'BRIX AI answers this store again', on: { click: function () { update({ aiPaused: false }); } }, text: 'Hand back to AI' })
-        : el('button', { type: 'button', class: 'plain', title: 'Stop BRIX AI here; you answer', on: { click: function () { update({ aiPaused: true }); } }, text: 'Take over' }),
-      c.status === 'closed'
-        ? el('button', { type: 'button', class: 'plain', on: { click: function () { update({ status: 'open' }); } }, text: 'Reopen' })
-        : el('button', { type: 'button', class: 'plain', on: { click: function () { update({ status: 'closed' }); } }, text: 'Close' }),
-    ]);
-    var msgs = el('div', { class: 'msgs', id: 'msgs' });
-    state.messages.forEach(function (m) {
-      if (m.sender === 'system') { msgs.appendChild(el('div', { class: 'note', text: m.body })); return; }
-      var who = m.sender === 'merchant' ? 'Merchant' : m.sender === 'ai' ? 'BRIX AI' : (m.author || 'Team');
-      msgs.appendChild(el('div', { class: 'm ' + m.sender }, [el('span', { text: who + ' · ' + ago(m.at) }), el('p', { text: m.body })]));
+  function messageNode(m) {
+    if (m.sender === 'system') return el('div', { class: 'note', text: m.body });
+    var who = m.sender === 'merchant' ? 'Merchant' : m.sender === 'ai' ? 'BRIX AI' : (m.author || 'Team');
+    return el('div', { class: 'm ' + m.sender }, [el('span', { text: who + ' · ' + ago(m.at) }), el('p', { text: m.body })]);
+  }
+  // New messages go at the end; the view follows them only when it was already at the bottom.
+  function appendMessages(list, toBottom) {
+    var box = document.getElementById('msgs');
+    if (!box || !list.length) return;
+    var atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    list.forEach(function (m) {
+      if (state.messages.some(function (x) { return x.id === m.id; })) return;
+      state.messages.push(m);
+      box.appendChild(messageNode(m));
     });
-    var area = el('textarea', { id: 'reply', placeholder: 'Reply to ' + storeName(c) + ' (Ctrl+Enter sends). Replying stops BRIX AI in this chat.', 'aria-label': 'Reply' });
-    area.value = draft;
-    area.addEventListener('keydown', function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(); } });
-    var quick = el('select', { 'aria-label': 'Quick replies', on: { change: function (e) { if (e.target.value) { area.value = (area.value ? area.value + '\\n' : '') + e.target.value; e.target.value = ''; area.focus(); } } } },
-      [el('option', { value: '', text: 'Quick replies…' })].concat(((state.settings && state.settings.quickReplies) || []).map(function (q) { return el('option', { value: q, text: q.length > 70 ? q.slice(0, 70) + '…' : q }); })));
-    var err = el('span', { class: 'err', id: 'reply-err' });
-    var reply = el('div', { class: 'reply' }, [area, el('div', { class: 'row' }, [quick, el('button', { type: 'button', class: 'main', on: { click: sendReply }, text: 'Send' }), err])]);
-    box.appendChild(head); box.appendChild(msgs); box.appendChild(reply);
-    if (scroll) msgs.scrollTop = msgs.scrollHeight;
+    state.lastId = state.messages.length ? state.messages[state.messages.length - 1].id : state.lastId;
+    if (toBottom || atBottom) box.scrollTop = box.scrollHeight;
+  }
+  function drawHead() {
+    var c = state.conv;
+    var head = document.getElementById('chat-head');
+    if (!c || !head) return;
+    var sig = [storeName(c), c.status, c.aiPaused].join('|');
+    if (sig === headSig) return;
+    headSig = sig;
+    head.textContent = '';
+    head.appendChild(el('b', { text: storeName(c) }));
+    head.appendChild(c.aiPaused
+      ? el('button', { type: 'button', class: 'plain', title: 'BRIX AI answers this store again', on: { click: function () { update({ aiPaused: false }); } }, text: 'Hand back to AI' })
+      : el('button', { type: 'button', class: 'plain', title: 'Stop BRIX AI here; you answer', on: { click: function () { update({ aiPaused: true }); } }, text: 'Take over' }));
+    head.appendChild(c.status === 'closed'
+      ? el('button', { type: 'button', class: 'plain', on: { click: function () { update({ status: 'open' }); } }, text: 'Reopen' })
+      : el('button', { type: 'button', class: 'plain', on: { click: function () { update({ status: 'closed' }); } }, text: 'Close' }));
+    var area = document.getElementById('reply');
+    if (area) area.placeholder = 'Reply to ' + storeName(c) + ' (Ctrl+Enter sends). Replying stops BRIX AI in this chat.';
   }
   function drawInfo() {
+    var c = state.conv;
     var box = document.getElementById('info');
+    if (!c) { infoSig = ''; box.textContent = ''; return; }
+    var sig = JSON.stringify([c.id, c.context, c.contextAt, Math.floor(Date.now() / 60000)]);
+    if (sig === infoSig) return;
+    infoSig = sig;
     box.textContent = '';
-    var c = state.conv; if (!c) return;
     var x = c.context || {};
     var rows = [['Store', x.name || c.shop], ['Shop', c.shop], ['Website', x.domain], ['Owner', x.owner], ['Email', x.email], ['BRIX plan', x.plan], ['Shopify plan', x.shopifyPlan],
       ['App embed', x.embed], ['Page', x.page], ['Language', x.locale], ['Time zone', x.timeZone], ['Updated', ago(c.contextAt)]];
@@ -233,12 +282,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
       box.appendChild(el('h2', { style: 'margin-top:14px', text: 'Features' }));
       box.appendChild(el('div', { class: 'chips' }, Object.keys(x.features).map(function (k) { return el('span', { class: 'chip' + (x.features[k] === true ? ' on' : ''), text: k + (x.features[k] === true ? ' on' : x.features[k] === false ? ' off' : ' ?') }); })));
     }
-    var links = el('div', { class: 'chips', style: 'margin-top:14px' }, [
+    box.appendChild(el('div', { class: 'chips', style: 'margin-top:14px' }, [
       el('a', { href: 'https://' + c.shop + '/admin', target: '_blank', rel: 'noopener', text: 'Shopify admin' }),
       x.domain ? el('a', { href: x.domain, target: '_blank', rel: 'noopener', text: 'Store' }) : null,
       el('a', { href: '/internal/reports?shop=' + encodeURIComponent(c.shop), target: '_blank', rel: 'noopener', text: 'Report' }),
-    ]);
-    box.appendChild(links);
+    ]));
   }
   function sendReply() {
     var area = document.getElementById('reply');
@@ -248,15 +296,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     if (!text) return;
     if (!author) { err.textContent = 'Write your name at the top first.'; document.getElementById('agent').focus(); return; }
     err.textContent = '';
-    api('POST', '', { intent: 'reply', id: state.id, body: text, author: author }).then(function (res) {
+    var id = state.id;
+    api('POST', '', { intent: 'reply', id: id, body: text, author: author }).then(function (res) {
       if (!res.success) { err.textContent = res.error || 'Not sent.'; return; }
-      area.value = '';
-      loadChat(false); loadList();
+      if (area.value.trim() === text) area.value = '';
+      if (id === state.id && res.message) {
+        appendMessages([res.message], true);
+        if (state.conv) { state.conv.aiPaused = true; state.conv.needsTeam = false; drawHead(); }
+      }
+      loadList();
     });
   }
   function update(patch) {
     api('POST', '', Object.assign({ intent: 'update', id: state.id }, patch)).then(function (res) {
-      if (res.success) { state.conv = res.conversation; drawChat(false); drawInfo(); loadList(); }
+      if (res.success) { state.conv = res.conversation; drawHead(); drawInfo(); loadList(); }
     });
   }
 
@@ -290,8 +343,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     [
       check('Show the chat in the BRIX admin', 'enabled', 'Off = no launcher for any store.'),
       check('BRIX AI answers first', 'aiEnabled', 'Off = only the team answers.'),
-      field('Launcher text', 'launcherText', 'text', 'Shown on the corner button until the merchant first chats (max 40).'),
-      field('Greeting', 'greeting', 'textarea', 'The first message in an empty chat.'),
+      field('Bubble heading', 'launcherText', 'text', 'The bold line in the chat bubble shown until the merchant first chats (max 40).'),
+      field('Greeting', 'greeting', 'textarea', 'Under the heading in the chat bubble, and the first message in the chat.'),
       field('Team name', 'teamName', 'text', 'At the top of the chat.'),
       field('Hand-over message', 'handoffMessage', 'textarea', 'When the chat goes to the team during office hours.'),
       field('Away message', 'awayMessage', 'textarea', 'When the chat goes to the team outside office hours.'),
@@ -317,11 +370,11 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
     msg.className = ''; msg.textContent = 'Saving…';
     api('POST', '', { intent: 'settings', settings: settings }).then(function (res) {
       if (!res.success) { msg.className = 'err'; msg.textContent = res.error || 'Not saved.'; return; }
-      state.settings = res.settings; drawSettings();
+      state.settings = res.settings; fillQuick(); drawSettings();
       var m = document.getElementById('s-msg'); m.className = 'ok'; m.textContent = 'Saved. Merchants see it within a minute.';
     });
   }
-  function loadSettings() { return api('GET', '?settings=1').then(function (res) { if (res.success) { state.settings = res.settings; if (state.tab === 'settings') drawSettings(); } }); }
+  function loadSettings() { return api('GET', '?settings=1').then(function (res) { if (res.success) { state.settings = res.settings; fillQuick(); if (state.tab === 'settings') drawSettings(); } }); }
 
   // ---------- wiring ----------
   [].forEach.call(document.querySelectorAll('[data-filter]'), function (b) {

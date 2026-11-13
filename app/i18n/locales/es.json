@@ -192,6 +192,8 @@
   "admin.chat.error": "No se pudo enviar tu mensaje. Inténtalo de nuevo.",
   "admin.chat.unread": "{count, plural, one {# mensaje nuevo} other {# mensajes nuevos}}",
   "admin.chat.ai_note": "Responde BRIX AI. Pide hablar con una persona cuando quieras.",
+  "admin.chat.start": "Chatea con nosotros",
+  "admin.chat.dismiss": "Ocultar este mensaje",
   "error.admin.save_failed": "No se pudieron guardar los cambios. Inténtalo de nuevo.",
   "error.cod.calculate_failed": "No pudimos calcular el precio de este pedido. Inténtalo de nuevo o paga en línea.",
   "error.cod.checkout_only": "Este carrito tiene un regalo gratis que solo está disponible con pago en línea.",

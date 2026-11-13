@@ -90,6 +90,22 @@ check('merchant HTML shows as text and never runs', (await page.locator('.msgs i
 await page.waitForTimeout(300);
 check('opening a chat marks it read', posts.some((p) => p.intent === 'update' && p.id === 7 && p.read));
 
+// Typing across several polls, with a new merchant message arriving meanwhile,
+// keeps every character and the focus (polls used to rebuild the reply box).
+const reply0 = page.locator('#reply');
+const replyHandle = await reply0.elementHandle();
+await reply0.click();
+const typed = 'Hello there, I am looking at your COD settings now';
+const half = Math.floor(typed.length / 2);
+await page.keyboard.type(typed.slice(0, half), { delay: 60 });
+MESSAGES[7].push({ id: 5, sender: 'merchant', author: '', body: 'Any update?', at: recent });
+await page.waitForTimeout(3500);
+await page.keyboard.type(typed.slice(half), { delay: 60 });
+await page.waitForTimeout(3500);
+check('typing with spaces across polls keeps every character and the focus', (await reply0.inputValue()) === typed && await page.evaluate(() => document.activeElement && document.activeElement.id === 'reply'), JSON.stringify(await reply0.inputValue()));
+check('the reply box is the same element after polls', await page.evaluate((a) => a === document.getElementById('reply'), replyHandle));
+check('the new merchant message was added meanwhile', (await page.locator('.m.merchant p', { hasText: 'Any update?' }).count()) === 1);
+await reply0.fill('');
 await page.locator('#reply').fill('Hi, checking now.');
 await page.getByRole('button', { name: 'Send' }).click();
 check('a reply needs your name first', (await page.locator('#reply-err').innerText()).includes('name'));

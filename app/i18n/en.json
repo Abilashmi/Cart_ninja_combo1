@@ -192,6 +192,8 @@
   "admin.chat.error": "Your message could not be sent. Please try again.",
   "admin.chat.unread": "{count, plural, one {# new message} other {# new messages}}",
   "admin.chat.ai_note": "Answers from BRIX AI. Ask for a person any time.",
+  "admin.chat.start": "Chat with us",
+  "admin.chat.dismiss": "Hide this message",
   "error.admin.save_failed": "Could not save your changes. Please try again.",
   "error.cod.calculate_failed": "We couldn't price this order. Please try again, or pay online.",
   "error.cod.checkout_only": "This cart has a free gift that is only available with online payment.",

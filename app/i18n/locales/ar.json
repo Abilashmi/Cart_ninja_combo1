@@ -192,6 +192,8 @@
   "admin.chat.error": "تعذّر إرسال رسالتك. حاول مرة أخرى.",
   "admin.chat.unread": "{count, plural, one {# رسالة جديدة} other {# رسائل جديدة}}",
   "admin.chat.ai_note": "الإجابات من BRIX AI. اطلب التحدث إلى شخص في أي وقت.",
+  "admin.chat.start": "تحدث معنا",
+  "admin.chat.dismiss": "إخفاء هذه الرسالة",
   "error.admin.save_failed": "تعذّر حفظ التغييرات. حاول مرة أخرى.",
   "error.cod.calculate_failed": "تعذّر حساب سعر هذا الطلب. حاول مرة أخرى أو ادفع عبر الإنترنت.",
   "error.cod.checkout_only": "تحتوي هذه السلة على هدية مجانية متاحة فقط مع الدفع عبر الإنترنت.",

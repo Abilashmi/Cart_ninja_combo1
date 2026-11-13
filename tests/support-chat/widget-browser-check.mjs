@@ -54,6 +54,7 @@ async function open({ settings = SETTINGS, conversation = null, messages = [], v
       const after = Number(url.searchParams.get('after')) || 0;
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ success: true, settings: server.settings, conversation: server.conversation, messages: server.messages.filter((m) => m.id > after) }) });
     }
+    if (url.pathname === '/brix-mark.png') return route.fulfill({ contentType: 'image/png', body: fs.readFileSync(path.join('public', 'brix-mark.png')) });
     if (url.host === 'harness.test') {
       const file = path.join(dist, url.pathname === '/' ? 'index.html' : url.pathname);
       if (fs.existsSync(file) && fs.statSync(file).isFile()) return route.fulfill({ contentType: MIME[path.extname(file)] || 'application/octet-stream', body: fs.readFileSync(file) });
@@ -65,15 +66,19 @@ async function open({ settings = SETTINGS, conversation = null, messages = [], v
   return { page, errors, server };
 }
 
-// 1) A store that hasn't chatted: the launcher asks, nothing opens by itself.
+// 1) A store that hasn't chatted: a chat-style bubble asks, nothing opens by itself.
 {
   const { page, errors, server } = await open();
-  const launcher = page.locator('.bxsc-launch');
-  check('launcher reads "Need help setting up?"', (await launcher.innerText()).trim() === 'Need help setting up?');
-  check('the chat does not open by itself', (await page.locator('.bxsc').count()) === 0);
+  const teaser = page.locator('.bxsc-teaser');
+  const text = await teaser.innerText();
+  check('chat bubble: team name, "Need help setting up?", the greeting, "Chat with us"', ['BRIX Support', 'Need help setting up?', 'Do you need any help to set up BRIX?', 'Chat with us'].every((w) => text.includes(w)), text.replace(/\s+/g, ' '));
+  check('the chat window does not open by itself', (await page.locator('.bxsc').count()) === 0);
+  const launcher = page.locator('.bxsc-launch.round');
   const box = await launcher.boundingBox();
-  check('launcher sits in the bottom-right corner, above the Sidekick strip', box && box.x + box.width > 1200 && box.y + box.height <= 860 - 80 + 1, JSON.stringify(box));
-  await launcher.click();
+  const tbox = await teaser.boundingBox();
+  check('round chat button in the bottom-right corner, above the Sidekick strip, the bubble above it', box && box.x + box.width > 1200 && box.y + box.height <= 860 - 80 + 1 && tbox && tbox.y + tbox.height <= box.y, JSON.stringify({ box, tbox }));
+  await page.screenshot({ path: path.join(shotDir, 'desktop-bubble.png') });
+  await page.getByRole('button', { name: 'Chat with us' }).click();
   await page.locator('.bxsc').waitFor();
   check('opens with the team name and the greeting', (await page.locator('.bxsc-head').innerText()).includes('BRIX Support') && (await page.locator('.bxsc-body').innerText()).includes('Do you need any help to set up BRIX?'));
   check('chat window is masked from Clarity', (await page.locator('.bxsc').getAttribute('data-clarity-mask')) === 'true');
@@ -91,8 +96,20 @@ async function open({ settings = SETTINGS, conversation = null, messages = [], v
   check('"Talk to a person" hands over and says the team will reply', server.posts.some((p) => p.intent === 'team') && (await page.locator('.bxsc-note').innerText()).includes('BRIX team will reply'));
   check('"Talk to a person" is gone once asked', (await page.getByRole('button', { name: 'Talk to a person' }).count()) === 0);
   await page.keyboard.press('Escape');
-  check('Escape closes it; the launcher is now a round button', (await page.locator('.bxsc').count()) === 0 && (await page.locator('.bxsc-launch.round').count()) === 1);
+  check('Escape closes it; no bubble once the store has chatted, just the round button', (await page.locator('.bxsc').count()) === 0 && (await page.locator('.bxsc-launch.round').count()) === 1 && (await page.locator('.bxsc-teaser').count()) === 0);
   check('no page errors', errors.length === 0, errors.join(' | '));
+  await page.close();
+}
+
+// 1b) The bubble's × hides it for good (this browser); the round button stays.
+{
+  const { page, errors } = await open();
+  await page.getByRole('button', { name: 'Hide this message' }).click();
+  check('× hides the bubble, the round button stays, the chat stays closed', (await page.locator('.bxsc-teaser').count()) === 0 && (await page.locator('.bxsc-launch.round').count()) === 1 && (await page.locator('.bxsc').count()) === 0);
+  await page.reload();
+  await page.waitForTimeout(1800);
+  check('after a reload the bubble stays hidden', (await page.locator('.bxsc-teaser').count()) === 0 && (await page.locator('.bxsc-launch.round').count()) === 1);
+  check('no page errors (×)', errors.length === 0, errors.join(' | '));
   await page.close();
 }
 
@@ -126,6 +143,9 @@ async function open({ settings = SETTINGS, conversation = null, messages = [], v
 // 4) Phones: the chat fills the screen with a small margin.
 {
   const { page, errors } = await open({ viewport: { width: 390, height: 844 } });
+  const tb = await page.locator('.bxsc-teaser').boundingBox();
+  check('phone: the bubble fits the screen', tb && tb.x >= 12 && tb.x + tb.width <= 390 - 11, JSON.stringify(tb));
+  await page.screenshot({ path: path.join(shotDir, 'phone-bubble.png') });
   await page.locator('.bxsc-launch').click();
   await page.locator('.bxsc').waitFor();
   const box = await page.locator('.bxsc').boundingBox();
