@@ -482,3 +482,21 @@ test('Type / Brand / own tag / Sort as rows of chips (qs_filter_dd_style)', () =
   kit.applyUiAction(ui, 'qs-group', el('sort', 'name'));
   assert.equal(ui.dd.sort, 'name');
 });
+
+test('each filter has its own style: only Type as chips', () => {
+  const typed = [
+    product(21, { productType: 'Rings', vendor: 'Silverline' }),
+    product(22, { productType: 'Chains', vendor: 'Gopi' }),
+  ];
+  const build = (config) => kit.buildModel({
+    config: { layout: 'layout6', tab_count: 1, col_1: 'jewels', ...config },
+    productsByHandle: { jewels: typed }, handles: ['jewels'], ui: { chip: 'all', dd: {} }, pricing: { tiers: [], enabled: false },
+  });
+  const typeOnly = build({ qs_filter_type_style: 'chips' });
+  assert.deepEqual(typeOnly.row.groups.map((g) => g.id), ['type']);
+  assert.deepEqual(typeOnly.row.menus.map((m) => m.id), ['brand', 'sort']);
+  // A filter's own choice wins over the old all-in-one setting.
+  const mixed = build({ qs_filter_dd_style: 'chips', qs_filter_sort_style: 'dropdown' });
+  assert.deepEqual(mixed.row.groups.map((g) => g.id), ['type', 'brand']);
+  assert.deepEqual(mixed.row.menus.map((m) => m.id), ['sort']);
+});

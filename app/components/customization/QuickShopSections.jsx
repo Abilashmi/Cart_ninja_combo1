@@ -461,11 +461,19 @@ function SizeField({ PxField, config, updateConfig, keyName, label, fallback, mi
 
 function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
   const source = val(config, 'qs_chips_source');
-  const toggleWithLabel = (key, labelKey, title, help) => (
+  const toggleWithLabel = (key, labelKey, title, help, styleKey = null) => (
     <BlockStack gap="100">
       <Checkbox label={title} checked={isOn(config, key)} onChange={(v) => updateConfig(key, v)} helpText={help} />
       {isOn(config, key) && (
         <TextField label="Label" labelHidden value={val(config, labelKey)} onChange={(v) => updateConfig(labelKey, v)} autoComplete="off" />
+      )}
+      {/* Type / Brand / own tag / Sort: each a dropdown or a row of chips ('' = the old all-in-one setting). */}
+      {isOn(config, key) && styleKey && (
+        <Select
+          label="Shown as" options={GROUP_STYLES}
+          value={val(config, styleKey) || val(config, 'qs_filter_dd_style') || 'dropdown'}
+          onChange={(v) => updateConfig(styleKey, v)}
+        />
       )}
     </BlockStack>
   );
@@ -520,9 +528,9 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Collection filters</Text></div>
         <CollectionFilterGroups config={config} updateConfig={updateConfig} collections={collections} />
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Dropdown filters</Text></div>
-        {toggleWithLabel('qs_filter_type', 'qs_filter_type_label', 'Product type', 'Lists the Shopify product types on the page.')}
-        {toggleWithLabel('qs_filter_brand', 'qs_filter_brand_label', 'Brand (vendor)', 'Lists the vendors on the page.')}
-        {toggleWithLabel('qs_filter_custom', 'qs_filter_custom_label', 'Your own tag filter', 'A dropdown of tags you choose, e.g. Cut: Boneless, With skin.')}
+        {toggleWithLabel('qs_filter_type', 'qs_filter_type_label', 'Product type', 'Lists the Shopify product types on the page.', 'qs_filter_type_style')}
+        {toggleWithLabel('qs_filter_brand', 'qs_filter_brand_label', 'Brand (vendor)', 'Lists the vendors on the page.', 'qs_filter_brand_style')}
+        {toggleWithLabel('qs_filter_custom', 'qs_filter_custom_label', 'Your own tag filter', 'Tags you choose, e.g. Cut: Boneless, With skin.', 'qs_filter_custom_style')}
         {isOn(config, 'qs_filter_custom') && (
           <TextField
             label="Tags in this dropdown" value={config.qs_filter_custom_tags || ''} onChange={(v) => updateConfig('qs_filter_custom_tags', v)}
@@ -532,16 +540,8 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         {toggleWithLabel('qs_filter_weight', 'qs_filter_weight_label', 'Weight', 'From your products\' Shopify variant weights, e.g. 250 g, 500 g, 1 kg.')}
         {isOn(config, 'qs_filter_weight') && <WeightFilterOptions config={config} updateConfig={updateConfig} />}
         {toggleWithLabel('qs_filter_price', 'qs_filter_price_label', 'Price slider', 'Shoppers drag from – to between the cheapest and dearest product on the page.')}
-        {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.')}
+        {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.', 'qs_filter_sort_style')}
         {toggleWithLabel('qs_filter_instock', 'qs_filter_instock_label', '“In stock” chip', 'Hides sold-out products when on.')}
-        {(isOn(config, 'qs_filter_type') || isOn(config, 'qs_filter_brand') || isOn(config, 'qs_filter_custom') || isOn(config, 'qs_filter_sort')) && (
-          <Select
-            label="Type, Brand, your tag filter and Sort shown as"
-            options={[{ label: 'Dropdowns', value: 'dropdown' }, { label: 'Rows of chips', value: 'chips' }]}
-            value={val(config, 'qs_filter_dd_style')} onChange={(v) => updateConfig('qs_filter_dd_style', v)}
-            helpText={val(config, 'qs_filter_dd_style') === 'chips' ? 'Each one is its own labelled row of chips. A tap picks, a tap on the picked chip clears it.' : 'Each one is a chip that opens a list.'}
-          />
-        )}
         <Text as="p" variant="bodySm" tone="subdued">A filter only shows when the products on the page have at least two values for it.</Text>
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Filter look</Text></div>
         <Select

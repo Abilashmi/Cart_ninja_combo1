@@ -60,9 +60,14 @@ export function createQuickShopKit(core) {
     qs_filter_sort_label: 'Sort By',
     qs_filter_instock: false,
     qs_filter_instock_label: 'In stock',
-    // Type, Brand, the own tag filter and Sort: dropdowns, or each as its own
+    // Type, Brand, the own tag filter and Sort, each a dropdown or its own
     // labelled row of chips (like a collection filter group: a tap picks, a
-    // tap on the picked one clears).
+    // tap on the picked one clears). '' = follow qs_filter_dd_style (one
+    // setting for all four, the first version).
+    qs_filter_type_style: '', // '' | dropdown | chips
+    qs_filter_brand_style: '',
+    qs_filter_custom_style: '',
+    qs_filter_sort_style: '',
     qs_filter_dd_style: 'dropdown', // dropdown | chips
     // Collection filter groups: each group is one filter ("Weight", "Years")
     // whose options are store collections (any collection, not only the
@@ -826,10 +831,13 @@ export function createQuickShopKit(core) {
 
     var dd = ui.dd || {};
     var menus = [];
-    var ddChips = opt(config, 'qs_filter_dd_style') === 'chips';
+    function asChips(id) {
+      var own = opt(config, 'qs_filter_' + id + '_style');
+      return (own === 'chips' || own === 'dropdown' ? own : opt(config, 'qs_filter_dd_style')) === 'chips';
+    }
     function addMenu(id, label, values) {
       if (values.length < 2) return;
-      if (ddChips) {
+      if (asChips(id)) {
         var chipOptions = [];
         for (var ci = 0; ci < values.length; ci++) chipOptions.push({ value: values[ci], label: values[ci], on: dd[id] === values[ci] });
         chipGroups.push({ id: id, label: label, style: 'chips', value: dd[id] || '', options: chipOptions });
@@ -871,7 +879,7 @@ export function createQuickShopKit(core) {
     }
     if (on(config, 'qs_filter_sort')) {
       var sortValue = dd.sort && dd.sort !== 'featured' ? dd.sort : '';
-      if (ddChips) {
+      if (asChips('sort')) {
         var sortChips = [];
         for (var si = 0; si < SORTS.length; si++) sortChips.push({ value: SORTS[si].value, label: SORTS[si].label, on: (sortValue || 'featured') === SORTS[si].value });
         chipGroups.push({ id: 'sort', label: opt(config, 'qs_filter_sort_label'), style: 'chips', value: sortValue, options: sortChips });

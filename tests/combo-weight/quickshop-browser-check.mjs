@@ -822,6 +822,16 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.screenshot({ path: path.join(SHOTS, 'quickshop-dd-chips-phone.png') });
   await page.close();
 
+  // Only Type as chips; Brand, Cut and Sort stay dropdowns.
+  ({ page } = await openCombo({ ...baseConfig, qs_filter_type_style: 'chips' }, wp(QUANTITY)));
+  const typeRows = await page.$$eval('.bxq-gchips .bxq-gchips-label', (els) => els.map((e) => e.textContent));
+  const typeMenus = await page.$$eval('[data-combo-action="qs-menu"]', (els) => els.map((e) => e.getAttribute('data-menu')));
+  check('Type only as chips: one Type chip row, Brand / Cut / Sort still dropdowns', typeRows.join('|') === 'Type' && typeMenus.join('|') === 'brand|custom|sort', `${typeRows.join('|')} / ${typeMenus.join('|')}`);
+  await page.click('[data-combo-action="qs-group"][data-menu="type"][data-value="Mutton"]');
+  check('Type only as chips: the Mutton chip filters', (await titles(page)).length === 2, (await titles(page)).join('|'));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-type-chips.png') });
+  await page.close();
+
   // Filters in a left column (desktop) and a slider inside a dropdown.
   ({ page } = await openCombo({ ...baseConfig, ...qty, qs_filter_position: 'left', qs_filter_weight: true, qs_filter_price: true, qs_filter_brand: true }, wp(QUANTITY)));
   const side = await page.$eval('.bxq-side', (e) => { const r = e.getBoundingClientRect(); const g = document.querySelector('.bxq-grid').getBoundingClientRect(); return { w: Math.round(r.width), left: r.left < g.left, top: Math.abs(r.top - g.top) < 4 }; });
