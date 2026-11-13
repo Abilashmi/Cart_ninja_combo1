@@ -474,5 +474,6 @@
   "storefront.cod.partial_desc": "अभी {advance} ऑनलाइन चुकाएँ, {balance} डिलीवरी पर",
   "storefront.cod.partial_note": "आप स्टोर के सुरक्षित चेकआउट में {advance} चुकाएँगे। डिलीवरी पर {balance} तैयार रखें।",
   "storefront.cod.partial_pay_now": "अभी चुकाएँ",
-  "storefront.cod.partial_title": "आंशिक भुगतान"
+  "storefront.cod.partial_title": "आंशिक भुगतान",
+  "error.cod.partial_required": "इस ऑर्डर के लिए कुछ भुगतान ऑनलाइन करना ज़रूरी है। कृपया आंशिक भुगतान चुनें।"
 }

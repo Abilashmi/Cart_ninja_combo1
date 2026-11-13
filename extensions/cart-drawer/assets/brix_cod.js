@@ -96,6 +96,7 @@
     invalid_pincode: ['error.cod.invalid_pincode', 'Enter a valid 6-digit PIN code.'],
     otp_invalid: ['error.cod.otp_invalid', 'Enter the 4-digit code from the SMS.'],
     partial_unavailable: ['error.cod.partial_unavailable', 'Part payment is not available for this order. Please choose Cash on Delivery or pay online.'],
+    partial_required: ['error.cod.partial_required', 'This order needs a part payment online. Please choose Part payment.'],
     otp_locked: ['error.cod.otp_locked', 'Too many wrong tries. Ask for a new code.'],
     otp_expired: ['error.cod.otp_expired', 'This code has expired. Ask for a new one.'],
     otp_wrong: ['error.cod.otp_wrong', 'That code doesn\'t match. {attemptsLeft, plural, one {# try left.} other {# tries left.}}'],
@@ -1574,7 +1575,10 @@
     var q = this.quote, fmt = this.fmt, a = this.addr;
     // Partial COD: offered for this total? Picked? (this.payMode)
     var split = partialSplit(this.cfg, q.total);
+    // "Only part payment": no full Cash on Delivery where Partial COD is offered.
+    var partialOnly = Boolean(split) && Boolean(this.cfg.partialCod && this.cfg.partialCod.only);
     if (!split) this.payMode = 'cod';
+    else if (partialOnly) this.payMode = 'partial';
     var partial = Boolean(split) && this.payMode === 'partial';
     var prevBody = this.sh.querySelector('.bd');
     var scrollTop = prevBody ? prevBody.scrollTop : 0;
@@ -1603,11 +1607,16 @@
       '<br><span dir="ltr">+91 ' + esc(prettyPhone(this.phone)) + '</span></div><button type="button" class="lk" data-go="address">' + esc(bxT('storefront.common.edit', 'Edit')) + '</button></div>';
     var pay = '<div class="pay"><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div>' +
       icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>';
-    if (split) {
+    var partialNote = partial ? '<p class="mu" style="margin:0 0 4px;font-size:12.5px">' + esc(bxT('storefront.cod.partial_note', 'You\'ll pay {advance} in the store\'s secure checkout. Keep {balance} ready at delivery.', { advance: split ? fmt(split.advance) : '', balance: split ? fmt(split.balance) : '' })) + '</p>' : '';
+    if (partialOnly) {
+      // The only way to pay: the advance now online + the rest on delivery.
+      pay = '<div class="pay"><div class="ic">' + icon('card', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.partial_title', 'Part payment')) + '</b>' + esc(bxT('storefront.cod.partial_desc', 'Pay {advance} now online, {balance} on delivery', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</div>' +
+        icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>' + partialNote;
+    } else if (split) {
       // Two choices: the whole amount on delivery, or the advance now online + the rest on delivery.
       pay = '<button type="button" class="pay" data-act="pay-mode" data-mode="cod" aria-pressed="' + String(!partial) + '"><span class="rd"></span><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div></button>' +
         '<button type="button" class="pay" data-act="pay-mode" data-mode="partial" aria-pressed="' + String(partial) + '"><span class="rd"></span><div class="ic">' + icon('card', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.partial_title', 'Part payment')) + '</b>' + esc(bxT('storefront.cod.partial_desc', 'Pay {advance} now online, {balance} on delivery', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</div></button>' +
-        (partial ? '<p class="mu" style="margin:0 0 4px;font-size:12.5px">' + esc(bxT('storefront.cod.partial_note', 'You\'ll pay {advance} in the store\'s secure checkout. Keep {balance} ready at delivery.', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</p>' : '');
+        partialNote;
     }
     this.frame(bxT('storefront.cod.review_title', 'Review your order'), 'address', 'review',
       this.lineList(q) + this.couponBlock() + save + rows +

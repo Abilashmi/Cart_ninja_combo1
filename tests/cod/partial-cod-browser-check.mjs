@@ -131,6 +131,28 @@ async function run({ partialCod, partialAnswer }) {
   await page.close();
 }
 
+// 2b) "Only offer part payment": one Part payment card, no full COD; outside the range, normal COD.
+{
+  const { page, inSheet, errors, getCheckout } = await run({
+    partialCod: { mode: 'fixed', amount: 400, percent: 10, minOrder: 0, maxOrder: 0, only: true },
+    partialAnswer: { ok: true, body: { code: 'PCTESTCODE02', advance: 400, balance: 2298, total: 2698, currency: 'INR' } },
+  });
+  check('only: no Cash on Delivery choice, one Part payment card', (await inSheet('button.pay').count()) === 0 && (await inSheet('.pay').count()) === 1 && (await inSheet('.pay').textContent()).includes('Part payment') && !(await inSheet('.pay').textContent()).includes('Cash on Delivery'));
+  check('only: the button pays the advance', /^Pay ₹400(\.00)? now$/.test((await inSheet('button[type="submit"]').textContent()).trim()));
+  await inSheet('[name="policy"]').check();
+  await inSheet('button[type="submit"]').click();
+  await page.waitForURL(/\/cart\//, { timeout: 5000 });
+  check('only: goes to Shopify checkout with the code', getCheckout()?.searchParams.get('discount') === 'PCTESTCODE02');
+  check('only: no page errors', errors.length === 0, errors.join('; '));
+  await page.close();
+}
+{
+  const { page, inSheet, errors } = await run({ partialCod: { mode: 'fixed', amount: 50, percent: 10, minOrder: 0, maxOrder: 2000, only: true }, partialAnswer: { ok: true, body: {} } });
+  check('only, order outside the Partial COD range: normal COD', (await inSheet('button.pay').count()) === 0 && (await inSheet('button[type="submit"]').textContent()).includes('Place COD order'));
+  check('only, outside the range: no page errors', errors.length === 0, errors.join('; '));
+  await page.close();
+}
+
 // 3) Partial COD off, or not offered for this total: the popup is exactly as before.
 for (const [name, partialCod] of [['off', null], ['order above its maximum', { mode: 'fixed', amount: 50, percent: 10, minOrder: 0, maxOrder: 2000 }]]) {
   const { page, inSheet, errors } = await run({ partialCod, partialAnswer: { ok: true, body: {} } });

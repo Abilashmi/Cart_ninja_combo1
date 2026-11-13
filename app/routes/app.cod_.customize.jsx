@@ -953,6 +953,14 @@ export default function CodCustomizePage() {
                   {form.partialMode === 'fixed'
                     ? <TextField label="Advance amount" type="number" min={1} value={form.partialAmount} onChange={set('partialAmount')} prefix={data.currencyCode} error={errors.partialAmount} autoComplete="off" />
                     : <TextField label="Advance percentage" type="number" min={1} max={90} value={form.partialPercent} onChange={set('partialPercent')} suffix="%" error={errors.partialPercent} autoComplete="off" />}
+                  <Checkbox
+                    label="Only offer part payment"
+                    checked={form.partialOnly}
+                    onChange={set('partialOnly')}
+                    helpText={form.partialOnly
+                      ? 'Shoppers must pay the advance online: full Cash on Delivery isn’t offered where Partial COD is. Orders outside the order values below still get normal COD.'
+                      : 'Off: shoppers choose Cash on Delivery or Part payment.'}
+                  />
                   <FormLayout.Group>
                     <TextField label="Offer from order value" type="number" min={0} value={form.partialMinOrder} onChange={set('partialMinOrder')} placeholder="No minimum" prefix={data.currencyCode} error={errors.partialMinOrder} autoComplete="off" />
                     <TextField label="Up to order value" type="number" min={0} value={form.partialMaxOrder} onChange={set('partialMaxOrder')} placeholder="No maximum" prefix={data.currencyCode} error={errors.partialMaxOrder} autoComplete="off" />

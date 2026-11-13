@@ -474,5 +474,6 @@
   "storefront.cod.partial_desc": "Pay {advance} now online, {balance} on delivery",
   "storefront.cod.partial_note": "You'll pay {advance} in the store's secure checkout. Keep {balance} ready at delivery.",
   "storefront.cod.partial_pay_now": "Pay now",
-  "storefront.cod.partial_title": "Part payment"
+  "storefront.cod.partial_title": "Part payment",
+  "error.cod.partial_required": "This order needs a part payment online. Please choose Part payment."
 }

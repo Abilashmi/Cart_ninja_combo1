@@ -36,6 +36,9 @@ test('settings: defaults off, values clamped, part of the COD settings', () => {
   assert.equal(cod.partialCod.enabled, true);
   assert.equal(cod.partialCod.amount, 99);
   assert.equal(sanitizeCodSettings({}).partialCod.enabled, false);
+  assert.equal(sanitizeCodSettings({}).partialCod.only, false, '"only part payment" is off by default');
+  assert.equal(sanitizePartialCod({ only: 1 }).only, true);
+  assert.equal(sanitizePartialCod({ amount: 60 }, { only: true }).only, true, 'kept when not sent');
 });
 
 function fakeAdmin({ prices = { 41: '1599.00' }, failOn = null } = {}) {

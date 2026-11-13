@@ -623,6 +623,10 @@
     "status": "ai",
     "srcHash": "fd52b035"
   },
+  "error.cod.partial_required": {
+    "status": "ai",
+    "srcHash": "d785ae49"
+  },
   "error.cod.partial_unavailable": {
     "status": "ai",
     "srcHash": "5cf5463e"

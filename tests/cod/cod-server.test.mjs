@@ -392,6 +392,16 @@ test('order: a repeated tap with the same key returns the first order, never a s
   assert.equal(admin.calls.filter((c) => c.op === 'CodComplete').length, 1);
 });
 
+test('order: "only part payment" refuses a full COD order where Partial COD is offered', async () => {
+  const admin = fakeAdmin();
+  const only = settingsOn({ partialCod: { enabled: true, amount: 50, only: true } });
+  await assert.rejects(place(admin, { settings: only, idemKey: 'idem-key-p001' }), (e) => e.code === 'partial_required');
+  assert.equal(admin.calls.filter((c) => c.op === 'CodComplete').length, 0, 'no order made');
+  // Outside the Partial COD range, or with "only" off: COD as usual.
+  await place(admin, { settings: settingsOn({ partialCod: { enabled: true, amount: 50, only: true, minOrder: 100000 } }), idemKey: 'idem-key-p002' });
+  await place(admin, { settings: settingsOn({ partialCod: { enabled: true, amount: 50 } }), idemKey: 'idem-key-p003' });
+});
+
 test('order: daily per-phone limit', async () => {
   const admin = fakeAdmin();
   const settings = settingsOn({ dailyLimitPerPhone: 1 });

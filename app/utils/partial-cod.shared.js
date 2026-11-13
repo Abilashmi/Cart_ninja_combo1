@@ -27,6 +27,10 @@ export const DEFAULT_PARTIAL_COD = Object.freeze({
   // Offered only for order totals in this range (0 = no limit).
   minOrder: 0,
   maxOrder: 0,
+  // Only part payment: where Partial COD is offered, full Cash on Delivery
+  // isn't (the popup shows only Part payment, the server refuses a full COD
+  // order). Orders outside the range above keep normal COD.
+  only: false,
 });
 
 function num(value, fallback, min, max) {
@@ -51,6 +55,7 @@ export function sanitizePartialCod(patch, base = DEFAULT_PARTIAL_COD) {
     percent: num(has('percent') ? p.percent : b.percent, DEFAULT_PARTIAL_COD.percent, ...PARTIAL_COD_LIMITS.percent),
     minOrder: money(has('minOrder') ? p.minOrder : b.minOrder, 0),
     maxOrder: money(has('maxOrder') ? p.maxOrder : b.maxOrder, 0),
+    only: has('only') ? Boolean(p.only) : Boolean(b.only),
   };
   if (out.maxOrder > 0 && out.maxOrder < out.minOrder) out.maxOrder = out.minOrder;
   return out;

@@ -231,6 +231,8 @@ function cods_partial_cod($value) {
         'percent' => $percent,
         'minOrder' => cods_num($p['minOrder'] ?? 0),
         'maxOrder' => cods_num($p['maxOrder'] ?? 0),
+        // Only part payment: no full Cash on Delivery where Partial COD is offered.
+        'only' => !empty($p['only']),
     ];
 }
 

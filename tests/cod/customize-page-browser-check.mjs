@@ -566,6 +566,8 @@ if (scenario === 'live') {
   await page.waitForTimeout(100);
   check('Partial COD: percentage rounds the advance up (₹160 on ₹1,599)', await page.getByText('Example: on a ₹1,599 order, the shopper pays ₹160 now and ₹1,439 on delivery.').count() === 1);
   await page.getByText('A fixed amount', { exact: true }).click();
+  check('Partial COD: "Only offer part payment" off by default', !(await page.getByLabel('Only offer part payment').isChecked()));
+  await page.getByLabel('Only offer part payment').check();
   await page.getByLabel('Offer from order value').fill('500');
   await page.waitForTimeout(100);
   check('Partial COD: badge On once switched on', await badge('Partial COD') === 'On');
@@ -644,7 +646,7 @@ if (scenario === 'live') {
   const submitted = await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'));
   const saved = submitted.settings || {};
   check('Save: Partial COD settings are sent',
-    saved.partialCod?.enabled === true && saved.partialCod?.mode === 'fixed' && saved.partialCod?.amount === 75 && saved.partialCod?.percent === 10 && saved.partialCod?.minOrder === 500,
+    saved.partialCod?.enabled === true && saved.partialCod?.mode === 'fixed' && saved.partialCod?.amount === 75 && saved.partialCod?.percent === 10 && saved.partialCod?.minOrder === 500 && saved.partialCod?.only === true,
     JSON.stringify(saved.partialCod));
   check('Save: the MSG91 keys go as write-only secrets, not in the settings',
     submitted.secrets?.msg91AuthKey === 'authKEY12345' && submitted.secrets?.msg91TemplateId === 'tmpl6789' && !JSON.stringify(saved).includes('authKEY'), JSON.stringify(submitted.secrets));

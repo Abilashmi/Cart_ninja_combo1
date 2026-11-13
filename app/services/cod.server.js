@@ -22,6 +22,7 @@ import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
   maskPhone, splitName, provinceCodeFor, moneyFormatter, codRuleCollections, codShownOnProduct, unlistedCodAllowed,
 } from '../utils/cod.shared.js';
+import { partialCodSplit } from '../utils/partial-cod.shared.js';
 import { computeBox, decimalsFor, formatWeight, tierLabel, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 import { COMBO_WEIGHT_CONFIG_KEY, COMBO_WEIGHT_DISCOUNT_TITLE } from './combo-weight-shopify.server';
 import { PACKS_CONFIG_KEY, PACKS_DISCOUNT_TITLE } from './packs-shopify.server';
@@ -1279,6 +1280,11 @@ export async function placeCodOrder(admin, {
     shipping, destination: { pincode: address.pincode, city: address.city, state: address.state }, delivery, strictDelivery: true,
   });
   const option = ship?.selected || null;
+  // Partial COD set to "only part payment": where it's offered, the whole amount
+  // can't be paid on delivery (the popup shows only Part payment).
+  if (settings.partialCod?.only && partialCodSplit(settings.partialCod, quote.total)) {
+    throw new CodError('partial_required', 'This order needs a part payment online. Please choose Part payment.', { status: 422 });
+  }
 
   try {
     await php('cod_orders.php', {

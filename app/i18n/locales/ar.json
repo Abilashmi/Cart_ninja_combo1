@@ -474,5 +474,6 @@
   "storefront.cod.partial_desc": "ادفع {advance} الآن عبر الإنترنت و{balance} عند الاستلام",
   "storefront.cod.partial_note": "ستدفع {advance} في صفحة الدفع الآمنة للمتجر. جهّز {balance} عند الاستلام.",
   "storefront.cod.partial_pay_now": "ادفع الآن",
-  "storefront.cod.partial_title": "دفع جزئي"
+  "storefront.cod.partial_title": "دفع جزئي",
+  "error.cod.partial_required": "يتطلب هذا الطلب دفع جزء عبر الإنترنت. اختر الدفع الجزئي."
 }

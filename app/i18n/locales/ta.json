@@ -474,5 +474,6 @@
   "storefront.cod.partial_desc": "இப்போது {advance} ஆன்லைனில், {balance} டெலிவரியின் போது",
   "storefront.cod.partial_note": "கடையின் பாதுகாப்பான செக்அவுட்டில் {advance} செலுத்துவீர்கள். டெலிவரியின் போது {balance} தயாராக வைத்திருங்கள்.",
   "storefront.cod.partial_pay_now": "இப்போது செலுத்த",
-  "storefront.cod.partial_title": "பகுதி கட்டணம்"
+  "storefront.cod.partial_title": "பகுதி கட்டணம்",
+  "error.cod.partial_required": "இந்த ஆர்டருக்கு ஒரு பகுதியை ஆன்லைனில் செலுத்த வேண்டும். பகுதி கட்டணத்தைத் தேர்ந்தெடுக்கவும்."
 }

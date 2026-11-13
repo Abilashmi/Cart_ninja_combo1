@@ -139,6 +139,7 @@ export function toForm(s) {
     partialPercent: numText(s.partialCod?.percent ?? 10),
     partialMinOrder: numText(s.partialCod?.minOrder ?? 0),
     partialMaxOrder: numText(s.partialCod?.maxOrder ?? 0),
+    partialOnly: Boolean(s.partialCod?.only),
     requireOtp: s.requireOtp,
     dailyLimitPerPhone: String(s.dailyLimitPerPhone),
     blockedPincodes: s.blockedPincodes.join(', '),
@@ -285,6 +286,7 @@ export function toSettings(f) {
       percent: Number(f.partialPercent) || 0,
       minOrder: Number(f.partialMinOrder) || 0,
       maxOrder: Number(f.partialMaxOrder) || 0,
+      only: Boolean(f.partialOnly),
     },
   };
 }
