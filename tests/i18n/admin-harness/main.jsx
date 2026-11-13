@@ -22,6 +22,13 @@ const pageName = params.get('page') || 'account';
 const messages = pickAdminMessages({ en, hi, ta, es, ar }, lang);
 window.__posts = [];
 
+// The Home loader's period, as app._index.jsx resolves it (fixed "today").
+const RANGES = { today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days', last30: 'Last 30 days', last90: 'Last 90 days', thisMonth: 'This month', lastMonth: 'Last month' };
+const rangeFor = (preset) => {
+  const id = RANGES[preset] ? preset : 'last30';
+  return { preset: id, label: RANGES[id], from: '2026-10-15', to: '2026-11-13', today: '2026-11-13' };
+};
+
 const router = createMemoryRouter([
   {
     path: '/app/additional',
@@ -38,7 +45,7 @@ const router = createMemoryRouter([
     },
   },
   ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),
-  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: { preset: new URL(request.url).searchParams.get('range') || 'last30', label: 'Last 30 days', from: '2026-10-15', to: '2026-11-13', today: '2026-11-13' } }) },
+  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: rangeFor(new URL(request.url).searchParams.get('range')) }) },
 ], { initialEntries: [pageName === 'home' ? '/app' : '/app/additional'] });
 
 createRoot(document.getElementById('root')).render(

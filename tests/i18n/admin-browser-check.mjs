@@ -61,7 +61,7 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
 
   const home = await open('home', lang);
   const homeText = await home.innerText('body');
-  const hWant = ['admin.home.welcome_modules', 'admin.home.explore_sub', 'admin.home.help', 'admin.home.kpi_orders', 'admin.home.kpi_revenue_generated', 'admin.home.mod_cart_title', 'admin.home.mod_combo_title', 'admin.home.mod_cod_title', 'admin.home.mod_packs_title', 'admin.home.mod_fbt_title', 'admin.home.mod_coupon_title', 'admin.home.feedback'].map((k) => t[k]);
+  const hWant = ['admin.home.kpi_orders', 'admin.home.kpi_revenue_generated', 'admin.home.mod_cart_title', 'admin.home.mod_combo_title', 'admin.home.mod_cod_title', 'admin.home.mod_packs_title', 'admin.home.mod_fbt_title', 'admin.home.mod_coupon_title', 'admin.home.feedback'].map((k) => t[k]);
   const hMissing = hWant.filter((w) => !homeText.includes(w));
   check(`${lang}: Home in ${lang}`, hMissing.length === 0, hMissing.length ? `missing ${JSON.stringify(hMissing)}` : '');
   await home.screenshot({ path: path.join(shotDir, `${lang}-home.png`), fullPage: true });
@@ -77,18 +77,28 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
       check(`en: switch ${i + 1} opens ${routes[i]}`, (await page.locator('[data-testid="module-page"]').innerText()) === routes[i]);
       await page.close();
     }
+    // Date range picker (toolbar): Last 30 days by default, quick periods, a pick reloads the stats.
     const rangePage = await open('home', lang);
-    const select = rangePage.getByLabel(t['admin.home.range_label']);
-    check('en: period selector defaults to Last 30 days and lists 4 periods', (await select.inputValue()) === '30d' && (await select.locator('option').count()) === 4);
-    await select.selectOption('7d');
-    await rangePage.waitForTimeout(300);
-    check('en: picking Last 7 days changes the period', (await select.inputValue()) === '7d');
+    const rangeButton = rangePage.getByRole('button', { name: /Last 30 days/ }).first();
+    check('en: period picker defaults to Last 30 days', (await rangeButton.count()) === 1);
+    await rangeButton.click();
+    const presets = rangePage.locator('.drp-presets');
+    await presets.waitFor();
+    const presetText = await presets.innerText();
+    check('en: period picker lists the quick periods', ['Today', 'Yesterday', 'Last 7 days', 'Last 90 days', 'This month', 'Last month'].every((w) => presetText.includes(w)), presetText.replace(/\s+/g, ' '));
+    await presets.getByText('Last 7 days', { exact: true }).click();
+    await rangePage.waitForTimeout(400);
+    check('en: picking Last 7 days changes the period', (await rangePage.getByRole('button', { name: /Last 7 days/ }).count()) >= 1);
     await rangePage.close();
+    // "How to set up": a popup with the steps, "Watch video tutorials" opens them on the Account page.
     const helpPage = await open('home', lang);
-    await helpPage.getByRole('button', { name: t['admin.home.help_label'] }).click();
+    await helpPage.getByText('How to set up', { exact: true }).first().click();
+    await helpPage.getByText('How to set up BRIX').waitFor();
+    check('en: How to set up opens the steps popup', (await helpPage.innerText('body')).includes('Turn on the app embed.'));
+    await helpPage.getByRole('button', { name: 'Watch video tutorials' }).click();
     await helpPage.waitForTimeout(600);
     const helpText = await helpPage.innerText('body');
-    check('en: Help opens the Account page at the video tutorials', helpText.includes(t['admin.account.store_info']) && helpText.includes(t['admin.home.videos']));
+    check('en: Watch video tutorials opens the Account page at the tutorials', helpText.includes(t['admin.account.store_info']) && helpText.includes(t['admin.home.videos']));
     await helpPage.close();
   }
   await home.close();

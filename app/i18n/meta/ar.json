@@ -732,8 +732,8 @@
     "srcHash": "f23f7ca1"
   },
   "error.cod.checkout_only": {
-    "status": "needs-review",
-    "srcHash": "44e84ab5"
+    "status": "ai",
+    "srcHash": "be934a6f"
   },
   "error.cod.combo_price_mismatch": {
     "status": "ai",
@@ -1116,8 +1116,8 @@
     "srcHash": "56206962"
   },
   "storefront.cod.not_with_packs": {
-    "status": "needs-review",
-    "srcHash": "e9137bf3"
+    "status": "ai",
+    "srcHash": "5f59cc60"
   },
   "storefront.cod.opening_checkout": {
     "status": "ai",
