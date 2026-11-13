@@ -323,6 +323,36 @@
 
   function dedupe(products){var map=new Map();products.forEach(function(p){map.set(p.id,p);});return Array.from(map.values());}
 
+  /* AI mode, a product the AI made no suggestions for (no orders, product
+     type or shared collection to go on, past the products one run covers,
+     added since the last run) or whose suggestions are all sold out:
+     Shopify's own recommendations for it instead (Search & Discovery's
+     complementary picks first, then related), in the rule products' shape.
+     The current product is never one; stock and prices are checked after,
+     like any suggestion (filterAvailableFbtProducts). */
+  async function shopifyRecommendations(productNumId,count){
+    if(!productNumId)return[];
+    var want=Math.max(1,Math.min(6,Number(count)||3));
+    var root=(window.Shopify&&window.Shopify.routes&&window.Shopify.routes.root)||'/';
+    var out=[];var seen={};seen[String(productNumId)]=true;
+    var intents=['complementary','related'];
+    for(var i=0;i<intents.length&&out.length<want+3;i++){
+      var json=null;
+      try{json=await cachedJson(root+'recommendations/products.json?product_id='+encodeURIComponent(productNumId)+'&limit='+(want+3)+'&intent='+intents[i],300000);}catch(e){json=null;}
+      var list=Array.isArray(json&&json.products)?json.products:[];
+      for(var j=0;j<list.length;j++){
+        var p=list[j];var id=String(p&&p.id||'');
+        if(!id||seen[id]||p.available===false)continue;
+        seen[id]=true;
+        var img=p.featured_image||(Array.isArray(p.images)?p.images[0]:'')||'';
+        if(img&&typeof img==='object')img=img.src||'';
+        img=String(img||'');if(img.indexOf('//')===0)img='https:'+img;
+        out.push({id:'gid://shopify/Product/'+id,title:String(p.title||''),handle:String(p.handle||''),image:img,price:toPriceNumber(p.price)/100,shopifyRecommended:true});
+      }
+    }
+    return out.slice(0,want+3);
+  }
+
   function openCartDrawerFast(detail){
     var payload=detail||{};
     try{if(window.__CC_DRAWER_API&&typeof window.__CC_DRAWER_API.openNow==='function'){window.__CC_DRAWER_API.openNow(payload);return;}}catch(e){}
@@ -694,6 +724,10 @@
             var match=triggerCandidates.some(function(p){return extractNumericId(p.id)===currentNumId;});
             if(match){matchedProducts=matchedProducts.concat(rule.fbtProducts);matchedSpares=matchedSpares.concat(rule.backupProducts);if(rule.offer&&(!offerRule||offerRule.displayScope==='all'))offerRule=rule;}
           });
+          var aiMode=String(data.selectedMode||'').toLowerCase()==='ai';
+          var aiCount=Number(data.aiProductCount)||3;
+          var usedRecommendations=false;
+          if(!matchedProducts.length&&aiMode){matchedProducts=await shopifyRecommendations(currentNumId,aiCount);usedRecommendations=matchedProducts.length>0;}
           if(!matchedProducts.length)return;
           matchedProducts=dedupe(matchedProducts);
           var placed=false,drawToken=0;
@@ -710,6 +744,12 @@
           renderSkeleton(el,config,matchedProducts.length,config.interactionType==='checkboxQty'||config.layout==='vertical');
           placeOnce();
           var liveProducts=await filterAvailableFbtProducts(matchedProducts);
+          /* AI picks all sold out: Shopify's recommendations instead (AI mode only). */
+          if(!liveProducts.length&&aiMode&&!usedRecommendations){
+            usedRecommendations=true;
+            liveProducts=await filterAvailableFbtProducts(await shopifyRecommendations(currentNumId,aiCount));
+          }
+          if(usedRecommendations)liveProducts=liveProducts.slice(0,Math.max(1,Math.min(6,aiCount)));
           if(!liveProducts.length){el.style.display='none';el.innerHTML='';return;}
           config.currentProductId=currentNumId;
           /* The viewed product's price (cents, from Liquid): it's part of the offer's set. */

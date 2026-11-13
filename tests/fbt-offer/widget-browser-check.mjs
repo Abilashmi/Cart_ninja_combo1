@@ -42,13 +42,14 @@ const browser = await chromium.launch();
 
 // products: a whole /products.json catalog instead of catalog(); pageProduct:
 // the viewed product's /products/joggers.js (its options and variants).
-async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '', productJs = {}, extraHtml = '' }) {
+async function open({ condition, temp1 = {}, cart = [], capAvailable = true, width = 1100, whole = false, socksVariants = null, products = null, pageProduct = null, catalogDelay = 0, themeCss = '', productJs = {}, extraHtml = '', dataExtra = {}, recs = null, noWait = false }) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   // Account → Price display → "Hide decimals in prices" (printed by the block).
   if (whole) await page.addInitScript(() => { window.__brixWholePrices = true; });
-  const log = { added: [], hits: { config: 0, catalog: 0 } };
+  const log = { added: [], hits: { config: 0, catalog: 0, recs: [] } };
   page.on('pageerror', (e) => check('no page errors', false, e.message));
   const config = { status: 'success', data: { selectedTemp: 'fbt1', isEnabled: true, temp1: { layout: 'carousel', interactionType: 'classic', showPrices: true, showAddAllButton: true, widgetPlacement: 'below_cart', ...temp1 }, condition } };
+  Object.assign(config.data, dataExtra);
   await page.route('https://int.thebrix.io/**', (r) => (log.hits.config += 1) && r.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(config) }));
   await page.route('http://shop.test/**', async (r) => {
     const url = new URL(r.request().url());
@@ -56,6 +57,7 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
     if (url.pathname === '/products.json') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(products ? { products } : catalog(capAvailable, socksVariants)) });
     if (productJs[url.pathname]) return r.fulfill({ contentType: 'application/json', body: JSON.stringify(productJs[url.pathname]) });
     if (url.pathname === '/products/joggers.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify(pageProduct || { options: [], variants: [] }) });
+    if (url.pathname === '/recommendations/products.json') { log.hits.recs.push(url.searchParams.get('intent')); return r.fulfill({ contentType: 'application/json', body: JSON.stringify(recs ? recs(url.searchParams.get('intent')) : { products: [] }) }); }
     if (url.pathname === '/cart.js') return r.fulfill({ contentType: 'application/json', body: JSON.stringify({ items: cart }) });
     if (url.pathname === '/cart/add.js') { log.added.push(r.request().postDataJSON()); return r.fulfill({ contentType: 'application/json', body: '{"items":[]}' }); }
     if (url.hostname === 'img.test' || url.pathname.endsWith('.svg')) return r.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="#16a34a"/></svg>' });
@@ -63,7 +65,7 @@ async function open({ condition, temp1 = {}, cart = [], capAvailable = true, wid
     return r.fulfill({ contentType: 'text/html', body: `<!doctype html><html><head><meta charset="utf-8"><style>${themeCss}</style></head><body style="margin:0;font-family:Arial"><form action="/cart/add"><input type="hidden" name="id" value="1005"><button name="add" type="submit">Add to cart</button></form>${extraHtml}${fbt}</body></html>` });
   });
   await page.goto('http://shop.test/products/joggers');
-  if (catalogDelay) return { page, log };
+  if (catalogDelay || noWait) return { page, log };
   await page.waitForSelector('ps-fbt-widget .ps-product-card, ps-fbt-widget .ps-product-row', { timeout: 10000 });
   return { page, log };
 }
@@ -103,6 +105,33 @@ const OFFER = { type: 'percentage', value: 10, text: 'Buy all {count} together a
   });
   check('re-created widget: cards on the next frames, never hidden', samples.slice(1).every((x) => x === 'block:2'), samples.join(' | '));
   check('re-created widget: nothing downloaded again', log.hits.config === hitsBefore.config && log.hits.catalog === hitsBefore.catalog, JSON.stringify({ before: hitsBefore, after: log.hits }));
+  await page.close();
+}
+
+/* R. AI mode: a product the AI made no suggestions for, or whose suggestions
+   are all sold out, gets Shopify's own recommendations (complementary first,
+   then related); never the viewed product; Manual mode stays as it was. */
+{
+  const recProduct = (id, title, handle, cents) => ({ id, title, handle, price: cents, available: true, featured_image: '//img.test/' + handle + '.svg' });
+  const recs = (intent) => ({ products: intent === 'complementary'
+    ? [recProduct(100, 'Joggers', 'joggers', 80000), recProduct(201, 'Socks', 'socks', 19900)]
+    : [recProduct(201, 'Socks', 'socks', 19900), recProduct(202, 'Cap', 'cap', 50000)] });
+  let { page, log } = await open({ condition: [], dataExtra: { selectedMode: 'ai', aiProductCount: 2 }, recs });
+  const titles = await page.$$eval('ps-fbt-widget .ps-product-card', (els) => els.map((e) => e.textContent));
+  check('AI mode, no suggestions for this product: Shopify\'s recommendations show', titles.length === 2 && titles.some((t) => t.includes('Socks')) && titles.some((t) => t.includes('Cap')), JSON.stringify(titles));
+  check('…complementary picks asked first, then related; never the viewed product', log.hits.recs.join(',') === 'complementary,related' && !titles.some((t) => t.includes('Joggers')), log.hits.recs.join(','));
+  check('…with live prices (₹199 from the catalogue)', titles.some((t) => t.includes('199')), JSON.stringify(titles));
+  await page.screenshot({ path: path.join(shotDir, 'ai-recommendations.png') });
+  await page.close();
+
+  ({ page, log } = await open({ condition: [{ id: 'sold', displayScope: 'per_product', triggerProducts: [{ id: 'gid://shopify/Product/100' }], fbtProducts: [CAP] }], capAvailable: false, dataExtra: { selectedMode: 'ai', aiProductCount: 3 }, recs: () => ({ products: [recProduct(201, 'Socks', 'socks', 19900)] }) }));
+  const soldTitles = await page.$$eval('ps-fbt-widget .ps-product-card', (els) => els.map((e) => e.textContent));
+  check('AI mode, the AI\'s pick is sold out: Shopify\'s recommendation instead', soldTitles.length === 1 && soldTitles[0].includes('Socks'), JSON.stringify(soldTitles));
+  await page.close();
+
+  ({ page, log } = await open({ condition: [], dataExtra: { selectedMode: 'manual' }, recs, noWait: true }));
+  await page.waitForTimeout(2500);
+  check('Manual mode with no rule for this product: still no widget, Shopify not asked', (await page.$$('ps-fbt-widget .ps-product-card')).length === 0 && log.hits.recs.length === 0);
   await page.close();
 }
 

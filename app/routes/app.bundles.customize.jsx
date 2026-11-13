@@ -3843,6 +3843,7 @@ function CustomizeEditor({ onDiscard }) {
             expandedSections={expandedSections}
             toggleSection={toggleSection}
             collections={collections}
+            pageProducts={allStepProducts}
             updateConfig={updateConfig}
             getStyleKey={getStyleKey}
             stepErrors={stepErrors}

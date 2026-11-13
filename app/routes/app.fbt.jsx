@@ -74,7 +74,7 @@ export const loader = async ({ request }) => {
   // (2 sequential Shopify REST calls) are all independent of each other, so
   // they run concurrently instead of one after another. Each keeps its own
   // try/catch so a failure in one doesn't affect the others' results.
-  const [allProducts, { fbtConfig, manualRules }, fbtEmbedEnabled] = await Promise.all([
+  const [allProducts, { fbtConfig, manualRules, aiRules }, fbtEmbedEnabled] = await Promise.all([
     /* fetch products from Shopify */
     (async () => {
       try {
@@ -127,6 +127,7 @@ export const loader = async ({ request }) => {
     (async () => {
       let fbtConfig = null;
       let manualRules = [];
+      let aiRules = [];
       try {
         const db = getDb();
         await ensureFbtRulesSourceColumn(db);
@@ -142,6 +143,21 @@ export const loader = async ({ request }) => {
         const [rules] = await db.execute(
           "SELECT * FROM fbt_rules WHERE shop_domain = ? AND source = 'manual' AND is_active = 1 ORDER BY sort_order ASC", [shop]
         );
+        // The AI Coverage Run's saved suggestions, so the AI pane and the
+        // preview can show what the storefront really gets (the page used to
+        // show only a count, gone after a reload). Trimmed to what's drawn.
+        try {
+          const [aiRows] = await db.execute(
+            "SELECT trigger_products, fbt_products FROM fbt_rules WHERE shop_domain = ? AND source = 'ai' AND is_active = 1 ORDER BY sort_order ASC LIMIT 300", [shop]
+          );
+          const slim = (p) => ({ id: p?.id, title: p?.title || '', image: p?.image || '', price: p?.price ?? '0' });
+          aiRules = aiRows.map((r) => ({
+            trigger: slim(parseJson(r.trigger_products, [])[0]),
+            picks: parseJson(r.fbt_products, []).map(slim),
+          })).filter((r) => r.trigger.id && r.picks.length);
+        } catch (e) {
+          console.error('[FBT loader] AI rules:', e.message);
+        }
         if (settings.length > 0) {
           const s = settings[0];
           // Heading / title / button-state colours live only in the active
@@ -221,7 +237,7 @@ export const loader = async ({ request }) => {
       } catch (e) {
         console.error('[FBT loader] DB read:', e.message);
       }
-      return { fbtConfig, manualRules };
+      return { fbtConfig, manualRules, aiRules };
     })(),
     // Detect if FBT app embed is enabled in the active theme.
     // Optimistic default: if we CANNOT read the theme (missing read_themes scope,
@@ -266,6 +282,7 @@ export const loader = async ({ request }) => {
     shop,
     allProducts,
     manualRules,
+    aiRules,
     fbtEmbedEnabled,
     // Surfaces the null-check the query above already does — `fbtConfig` is
     // only non-null once a real row was found in fbt_widget_settings/legacy
@@ -569,6 +586,58 @@ function buildPreviewProducts(rules, catalog) {
   });
 }
 
+/* The AI Coverage Run's saved suggestions: each product and what it shows. */
+const AI_LIST_PAGE = 15;
+function AiSuggestionsList({ rules }) {
+  const [query, setQuery] = useState('');
+  const [shown, setShown] = useState(AI_LIST_PAGE);
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? rules.filter((r) => r.trigger.title.toLowerCase().includes(q) || r.picks.some((p) => p.title.toLowerCase().includes(q)))
+    : rules;
+  const thumb = (p) => (
+    <span style={{ width: 28, height: 28, borderRadius: 6, background: '#f1f2f3', overflow: 'hidden', flexShrink: 0, display: 'inline-block' }}>
+      {p.image ? <img src={p.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}
+    </span>
+  );
+  return (
+    <BlockStack gap="200">
+      <InlineStack align="space-between" blockAlign="center">
+        <Text as="h4" variant="headingSm">Current suggestions</Text>
+        <Text as="span" variant="bodySm" tone="subdued">{rules.length} product{rules.length === 1 ? '' : 's'}</Text>
+      </InlineStack>
+      {rules.length > 5 && (
+        <TextField label="Search suggestions" labelHidden placeholder="Search by product" value={query}
+          onChange={(v) => { setQuery(v); setShown(AI_LIST_PAGE); }} autoComplete="off" clearButton onClearButtonClick={() => setQuery('')} />
+      )}
+      <div style={{ border: '1px solid #e3e5e7', borderRadius: 10, overflow: 'hidden' }}>
+        {matches.slice(0, shown).map((r, i) => (
+          <div key={`${r.trigger.id}-${i}`} style={{ padding: '10px 12px', borderTop: i ? '1px solid #f1f2f3' : 'none', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              {thumb(r.trigger)}
+              <Text as="span" variant="bodySm" fontWeight="semibold" truncate>{r.trigger.title}</Text>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingLeft: 36 }}>
+              {r.picks.map((p) => (
+                <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: 220, padding: '3px 8px 3px 3px', border: '1px solid #e3e5e7', borderRadius: 8, background: '#fafbfb' }}>
+                  {thumb(p)}
+                  <span style={{ fontSize: 12, color: '#4a4e50', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+        {!matches.length && (
+          <div style={{ padding: '12px' }}><Text as="p" variant="bodySm" tone="subdued">No product matches &ldquo;{query}&rdquo;.</Text></div>
+        )}
+      </div>
+      {matches.length > shown && (
+        <InlineStack><Button variant="plain" onClick={() => setShown((n) => n + AI_LIST_PAGE)}>Show more ({matches.length - shown})</Button></InlineStack>
+      )}
+    </BlockStack>
+  );
+}
+
 function apiKeyToTemplateId(apiKey) {
   return TEMPLATES.find(t => t.apiKey === apiKey)?.id ?? 'classic-grid';
 }
@@ -827,7 +896,7 @@ export default function FBTPage() {
 }
 
 function FBTEditor({ onDiscard }) {
-  const { shop, fbtConfig, allProducts: loadedProducts, manualRules: initialRules, fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
+  const { shop, fbtConfig, allProducts: loadedProducts, manualRules: initialRules, aiRules = [], fbtEmbedEnabled, hasSavedFbtConfig } = useLoaderData();
   // The store's first 50 products + products picked through the modal's search.
   const [foundProducts, setFoundProducts] = useState([]);
   const allProducts = useMemo(() => {
@@ -1151,7 +1220,11 @@ function FBTEditor({ onDiscard }) {
 
   const isSaving = fetcher.state !== 'idle' && !saveStalled;
   const aiCountValid = Number.isInteger(Number(fbtCount)) && Number(fbtCount) > 0;
-  const fbtPreviewProducts = buildPreviewProducts(manualRules, allProducts);
+  // AI mode previews the saved AI suggestions (what the storefront shows), else the manual rules.
+  const fbtPreviewProducts = buildPreviewProducts(
+    configMode === 'ai' && aiRules.length ? aiRules.map((r) => ({ fbtProducts: r.picks })) : manualRules,
+    allProducts,
+  );
   const draftTriggerProducts = draftRule?.triggerIds?.length ? findProductsByIds(allProducts, draftRule.triggerIds) : [];
   const draftFbtProducts     = draftRule?.fbtIds?.length     ? findProductsByIds(allProducts, draftRule.fbtIds)     : [];
   const draftReady = draftTriggerProducts.length > 0 && draftFbtProducts.length > 0;
@@ -1800,6 +1873,18 @@ function FBTEditor({ onDiscard }) {
                           </BlockStack>
                         </Banner>
                       )}
+                      {saveStalled && fetcher.state !== 'idle' && (
+                        <Banner tone="info">
+                          <Text as="p" variant="bodySm">Still making suggestions for your products. This list updates when it finishes.</Text>
+                        </Banner>
+                      )}
+                      {aiRules.length > 0 ? (
+                        <AiSuggestionsList rules={aiRules} />
+                      ) : aiConfigured && !aiRunResult && !isSaving ? (
+                        <Banner tone="warning">
+                          <Text as="p" variant="bodySm">No AI suggestions are saved yet, so the widget has nothing to show on product pages. Click Regenerate Suggestions. Suggestions come from order history, products sharing a collection or product type, or your instructions.</Text>
+                        </Banner>
+                      ) : null}
                     </BlockStack>
                   )}
 

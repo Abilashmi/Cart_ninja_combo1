@@ -500,3 +500,14 @@ test('each filter has its own style: only Type as chips', () => {
   assert.deepEqual(mixed.row.groups.map((g) => g.id), ['type', 'brand']);
   assert.deepEqual(mixed.row.menus.map((m) => m.id), ['sort']);
 });
+
+test('builder note: why Type / Brand / own tag filter is hidden on this page', async () => {
+  const { filterHiddenNote } = await import('../../app/utils/combo-filter-notes.shared.js');
+  assert.equal(filterHiddenNote('type', null), null, 'products not loaded yet');
+  assert.equal(filterHiddenNote('type', ['Saree', 'Kurta set']), null, 'two types: it shows');
+  assert.match(filterHiddenNote('type', []), /no product type/);
+  assert.match(filterHiddenNote('type', ['Saree']), /same product type \("Saree"\)/);
+  assert.match(filterHiddenNote('brand', ['Naanal']), /same vendor/);
+  assert.equal(filterHiddenNote('custom', [], ''), null, 'no tags typed yet');
+  assert.match(filterHiddenNote('custom', [], 'Silk, Cotton'), /none of these tags/);
+});

@@ -2,13 +2,14 @@
 // is a flat qs_* key on the combo config; a missing key shows the default
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
 // what the storefront and the preview fall back to.
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { BlockStack, Button, Checkbox, ChoiceList, Combobox, FormLayout, Icon, InlineStack, Listbox, Select, Tag, Text, TextField } from '@shopify/polaris';
 import { SearchIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
 import { createComboWeightCore, defaultWeightPricing, fixedMeasureFor } from '../../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../../utils/combo-quickshop.shared.js';
+import { filterHiddenNote } from '../../utils/combo-filter-notes.shared.js';
 
 const kit = createQuickShopKit(createComboWeightCore());
 const val = (config, key) => kit.opt(config, key);
@@ -459,11 +460,29 @@ function SizeField({ PxField, config, updateConfig, keyName, label, fallback, mi
   return <PxField label={label} value={value} min={min} max={max} onChange={(n) => updateConfig(keyName, n)} />;
 }
 
-function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
+function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField, pageProducts }) {
   const source = val(config, 'qs_chips_source');
+  // The different product types / vendors / typed tags among the page's products (null = not loaded).
+  const pageValues = useMemo(() => {
+    const pool = Object.values(pageProducts || {}).flat().filter(Boolean);
+    if (!pool.length) return null;
+    const uniq = (list) => [...new Set(list.map((v) => String(v || '').trim()).filter(Boolean))];
+    const typed = String(config.qs_filter_custom_tags || '').split(',').map((t) => t.trim()).filter(Boolean);
+    const hasTag = (p, t) => (p.tags || []).some((x) => String(x).toLowerCase() === t.toLowerCase());
+    return {
+      type: uniq(pool.map((p) => p.productType)),
+      brand: uniq(pool.map((p) => p.vendor)),
+      custom: typed.filter((t) => pool.some((p) => hasTag(p, t))),
+    };
+  }, [pageProducts, config.qs_filter_custom_tags]);
+  const hiddenNote = (key) => {
+    const kind = { qs_filter_type: 'type', qs_filter_brand: 'brand', qs_filter_custom: 'custom' }[key];
+    return kind && isOn(config, key) && pageValues ? filterHiddenNote(kind, pageValues[kind], config.qs_filter_custom_tags) : null;
+  };
   const toggleWithLabel = (key, labelKey, title, help, styleKey = null) => (
     <BlockStack gap="100">
       <Checkbox label={title} checked={isOn(config, key)} onChange={(v) => updateConfig(key, v)} helpText={help} />
+      {hiddenNote(key) && <Text as="p" variant="bodySm" tone="caution">{hiddenNote(key)}</Text>}
       {isOn(config, key) && (
         <TextField label="Label" labelHidden value={val(config, labelKey)} onChange={(v) => updateConfig(labelKey, v)} autoComplete="off" />
       )}
