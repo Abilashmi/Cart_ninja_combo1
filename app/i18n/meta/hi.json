@@ -163,9 +163,73 @@
     "status": "ai",
     "srcHash": "01f2289a"
   },
+  "admin.home.art_total": {
+    "status": "ai",
+    "srcHash": "ad066d9d"
+  },
   "admin.home.beginner": {
     "status": "ai",
     "srcHash": "d08ad5a7"
+  },
+  "admin.home.cart_art_away": {
+    "status": "ai",
+    "srcHash": "4d311530"
+  },
+  "admin.home.cart_art_checkout": {
+    "status": "ai",
+    "srcHash": "4a06ab59"
+  },
+  "admin.home.cart_art_unlocked": {
+    "status": "ai",
+    "srcHash": "26c4fc34"
+  },
+  "admin.home.cod_art_fee": {
+    "status": "ai",
+    "srcHash": "06894ef9"
+  },
+  "admin.home.cod_art_otp": {
+    "status": "ai",
+    "srcHash": "674fa1f1"
+  },
+  "admin.home.cod_art_rules": {
+    "status": "ai",
+    "srcHash": "6032d7c2"
+  },
+  "admin.home.combo_art_offer": {
+    "status": "ai",
+    "srcHash": "43919009"
+  },
+  "admin.home.combo_art_title": {
+    "status": "ai",
+    "srcHash": "dfcb0727"
+  },
+  "admin.home.combo_art_unlocked": {
+    "status": "ai",
+    "srcHash": "825a0dbc"
+  },
+  "admin.home.coupon_art_applied": {
+    "status": "ai",
+    "srcHash": "3c43c66a"
+  },
+  "admin.home.coupon_art_apply": {
+    "status": "ai",
+    "srcHash": "ca77bbdb"
+  },
+  "admin.home.coupon_art_code": {
+    "status": "ai",
+    "srcHash": "91f7bf18"
+  },
+  "admin.home.coupon_art_off": {
+    "status": "ai",
+    "srcHash": "b5a652ce"
+  },
+  "admin.home.coupon_art_saved": {
+    "status": "ai",
+    "srcHash": "da1d9abf"
+  },
+  "admin.home.coupon_art_title": {
+    "status": "ai",
+    "srcHash": "832e8b77"
   },
   "admin.home.embed": {
     "status": "ai",
@@ -202,6 +266,14 @@
   "admin.home.explore_sub": {
     "status": "ai",
     "srcHash": "78ffcc18"
+  },
+  "admin.home.fbt_art_add": {
+    "status": "ai",
+    "srcHash": "e7651b52"
+  },
+  "admin.home.fbt_art_title": {
+    "status": "ai",
+    "srcHash": "8f866ea7"
   },
   "admin.home.feedback": {
     "status": "ai",
@@ -334,6 +406,18 @@
   "admin.home.open_theme_editor": {
     "status": "ai",
     "srcHash": "e10a0435"
+  },
+  "admin.home.packs_art_add": {
+    "status": "ai",
+    "srcHash": "d5a50b39"
+  },
+  "admin.home.packs_art_buy": {
+    "status": "ai",
+    "srcHash": "e0196760"
+  },
+  "admin.home.packs_art_save": {
+    "status": "ai",
+    "srcHash": "b3314f8c"
   },
   "admin.home.plan_badge": {
     "status": "ai",

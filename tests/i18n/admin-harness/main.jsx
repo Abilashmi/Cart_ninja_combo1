@@ -38,7 +38,7 @@ const router = createMemoryRouter([
     },
   },
   ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),
-  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: new URL(request.url).searchParams.get('range') || '30d' }) },
+  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: { preset: new URL(request.url).searchParams.get('range') || 'last30', label: 'Last 30 days', from: '2026-10-15', to: '2026-11-13', today: '2026-11-13' } }) },
 ], { initialEntries: [pageName === 'home' ? '/app' : '/app/additional'] });
 
 createRoot(document.getElementById('root')).render(

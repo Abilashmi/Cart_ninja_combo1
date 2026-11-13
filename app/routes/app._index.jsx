@@ -17,6 +17,7 @@ import { formatAmount } from '../utils/currency.shared';
 import { useT } from '../i18n/admin';
 import { resolveCodRange } from '../utils/cod-dates.shared';
 import DateRangePicker from '../components/shared/DateRangePicker';
+import ModuleArt, { MODULE_ART_CSS } from '../components/home/ModuleArt';
 
 /* ─── Loader: keep real Shopify auth + today's analytics ─── */
 
@@ -159,41 +160,6 @@ const HOME_STYLES = `
 .brx-home-switch:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
 `;
 
-// Built-in pictures for the cards until a GIF / video is pasted into MODULE_MEDIA (shapes only, no text).
-function ModuleArt({ id, accent }) { // eslint-disable-line react/prop-types
-  const card = { fill: '#fff', stroke: 'rgba(15,23,42,.08)' };
-  const line = { fill: '#e5e7eb' };
-  const btn = { fill: accent };
-  const art = {
-    cart: (<>
-      <rect x="55" y="14" width="90" height="92" rx="9" {...card} /><rect x="65" y="24" width="34" height="6" rx="3" fill={accent} />
-      <rect x="65" y="38" width="22" height="22" rx="5" {...line} /><rect x="93" y="41" width="40" height="5" rx="2.5" {...line} /><rect x="93" y="51" width="26" height="5" rx="2.5" {...line} />
-      <rect x="65" y="66" width="22" height="22" rx="5" {...line} /><rect x="93" y="69" width="40" height="5" rx="2.5" {...line} /><rect x="93" y="79" width="26" height="5" rx="2.5" {...line} />
-      <rect x="65" y="93" width="70" height="9" rx="4.5" fill="#111" /></>),
-    combo: (<>
-      <rect x="12" y="38" width="48" height="48" rx="9" {...card} /><rect x="24" y="52" width="24" height="22" rx="4" {...btn} opacity=".85" />
-      <rect x="76" y="38" width="48" height="48" rx="9" {...card} /><rect x="86" y="58" width="28" height="9" rx="4.5" fill="#111" />
-      <rect x="140" y="38" width="48" height="48" rx="9" {...card} /><circle cx="164" cy="62" r="11" {...btn} opacity=".85" />
-      <path d="M68 62h4M70 60v4M132 62h4M134 60v4" stroke="#111" strokeWidth="2" strokeLinecap="round" />
-      <rect x="72" y="14" width="56" height="14" rx="7" fill="#111" /></>),
-    cod: (<>
-      <path d="M70 44l30-16 30 16v38l-30 16-30-16z" fill="#fff" stroke="rgba(15,23,42,.1)" /><path d="M70 44l30 16 30-16M100 60v38" stroke={accent} strokeWidth="2" fill="none" />
-      <circle cx="140" cy="38" r="15" fill={accent} /><text x="140" y="44" textAnchor="middle" fontSize="17" fontWeight="700" fill="#fff">₹</text></>),
-    packs: (<>
-      <rect x="30" y="52" width="50" height="46" rx="8" {...card} /><rect x="75" y="40" width="50" height="58" rx="8" {...card} /><rect x="120" y="52" width="50" height="46" rx="8" {...card} />
-      <rect x="86" y="52" width="28" height="6" rx="3" {...btn} /><rect x="86" y="64" width="28" height="5" rx="2.5" {...line} /><rect x="86" y="74" width="20" height="5" rx="2.5" {...line} />
-      <rect x="72" y="14" width="56" height="16" rx="8" fill="#111" /></>),
-    fbt: (<>
-      <rect x="22" y="36" width="52" height="56" rx="9" {...card} /><rect x="32" y="46" width="32" height="26" rx="5" {...btn} opacity=".85" /><rect x="32" y="78" width="32" height="5" rx="2.5" {...line} />
-      <rect x="126" y="36" width="52" height="56" rx="9" {...card} /><rect x="136" y="46" width="32" height="26" rx="5" fill="#111" opacity=".85" /><rect x="136" y="78" width="32" height="5" rx="2.5" {...line} />
-      <circle cx="100" cy="64" r="13" fill="#fff" stroke="rgba(15,23,42,.1)" /><path d="M94 64h12M100 58v12" stroke="#111" strokeWidth="2" strokeLinecap="round" /></>),
-    coupon: (<>
-      <path d="M36 32h128a6 6 0 0 1 6 6v14a8 8 0 0 0 0 16v14a6 6 0 0 1-6 6H36a6 6 0 0 1-6-6V68a8 8 0 0 0 0-16V38a6 6 0 0 1 6-6z" fill="#fff" stroke="rgba(15,23,42,.1)" />
-      <text x="100" y="62" textAnchor="middle" fontSize="22" fontWeight="800" fill={accent}>10%</text><rect x="72" y="72" width="56" height="8" rx="4" {...line} /><rect x="78" y="88" width="44" height="10" rx="5" fill="#111" /></>),
-  };
-  return <svg viewBox="0 0 200 120" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-hidden="true">{art[id]}</svg>;
-}
-
 function ModuleMedia({ id, tint, accent }) { // eslint-disable-line react/prop-types
   const url = MODULE_MEDIA[id];
   const isVideo = /\.(mp4|webm|mov)(\?|#|$)/i.test(url || '');
@@ -260,7 +226,7 @@ export default function DashboardPage() {
 
   return (
     <Page fullWidth>
-      <style>{HOME_STYLES}</style>
+      <style>{HOME_STYLES + MODULE_ART_CSS}</style>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         {/* Period picker and a blinking "How to set up", which opens the video tutorials on the Account page */}
