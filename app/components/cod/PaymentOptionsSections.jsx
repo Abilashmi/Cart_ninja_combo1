@@ -131,7 +131,7 @@ export function PaymentOptionsSection({ form, set, setPP, errors, money }) {
               onChange={set('productText')}
               error={errors.productText}
               maxLength={60}
-              helpText='The same text as the product page COD button. Prices: {price}, {cod_fee}, {cod_price} (e.g. "Buy it for {cod_price} COD").'
+              helpText='The same text as the product page COD button. Prices: {price}, {cod_fee}, {cod_price}, {partial_cod_amount} (e.g. "Buy it for {cod_price} COD").'
               autoComplete="off"
             />
             <Checkbox label="Show payment icon" checked={pp.cod.showIcon} onChange={setPP(['cod', 'showIcon'])} />

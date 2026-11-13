@@ -8,6 +8,7 @@ import {
 } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
 import { getAnalyticsData } from "../services/analytics.server";
+import { loadModuleStatus } from "../services/home-status.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
 import { getAgencyStoreStatus } from "../utils/agency-dashboard.server";
 import { useCurrency } from "../components/CurrencyContext";
@@ -89,19 +90,21 @@ export const loader = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shop }),
     }).catch(console.error);
-  } catch {}
+  } catch { /* best effort: Home loads without it */ }
 
   let initialAnalytics = { ...DEFAULT_ANALYTICS };
-  try {
-    // Calls the analytics loader logic directly in-process instead of
-    // fetching this app's own /api/analytics route over HTTP — a self-fetch
-    // would round-trip out through the public tunnel URL and back on every
-    // home-page load.
-    const data = await getAnalyticsData(shop, range.from, range.to);
-    if (data?.success) initialAnalytics = normalizeAnalytics(data.data);
-  } catch {}
+  // Calls the analytics loader logic directly in-process instead of
+  // fetching this app's own /api/analytics route over HTTP — a self-fetch
+  // would round-trip out through the public tunnel URL and back on every
+  // home-page load. Which features are on (the card switches) loads at the
+  // same time; it never throws.
+  const [data, moduleStatus] = await Promise.all([
+    getAnalyticsData(shop, range.from, range.to).catch(() => null),
+    loadModuleStatus(shop),
+  ]);
+  if (data?.success) initialAnalytics = normalizeAnalytics(data.data);
 
-  return { shop, initialAnalytics, range };
+  return { shop, initialAnalytics, range, moduleStatus };
 };
 
 /* ─── The six modules on Home ─── */
@@ -118,7 +121,7 @@ const MODULE_MEDIA = {
   coupon: '',
 };
 
-// Switching a module on opens its page (every switch starts off).
+// Each card's switch shows whether that feature is on (loadModuleStatus); a tap opens its page.
 const MODULES = [
   { id: 'cart',   title: 'admin.home.mod_cart_title',   desc: 'admin.home.mod_cart_desc',   to: '/app/cartdrawer',    icon: CartIcon,         tint: '#e0f2fe', accent: '#0284c7' },
   { id: 'combo',  title: 'admin.home.mod_combo_title',  desc: 'admin.home.mod_combo_desc',  to: '/app/bundles',       icon: CollectionIcon,   tint: '#dcfce7', accent: '#16a34a' },
@@ -173,7 +176,7 @@ function ModuleMedia({ id, tint, accent }) { // eslint-disable-line react/prop-t
 }
 
 export default function DashboardPage() {
-  const { shop, initialAnalytics, range } = useLoaderData();
+  const { shop, initialAnalytics, range, moduleStatus = {} } = useLoaderData();
   const [searchParams, setSearchParams] = useSearchParams();
   // Real app embed status from App Bridge (it used to always say "active").
   const embedStatus = useAppEmbedStatus();
@@ -182,7 +185,8 @@ export default function DashboardPage() {
   const t = useT();
   const analytics = normalizeAnalytics(initialAnalytics);
 
-  // Every module switch starts off; turning one on opens that module's page.
+  // A switch shows the feature's real on/off; tapping one opens that feature's page
+  // (an off switch flips on as it goes).
   const [enabling, setEnabling] = useState(null);
   const [setupOpen, setSetupOpen] = useState(false);
   const enableModule = (module) => {
@@ -277,19 +281,19 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Module cards: each switch starts off and opens its module when turned on */}
+        {/* Module cards: each switch shows whether the feature is on and opens its page */}
         <div className="brx-home-grid">
           {MODULES.map((module) => {
             const name = t(module.title);
             return (
-              <div key={module.id} className="brx-home-card">
+              <div key={module.id} className="brx-home-card brx-art-host">
                 <ModuleMedia id={module.id} tint={module.tint} accent={module.accent} />
                 <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                   <div style={{ minWidth: 0 }}>
                     <Text as="h2" variant="headingSm" fontWeight="semibold">{name}</Text>
                     <div style={{ marginTop: 2 }}><Text as="p" variant="bodySm" tone="subdued">{t(module.desc)}</Text></div>
                   </div>
-                  <button type="button" role="switch" className="brx-home-switch" aria-checked={enabling === module.id ? 'true' : 'false'} aria-label={t('admin.home.mod_toggle', { name })}
+                  <button type="button" role="switch" className="brx-home-switch" aria-checked={moduleStatus[module.id] === true || enabling === module.id ? 'true' : 'false'} aria-label={t('admin.home.mod_toggle', { name })}
                     onClick={() => enableModule(module)} />
                 </div>
               </div>

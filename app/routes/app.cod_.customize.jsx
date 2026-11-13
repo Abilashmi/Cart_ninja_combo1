@@ -203,8 +203,8 @@ function PicksField({ value, onChange, error, help }) {
 // Help under a COD button's text field: the price tags it can use.
 function priceTagHelp(text, priceIs) {
   return hasPriceTags(text)
-    ? `Prices fill in for each shopper. {price} = ${priceIs}, {cod_fee} = COD fee, {cod_price} = both.`
-    : 'Add a price with {price}, {cod_fee} or {cod_price}, e.g. "Buy it for {cod_price} COD".';
+    ? `Prices fill in for each shopper. {price} = ${priceIs}, {cod_fee} = COD fee, {cod_price} = both, {partial_cod_amount} = what Partial COD takes now.`
+    : 'Add a price with {price}, {cod_fee}, {cod_price} or {partial_cod_amount}, e.g. "Buy it for {cod_price} COD" or "Pay {partial_cod_amount} now".';
 }
 
 function RadiusCard({ option, active, accent, onPick }) {
@@ -762,7 +762,7 @@ export default function CodCustomizePage() {
                       maxLength={60}
                       placeholder="Buy it now"
                       autoComplete="off"
-                      helpText={'Shopify\'s Buy it now (still opens Shopify checkout). Empty = Shopify\'s text. Prices: {price} = product price × quantity, {cod_price}, {cod_fee}. For {prepaid_price}, turn on Payment options with a prepaid discount.'}
+                      helpText={'Shopify\'s Buy it now (still opens Shopify checkout). Empty = Shopify\'s text. Prices: {price} = product price × quantity, {cod_price}, {cod_fee}, {partial_cod_amount}. For {prepaid_price}, turn on Payment options with a prepaid discount.'}
                     />
                   )}
                   <TextField
@@ -982,6 +982,14 @@ export default function CodCustomizePage() {
                 </>
               )}
             </FormLayout>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">Show the amount on your COD buttons</Text>
+              <Text as="p" tone="subdued">
+                Put {'{partial_cod_amount}'} in a COD button&apos;s text (Cart drawer button, Product page button), e.g. &quot;Pay {'{partial_cod_amount}'} now, rest on delivery&quot;. It fills in what the shopper pays now for that cart or product, with your COD fee and flat shipping. Where part payment isn&apos;t offered, it shows the full amount.
+              </Text>
+            </BlockStack>
           </Card>
           <Card>
             <BlockStack gap="200">

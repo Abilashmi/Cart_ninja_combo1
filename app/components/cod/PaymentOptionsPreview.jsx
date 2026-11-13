@@ -199,7 +199,7 @@ export function PaymentOptionsScreen({ settings, money, phone, codHere = true })
     const look = codButtonLook(settings, 'product');
     cta = (
       <div className="cod-pv-btn" data-pv-cta="cod" style={{ ...codButtonColors(look), opacity: codReason ? 0.5 : 1, ...ctaStyle, ...codButtonType(look, SCALE) }}>
-        <span className="cod-pv-btn-l">{look.icon !== false && <Svg name="cash" size={14} />}{fillPriceTags(settings.buttons.productText, codPriceValues(pr.subtotal, codFee), tagMoney(money))}</span>
+        <span className="cod-pv-btn-l">{look.icon !== false && <Svg name="cash" size={14} />}{fillPriceTags(settings.buttons.productText, codPriceValues(pr.subtotal, codFee, settings), tagMoney(money))}</span>
       </div>
     );
   } else if (method === 'online') {

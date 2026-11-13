@@ -204,7 +204,7 @@
 
   // Price tags in the merchant's button text ("Buy it for {cod_price} COD"),
   // {{tag}} too. Mirrors app/utils/price-tags.shared.js fillPriceTags.
-  var PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
+  var PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving|partial_cod_amount)\s*\}?\}/g;
   function hasPriceTags(text) { return new RegExp(PRICE_TAG.source).test(String(text || '')); }
   function showsCodFee(text) { return /\{\{?\s*(cod_fee|cod_price)\s*\}?\}/.test(String(text || '')); }
   function priceTags(text, values, fmt) {
@@ -212,6 +212,28 @@
       var n = values ? values[key] : null;
       return n == null || !isFinite(Number(n)) ? '' : fmt(Number(n));
     }).replace(/\s+/g, ' ').trim();
+  }
+  // {partial_cod_amount}: what Partial COD takes now for items worth `price`
+  // with COD fee `fee`, plus the flat shipping; where part payment isn't
+  // offered, the whole amount to pay on delivery. Mirrors
+  // partial-cod.shared.js partialCodTagAmount.
+  function partialTagAmount(cfg, price, fee) {
+    var p = Number(price);
+    if (price == null || !isFinite(p)) return null;
+    var c = cfg || configValue || {};
+    var f = Number(fee) || 0;
+    var ship = Number(c.shippingFee) > 0 && !(Number(c.freeShippingAbove) > 0 && p >= Number(c.freeShippingAbove)) ? Number(c.shippingFee) : 0;
+    var total = Math.round((p + f + ship) * 100) / 100;
+    var split = partialSplit(c, { total: total, shipping: ship, codFee: f });
+    return split ? split.advance : total;
+  }
+  // Adds {partial_cod_amount} to a set of tag values that has {cod_price}.
+  function withPartialTag(values, cfg) {
+    if (values && values.cod_price != null && isFinite(Number(values.cod_price))) {
+      var fee = Number(values.cod_fee) || 0;
+      values.partial_cod_amount = partialTagAmount(cfg, Math.round((Number(values.cod_price) - fee) * 100) / 100, fee);
+    }
+    return values;
   }
   // The COD fee for an order of `price` (cod.shared.js codFeeOf, same
   // rounding): codFeePercent % of it from codFeePercentFrom on, else the
@@ -246,7 +268,7 @@
     if (!hasPriceTags(text)) return text;
     var fee = codFeeFor(cfg, price, ids);
     var values = price == null || !isFinite(Number(price)) ? { cod_fee: fee }
-      : { price: Number(price), cod_fee: fee, cod_price: Math.round((Number(price) + fee) * 100) / 100 };
+      : withPartialTag({ price: Number(price), cod_fee: fee, cod_price: Math.round((Number(price) + fee) * 100) / 100 }, cfg);
     return priceTags(text, values, shopperMoney());
   }
 
@@ -2315,7 +2337,7 @@
     var cfg = configValue || null;
     var codBase = Math.round((t + inCart) * 100) / 100;
     var fee = cfg ? codFeeFor(cfg, codBase, cartProductIds(cart)) : null;
-    return {
+    return withPartialTag({
       price: t,
       prepaid_price: Math.round((t - shown) * 100) / 100,
       saving: saving > 0 ? saving : null,
@@ -2323,7 +2345,7 @@
       cod_price: cfg ? Math.round((codBase + fee) * 100) / 100 : null,
       ready: configValue !== undefined,
       codText: Boolean(cfg && cfg.drawerCheckoutText && cfg.surfaces && cfg.surfaces.drawer !== false),
-    };
+    }, cfg);
   }
 
   // The BRIX prepaid discount (product page payment options) is a Shopify
@@ -2720,7 +2742,7 @@
     var price = state ? cartPrice(state) : null;
     var cod = state ? codPrice(state) : null;
     var fee = codFeeFor(cfg, cod, state && state.ids);
-    var values = price == null ? {} : { price: price, prepaid_price: price, saving: state.saving > 0 ? state.saving : null, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 };
+    var values = price == null ? {} : withPartialTag({ price: price, prepaid_price: price, saving: state.saving > 0 ? state.saving : null, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 }, cfg);
     return hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
   }
 
@@ -3162,7 +3184,7 @@
       var pr = Pay.pricing(price, 1, pre, 0, Boolean(pre.currency && pre.currency === active));
       if (pr.qualifies) online = pr.online;
     }
-    var values = price == null ? {} : { price: price, prepaid_price: online, saving: price - online > 0 ? Math.round((price - online) * 100) / 100 : null, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
+    var values = price == null ? {} : withPartialTag({ price: price, prepaid_price: online, saving: price - online > 0 ? Math.round((price - online) * 100) / 100 : null, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 }, cfg);
     var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
     targets.forEach(function (btn) { setButtonText(btn, next); });
   }
@@ -3327,7 +3349,7 @@
       var b = String(bxText(base, 'storefront.cod.buy_it_now', 'Buy it now')).trim();
       if (hasPriceTags(b)) {
         var values = pr && pr.subtotal != null
-          ? { price: pr.subtotal, prepaid_price: pr.online, saving: pr.savings > 0 ? pr.savings : null, cod_fee: pr.codFee, cod_price: pr.codTotal }
+          ? withPartialTag({ price: pr.subtotal, prepaid_price: pr.online, saving: pr.savings > 0 ? pr.savings : null, cod_fee: pr.codFee, cod_price: pr.codTotal })
           : {};
         return priceTags(b, values, st ? st.fmt : shopperMoney());
       }

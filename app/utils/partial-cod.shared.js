@@ -64,6 +64,25 @@ export function sanitizePartialCod(patch, base = DEFAULT_PARTIAL_COD) {
 }
 
 /**
+ * {partial_cod_amount} in a COD button text: what the shopper pays now with
+ * Partial COD for an order of `price` (items) with `codFee`, plus the flat
+ * shipping (shippingFee / freeShippingAbove; dynamic shipping isn't known
+ * before the address, so 0). When part payment isn't offered for it, the
+ * whole amount to pay on delivery. Mirrored by brix_cod.js partialTagAmount.
+ */
+export function partialCodTagAmount(settings, price, codFee) {
+  const p = Number(price);
+  if (price == null || !Number.isFinite(p)) return null;
+  const s = settings && typeof settings === 'object' ? settings : {};
+  const fee = Number(codFee) || 0;
+  const ship = s.shippingMode !== 'advanced' && Number(s.shippingFee) > 0
+    && !(Number(s.freeShippingAbove) > 0 && p >= Number(s.freeShippingAbove)) ? Number(s.shippingFee) : 0;
+  const total = Math.round((p + fee + ship) * 100) / 100;
+  const split = partialCodSplit(s.partialCod, total, Math.round((fee + ship) * 100) / 100);
+  return split ? split.advance : total;
+}
+
+/**
  * The advance and the balance for an order `total` (shop currency), or null
  * when Partial COD isn't on offer for it: switched off, outside the order
  * range, or an advance that would cover the whole order. The advance is in

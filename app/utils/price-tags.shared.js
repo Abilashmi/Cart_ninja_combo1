@@ -1,7 +1,9 @@
 /**
- * Price tags in the COD and Buy it now button texts — pure, no imports, so
- * cod.shared.js and product-payment.shared.js can both use it.
+ * Price tags in the COD and Buy it now button texts — pure, so cod.shared.js
+ * and product-payment.shared.js can both use it (partial-cod.shared.js has no
+ * imports of its own).
  */
+import { partialCodTagAmount } from './partial-cod.shared.js';
 
 // Price tags merchants can put in a COD or Buy it now button's text, filled in
 // for the shopper with the live price ({{tag}} works too):
@@ -10,9 +12,11 @@
 //   {cod_price}      price + COD fee
 //   {prepaid_price}  price after the prepaid discount
 //   {saving}         what the prepaid discount saves
+//   {partial_cod_amount}  what Partial COD takes now (partialCodTagAmount;
+//                    the whole amount when part payment isn't offered)
 // Mirrored by extensions/cart-drawer/assets/brix_cod.js priceTags().
-export const COD_PRICE_TAGS = ['price', 'cod_fee', 'cod_price', 'prepaid_price', 'saving'];
-const PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
+export const COD_PRICE_TAGS = ['price', 'cod_fee', 'cod_price', 'prepaid_price', 'saving', 'partial_cod_amount'];
+const PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving|partial_cod_amount)\s*\}?\}/g;
 
 export function hasPriceTags(template) {
   return new RegExp(PRICE_TAG.source).test(String(template || ''));
@@ -38,12 +42,17 @@ export function fillPriceTags(template, values, format) {
     .trim();
 }
 
-/** The tag values for a COD button: `price` (number or null) and the fee actually charged. */
-export function codPriceValues(price, codFee) {
+/**
+ * The tag values for a COD button: `price` (number or null) and the fee
+ * actually charged. With the COD `settings`, {partial_cod_amount} is the
+ * Partial COD advance; without them it is the COD price.
+ */
+export function codPriceValues(price, codFee, settings = null) {
   if (price == null || !Number.isFinite(Number(price))) return { cod_fee: codFee };
   const p = Number(price);
   const fee = Number(codFee) || 0;
-  return { price: p, cod_fee: fee, cod_price: Math.round((p + fee) * 100) / 100 };
+  const codPrice = Math.round((p + fee) * 100) / 100;
+  return { price: p, cod_fee: fee, cod_price: codPrice, partial_cod_amount: settings ? partialCodTagAmount(settings, p, fee) : codPrice };
 }
 
 /** The tag values for a Buy it now button, from productPaymentPricing(): every tag, {saving} only when there is one. */
@@ -55,6 +64,7 @@ export function paymentPriceValues(pricing) {
     saving: pricing.savings > 0 ? pricing.savings : null,
     cod_fee: pricing.codFee,
     cod_price: pricing.codTotal,
+    partial_cod_amount: pricing.codTotal,
   };
 }
 

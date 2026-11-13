@@ -16,7 +16,7 @@ const SURFACES = [
 
 // A COD button's text with its price tags filled in for `price`, as the storefront does.
 function codText(settings, text, price, money) {
-  return fillPriceTags(text, codPriceValues(price, codFeeOf(settings, price)), tagMoney(money));
+  return fillPriceTags(text, codPriceValues(price, codFeeOf(settings, price), settings), tagMoney(money));
 }
 
 // The drawer's Checkout text, as the storefront fills it (brix_cod.js
@@ -29,7 +29,7 @@ function checkoutText(settings, text, cart, money) {
   const pr = productPaymentPricing({ unitPrice: cart, prepaid });
   const fee = codFeeOf(settings, cart);
   return fillPriceTags(text, {
-    ...codPriceValues(cart, fee),
+    ...codPriceValues(cart, fee, settings),
     price: pr.online,
     prepaid_price: pr.online,
     saving: pr.savings > 0 ? pr.savings : null,
@@ -308,7 +308,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
               // Buy it now is only hidden while a usable COD button replaces it, as on the storefront.
               const bin = (codHidden || excluded || place !== 'replace') && (
                 <div key="bin" className="cod-scr-bin">
-                  {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings, cart)), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
+                  {pb.buyNowText ? fillPriceTags(pb.buyNowText, { ...codPriceValues(cart, codFeeOf(settings, cart), settings), prepaid_price: cart }, tagMoney(money)) : 'Buy it now'}
                 </div>
               );
               return place === 'below' ? [bin, cod] : [cod, bin];

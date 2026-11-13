@@ -45,7 +45,7 @@ const router = createMemoryRouter([
     },
   },
   ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),
-  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: rangeFor(new URL(request.url).searchParams.get('range')) }) },
+  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: rangeFor(new URL(request.url).searchParams.get('range')), moduleStatus: { cart: true, combo: false, cod: true, packs: false, fbt: true, coupon: null } }) },
 ], { initialEntries: [pageName === 'home' ? '/app' : '/app/additional'] });
 
 createRoot(document.getElementById('root')).render(

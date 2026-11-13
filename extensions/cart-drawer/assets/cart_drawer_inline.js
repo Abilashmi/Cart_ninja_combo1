@@ -3317,7 +3317,7 @@
   // {prepaid_price} / {saving} = after / the prepaid discount, {cod_fee} /
   // {cod_price} with COD on (brix_cod.js priceTagValues; without it every
   // price is the total). Same tags as COD's button texts (price-tags.shared.js).
-  const CC_PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
+  const CC_PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving|partial_cod_amount)\s*\}?\}/g;
   let _ccCheckoutPrice = null; // { cart, total } of the last drawn footer
   function ccHasPriceTags(text) { return new RegExp(CC_PRICE_TAG.source).test(String(text || '')); }
   function ccCheckoutText(text, info) {

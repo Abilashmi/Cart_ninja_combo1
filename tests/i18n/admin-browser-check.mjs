@@ -67,7 +67,20 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
   await home.screenshot({ path: path.join(shotDir, `${lang}-home.png`), fullPage: true });
   if (lang === 'en') {
     const switches = home.getByRole('switch');
-    check('en: six module switches, all off by default', (await switches.count()) === 6 && (await switches.evaluateAll((nodes) => nodes.every((n) => n.getAttribute('aria-checked') === 'false'))));
+    // The harness says Cart Editor, COD and FBT are on, Combo and Packs off, Coupon unknown (shown off).
+    const states = await switches.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-checked')));
+    check('en: six switches show which features are on', states.join(',') === 'true,false,true,false,true,false', states.join(','));
+    // The card pictures sit still (finished picture) until the pointer is on the card.
+    const running = () => home.evaluate(() => document.querySelector('svg.brx-art-cod').getAnimations({ subtree: true }).length);
+    await home.mouse.move(5, 5);
+    await home.waitForTimeout(200);
+    const still = await running();
+    const fee = await home.evaluate(() => getComputedStyle(document.querySelector('.brx-cod-c3')).opacity);
+    await home.locator('.brx-art-host').nth(2).hover();
+    await home.waitForTimeout(300);
+    const playing = await running();
+    check('en: card pictures play only on hover', still === 0 && fee === '1' && playing > 5, `still ${still} (fee shown ${fee}), hovered ${playing}`);
+    await home.mouse.move(5, 5);
     check('en: tutorials are no longer on Home', !(await home.innerText('body')).includes(t['admin.home.videos']));
     const routes = ['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'];
     for (let i = 0; i < routes.length; i += 1) {

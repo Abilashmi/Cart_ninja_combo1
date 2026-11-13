@@ -28,7 +28,7 @@ const check = (name, ok, detail = '') => { results.push({ name, ok }); console.l
 
 const browser = await chromium.launch();
 
-async function run({ partialCod, partialAnswer, quoteFor = quote }) {
+async function run({ partialCod, partialAnswer, quoteFor = quote, configExtra = {} }) {
   const page = await browser.newPage({ viewport: { width: 390, height: 800 } });
   const posted = [];
   let checkoutUrl = null;
@@ -46,7 +46,7 @@ async function run({ partialCod, partialAnswer, quoteFor = quote }) {
     if (url.href === 'https://cdn.test/brix_cod.js') return route.fulfill({ contentType: 'application/javascript', body: SCRIPT });
     if (url.pathname.startsWith('/products/')) return json({ tags: [] });
     if (url.origin === PHP && url.pathname === '/cod_storefront.php') {
-      if (url.searchParams.get('action') === 'config') return json({ ...baseConfig, partialCod });
+      if (url.searchParams.get('action') === 'config') return json({ ...baseConfig, ...configExtra, partialCod });
       const pin = url.searchParams.get('pin');
       return json({ success: true, pincode: pin, found: true, city: 'Chennai', state: 'Tamil Nadu', blocked: false });
     }
@@ -176,6 +176,19 @@ async function run({ partialCod, partialAnswer, quoteFor = quote }) {
   const { page, inSheet, errors } = await run({ partialCod: { mode: 'charges', amount: 50, percent: 10, minOrder: 0, maxOrder: 0, only: true }, partialAnswer: { ok: true, body: {} } });
   check('charges, free shipping and no fee: normal COD (even with only part payment)', (await inSheet('button.pay').count()) === 0 && (await inSheet('button[type="submit"]').textContent()).includes('Place COD order'));
   check('charges, no charges: no page errors', errors.length === 0, errors.join('; '));
+  await page.close();
+}
+
+// 2d) {partial_cod_amount} in button texts: what Partial COD takes now (COD fee ₹100 here).
+{
+  const { page, errors } = await run({ partialCod: { mode: 'fixed', amount: 50, percent: 10, minOrder: 0, maxOrder: 2000 }, partialAnswer: { ok: true, body: {} }, configExtra: { codFee: 100 } });
+  const values = await page.evaluate(async () => {
+    await window.BrixCod.config();
+    return [1599, 2500].map((t) => window.BrixCod.priceTagValues({ items: [] }, t));
+  });
+  check('{partial_cod_amount}: ₹50 now on a ₹1,599 cart (+ fee)', values[0].partial_cod_amount === 50, JSON.stringify(values[0]));
+  check('{partial_cod_amount}: above the Partial COD range = the whole COD amount', values[1].partial_cod_amount === values[1].cod_price, JSON.stringify(values[1]));
+  check('{partial_cod_amount}: no page errors', errors.length === 0, errors.join('; '));
   await page.close();
 }
 

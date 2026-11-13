@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Buffer } from 'node:buffer';
 
-const { partialCodSplit, sanitizePartialCod, DEFAULT_PARTIAL_COD } = await import('../../app/utils/partial-cod.shared.js');
+const { partialCodSplit, sanitizePartialCod, DEFAULT_PARTIAL_COD, partialCodTagAmount } = await import('../../app/utils/partial-cod.shared.js');
+const { codPriceValues, fillPriceTags, hasPriceTags } = await import('../../app/utils/price-tags.shared.js');
 const { sanitizeCodSettings } = await import('../../app/utils/cod.shared.js');
 const { createPartialCod, completePartialCodOrder } = await import('../../app/services/partial-cod.server.js');
 
@@ -32,6 +33,22 @@ test('split: shipping + COD fee mode', () => {
   assert.equal(partialCodSplit(on, 1599), null, 'no charges given');
   assert.equal(partialCodSplit({ ...on, maxOrder: 1000 }, 1698, 99), null, 'order range still applies');
   assert.equal(sanitizePartialCod({ mode: 'charges' }).mode, 'charges');
+});
+
+test('{partial_cod_amount}: the advance for a price, with the COD fee and flat shipping', () => {
+  const on = (partialCod, extra = {}) => ({ shippingFee: 0, freeShippingAbove: 0, ...extra, partialCod: { ...DEFAULT_PARTIAL_COD, enabled: true, ...partialCod } });
+  assert.equal(partialCodTagAmount(on({ mode: 'fixed', amount: 50 }), 1599, 100), 50);
+  assert.equal(partialCodTagAmount(on({ mode: 'percent', percent: 10 }), 1599, 100), 170, '10% of ₹1,699, rounded up');
+  assert.equal(partialCodTagAmount(on({ mode: 'charges' }, { shippingFee: 60 }), 1599, 39), 99, 'shipping + COD fee');
+  assert.equal(partialCodTagAmount(on({ mode: 'charges' }, { shippingFee: 60, freeShippingAbove: 999 }), 1599, 39), 39, 'free shipping above ₹999');
+  assert.equal(partialCodTagAmount(on({ mode: 'charges' }, { shippingFee: 60, shippingMode: 'advanced' }), 1599, 39), 39, 'dynamic shipping not known yet');
+  assert.equal(partialCodTagAmount(on({ mode: 'fixed', amount: 50, maxOrder: 1000 }), 1599, 100), 1699, 'not offered: the whole amount');
+  assert.equal(partialCodTagAmount({ partialCod: { ...DEFAULT_PARTIAL_COD } }, 1599, 100), 1699, 'Partial COD off: the whole amount');
+  assert.equal(partialCodTagAmount(on({}), null, 100), null);
+  const fmt = (n) => `₹${n}`;
+  assert.ok(hasPriceTags('Pay {partial_cod_amount} now'));
+  assert.equal(fillPriceTags('Pay {partial_cod_amount} now', codPriceValues(1599, 100, on({ mode: 'fixed', amount: 50 })), fmt), 'Pay ₹50 now');
+  assert.equal(fillPriceTags('Pay {{partial_cod_amount}} now', codPriceValues(1599, 100), fmt), 'Pay ₹1699 now', 'no settings = the COD price');
 });
 
 test('settings: defaults off, values clamped, part of the COD settings', () => {

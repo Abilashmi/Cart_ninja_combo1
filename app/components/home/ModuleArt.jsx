@@ -2,8 +2,9 @@
 // Home page feature cards: a small animated window per feature (6 s loop,
 // pure SVG + CSS, no GIF files). Each shows what the feature does: a cursor
 // taps, the window reacts, then it starts again. Shown until a GIF / video is
-// pasted into MODULE_MEDIA (app._index.jsx). With "reduce motion" on, each
-// shows its finished picture without moving (.fo / .fx / .fa / .fsa / .f0).
+// pasted into MODULE_MEDIA (app._index.jsx). It plays while the pointer is on
+// the card (.brx-art-host; always on touch screens); otherwise, and with
+// "reduce motion", each shows its finished picture (.fo / .fx / .fa / .fsa / .f0).
 import { useEffect, useRef } from 'react';
 import { useT } from '../../i18n/admin';
 
@@ -254,6 +255,27 @@ export default function ModuleArt({ id, accent }) {
   return Art ? <Art accent={accent} /> : null;
 }
 
+// The finished picture, not moving (fee typed, switches on, offer unlocked,
+// no cursor), for every .brx-art under `scope` inside `media`. Used while the
+// pointer isn't on the card (screens with a mouse; hovering or focusing the
+// card plays it from the start; phones keep it playing) and with
+// "reduce motion".
+function stillRules(media, scope) {
+  const at = (sel) => sel.split(',').map((one) => `${scope} ${one}`.trim()).join(',');
+  return `${media}
+${at('.brx-art .a,.brx-art-tap,.brx-art-pulse')}{animation:none}
+${at('.brx-art-cur,.brx-cod-hl')}{display:none}
+${at('.brx-art .fo')}{opacity:1}
+${at('.brx-art .fx')}{opacity:0}
+${at('.brx-art .fa')}{fill:var(--brx-a)}
+${at('.brx-art .fsa')}{stroke:var(--brx-a)}
+${at('.brx-art .f0')}{transform:none}
+${at('.brx-art .brx-cod-field')}{fill:#fff}
+${at('.brx-art .brx-cod-kb1,.brx-art .brx-cod-kb2')}{transform:translateX(8px)}
+${at('.brx-art .brx-packs-sel')}{transform:translateY(48px)}
+}`;
+}
+
 // Keyframes: every card loops in 6 s. Taps and button presses share
 // brx-art-tap / brx-art-pulse, started at their moment by animation-delay.
 export const MODULE_ART_CSS = `
@@ -355,16 +377,6 @@ export const MODULE_ART_CSS = `
 @keyframes brx-art-off24{0%{opacity:1}24%{opacity:0}95%{opacity:1}}
 @keyframes brx-art-on24{0%{opacity:0}24%{opacity:1}95%{opacity:0}}
 
-@media (prefers-reduced-motion:reduce){
-.brx-art .a,.brx-art-tap,.brx-art-pulse{animation:none}
-.brx-art-cur,.brx-cod-hl{display:none}
-.brx-art .fo{opacity:1}
-.brx-art .fx{opacity:0}
-.brx-art .fa{fill:var(--brx-a)}
-.brx-art .fsa{stroke:var(--brx-a)}
-.brx-art .f0{transform:none}
-.brx-art .brx-cod-field{fill:#fff}
-.brx-art .brx-cod-kb1,.brx-art .brx-cod-kb2{transform:translateX(8px)}
-.brx-art .brx-packs-sel{transform:translateY(48px)}
-}
+${stillRules('@media (hover:hover){', '.brx-art-host:not(:hover):not(:focus-within)')}
+${stillRules('@media (prefers-reduced-motion:reduce){', '')}
 `;
