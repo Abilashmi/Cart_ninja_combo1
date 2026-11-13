@@ -36,7 +36,7 @@ import { syncPartialCodPaymentRule } from '../services/partial-cod.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
-import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags } from '../utils/cod.shared';
+import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags, codCharges } from '../utils/cod.shared';
 import { partialCodSplit } from '../utils/partial-cod.shared.js';
 import LogoUploader from '../components/cod/LogoUploader';
 import ChipInput from '../components/cod/ChipInput';
@@ -923,7 +923,12 @@ export default function CodCustomizePage() {
     if (id === 'partial') {
       // The advance for a sample order, so the merchant sees what shoppers get.
       const sample = 1599;
-      const sampleSplit = partialCodSplit(toSettings(form).partialCod, sample);
+      const sampleSettings = sanitizeCodSettings(toSettings(form));
+      // Shipping + COD fee mode: the sample's charges under the one-price
+      // shipping (dynamic shipping prices each order by its delivery option).
+      const sampleCharges = codCharges(sampleSettings, sample);
+      const advancedShipping = sampleSettings.shippingMode === 'advanced';
+      const sampleSplit = partialCodSplit(sampleSettings.partialCod, sample, sampleCharges.total);
       const ruleMessage = fetcher.data?.success ? fetcher.data.partialCod?.message : null;
       return (
         <BlockStack gap="400">
@@ -946,13 +951,13 @@ export default function CodCustomizePage() {
                     choices={[
                       { label: 'A fixed amount', value: 'fixed' },
                       { label: 'A percentage of the order', value: 'percent', helpText: 'Rounded up to the next rupee.' },
+                      { label: 'Shipping + COD fee', value: 'charges', helpText: 'The shopper pays the order’s shipping and COD fee online, the items on delivery. An order with free shipping and no COD fee gets normal COD.' },
                     ]}
                     selected={[form.partialMode]}
                     onChange={([v]) => set('partialMode')(v)}
                   />
-                  {form.partialMode === 'fixed'
-                    ? <TextField label="Advance amount" type="number" min={1} value={form.partialAmount} onChange={set('partialAmount')} prefix={data.currencyCode} error={errors.partialAmount} autoComplete="off" />
-                    : <TextField label="Advance percentage" type="number" min={1} max={90} value={form.partialPercent} onChange={set('partialPercent')} suffix="%" error={errors.partialPercent} autoComplete="off" />}
+                  {form.partialMode === 'fixed' && <TextField label="Advance amount" type="number" min={1} value={form.partialAmount} onChange={set('partialAmount')} prefix={data.currencyCode} error={errors.partialAmount} autoComplete="off" />}
+                  {form.partialMode === 'percent' && <TextField label="Advance percentage" type="number" min={1} max={90} value={form.partialPercent} onChange={set('partialPercent')} suffix="%" error={errors.partialPercent} autoComplete="off" />}
                   <Checkbox
                     label="Only offer part payment"
                     checked={form.partialOnly}
@@ -966,9 +971,13 @@ export default function CodCustomizePage() {
                     <TextField label="Up to order value" type="number" min={0} value={form.partialMaxOrder} onChange={set('partialMaxOrder')} placeholder="No maximum" prefix={data.currencyCode} error={errors.partialMaxOrder} autoComplete="off" />
                   </FormLayout.Group>
                   <Text as="p" tone="subdued">
-                    {sampleSplit
-                      ? `Example: on a ₹${sample.toLocaleString('en-IN')} order, the shopper pays ₹${sampleSplit.advance.toLocaleString('en-IN')} now and ₹${sampleSplit.balance.toLocaleString('en-IN')} on delivery.`
-                      : `Not offered on a ₹${sample.toLocaleString('en-IN')} order with these settings.`}
+                    {form.partialMode === 'charges' && advancedShipping
+                      ? 'Example: the advance is the shipping of the delivery option the shopper picks plus your COD fee.'
+                      : sampleSplit
+                        ? `Example: on a ₹${sample.toLocaleString('en-IN')} order${form.partialMode === 'charges' ? ` (₹${sampleCharges.shipping.toLocaleString('en-IN')} shipping + ₹${sampleCharges.codFee.toLocaleString('en-IN')} COD fee)` : ''}, the shopper pays ₹${sampleSplit.advance.toLocaleString('en-IN')} now and ₹${sampleSplit.balance.toLocaleString('en-IN')} on delivery.`
+                        : form.partialMode === 'charges'
+                          ? `Not offered on a ₹${sample.toLocaleString('en-IN')} order: it has no shipping charge or COD fee with your current settings, so it gets normal COD.`
+                          : `Not offered on a ₹${sample.toLocaleString('en-IN')} order with these settings.`}
                   </Text>
                 </>
               )}

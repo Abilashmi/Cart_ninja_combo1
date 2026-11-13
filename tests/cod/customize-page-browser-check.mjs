@@ -565,6 +565,14 @@ if (scenario === 'live') {
   await page.getByLabel('Advance percentage').fill('10');
   await page.waitForTimeout(100);
   check('Partial COD: percentage rounds the advance up (₹160 on ₹1,599)', await page.getByText('Example: on a ₹1,599 order, the shopper pays ₹160 now and ₹1,439 on delivery.').count() === 1);
+  // Shipping + COD fee: no amount box; the example uses the store's one-price shipping and fee.
+  await page.getByText('Shipping + COD fee', { exact: true }).click();
+  await page.waitForTimeout(100);
+  const chargesText = (await page.getByText(/^(Example: on a ₹1,599 order \(|Not offered on a ₹1,599 order: it has no shipping)/).first().textContent().catch(() => '')) || '';
+  check('Partial COD: Shipping + COD fee shows no amount box and a worked example',
+    await page.getByLabel('Advance amount').count() === 0 && await page.getByLabel('Advance percentage').count() === 0
+      && /^Example: on a ₹1,599 order \(₹[\d,]+ shipping \+ ₹[\d,]+ COD fee\), the shopper pays ₹([\d,]+) now and ₹[\d,]+ on delivery\.$/.test(chargesText),
+    chargesText);
   await page.getByText('A fixed amount', { exact: true }).click();
   check('Partial COD: "Only offer part payment" off by default', !(await page.getByLabel('Only offer part payment').isChecked()));
   await page.getByLabel('Only offer part payment').check();

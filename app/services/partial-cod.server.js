@@ -34,6 +34,11 @@ import {
   PARTIAL_COD_BALANCE_TITLE, PARTIAL_COD_CODE_PREFIX, PARTIAL_COD_TAGS, partialCodSplit,
 } from '../utils/partial-cod.shared.js';
 
+// Shipping + COD fee of a priced order: the advance in `charges` mode.
+export function quoteCharges(quote) {
+  return Math.round(((Number(quote?.shipping) || 0) + (Number(quote?.codFee) || 0)) * 100) / 100;
+}
+
 export const PARTIAL_COD_TTL_MS = 2 * 60 * 60 * 1000;
 const CODE_RE = /^PC[A-Z0-9]{10}$/;
 const toVariantGid = (id) => `gid://shopify/ProductVariant/${id}`;
@@ -85,7 +90,7 @@ export async function createPartialCod(admin, {
     settings, lines, coupon, pincode: address.pincode, surface, currencyCode, comboWeightLive, cartCodes, cartAttributes,
     shipping, destination: { pincode: address.pincode, city: address.city, state: address.state }, delivery, strictDelivery: true,
   });
-  const split = partialCodSplit(settings.partialCod, quote.total);
+  const split = partialCodSplit(settings.partialCod, quote.total, quoteCharges(quote));
   if (!split) throw new CodError('partial_unavailable', 'Part payment is not available for this order. Please choose Cash on Delivery or pay online.', { status: 422 });
 
   // The items at their Shopify price: what the checkout starts from before the code.

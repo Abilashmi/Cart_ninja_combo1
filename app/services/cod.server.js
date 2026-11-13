@@ -1282,7 +1282,8 @@ export async function placeCodOrder(admin, {
   const option = ship?.selected || null;
   // Partial COD set to "only part payment": where it's offered, the whole amount
   // can't be paid on delivery (the popup shows only Part payment).
-  if (settings.partialCod?.only && partialCodSplit(settings.partialCod, quote.total)) {
+  const quoteCharges = (Number(quote.shipping) || 0) + (Number(quote.codFee) || 0);
+  if (settings.partialCod?.only && partialCodSplit(settings.partialCod, quote.total, quoteCharges)) {
     throw new CodError('partial_required', 'This order needs a part payment online. Please choose Part payment.', { status: 422 });
   }
 

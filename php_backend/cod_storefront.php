@@ -226,7 +226,8 @@ function cods_partial_cod($value) {
     $amount = is_numeric($p['amount'] ?? null) ? max(1, min(100000, round((float)$p['amount'], 2))) : 50;
     $percent = is_numeric($p['percent'] ?? null) ? max(1, min(90, round((float)$p['percent'], 2))) : 10;
     return [
-        'mode' => ($p['mode'] ?? '') === 'percent' ? 'percent' : 'fixed',
+        // charges = the order's shipping + COD fee is the advance.
+        'mode' => in_array($p['mode'] ?? '', ['percent', 'charges'], true) ? $p['mode'] : 'fixed',
         'amount' => $amount,
         'percent' => $percent,
         'minOrder' => cods_num($p['minOrder'] ?? 0),

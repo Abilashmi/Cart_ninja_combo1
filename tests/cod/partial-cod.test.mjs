@@ -24,6 +24,16 @@ test('split: fixed amount, percentage (rounded up), order range, never the whole
   assert.equal(partialCodSplit(on, 0), null);
 });
 
+test('split: shipping + COD fee mode', () => {
+  const on = { ...DEFAULT_PARTIAL_COD, enabled: true, mode: 'charges' };
+  assert.deepEqual(partialCodSplit(on, 1698, 99), { advance: 99, balance: 1599 }, '₹60 shipping + ₹39 fee');
+  assert.deepEqual(partialCodSplit(on, 1631.98, 31.98), { advance: 32, balance: 1599.98 }, 'rounded up to the rupee');
+  assert.equal(partialCodSplit(on, 1599, 0), null, 'free shipping and no fee: normal COD');
+  assert.equal(partialCodSplit(on, 1599), null, 'no charges given');
+  assert.equal(partialCodSplit({ ...on, maxOrder: 1000 }, 1698, 99), null, 'order range still applies');
+  assert.equal(sanitizePartialCod({ mode: 'charges' }).mode, 'charges');
+});
+
 test('settings: defaults off, values clamped, part of the COD settings', () => {
   assert.equal(sanitizePartialCod(null).enabled, false);
   const s = sanitizePartialCod({ enabled: true, mode: 'percent', percent: 500, amount: -3, minOrder: 900, maxOrder: 100 });
@@ -126,6 +136,25 @@ test('code: worth the items\' Shopify price minus the advance; order total remem
   assert.equal(input.endsAt, new Date(NOW + 2 * 60 * 60 * 1000).toISOString());
   assert.deepEqual(input.combinesWith, { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true });
   assert.equal(db.rows.get('PCABCDEFGHJK').expected_total, '2698');
+});
+
+test('code: shipping + COD fee mode takes the advance from the priced order', async () => {
+  const admin = fakeAdmin();
+  const db = fakeDb();
+  const result = await createPartialCod(admin, {
+    shop: 'demo.myshopify.com', settings: { partialCod: { ...SETTINGS.partialCod, mode: 'charges' } },
+    lines: [{ variantId: '41', quantity: 1 }], address: ADDRESS, surface: 'product', db, now: NOW, random: fixedRandom,
+    priceOrder: async () => ({ quote: { total: 1698, shipping: 60, codFee: 39, currency: 'INR' } }),
+  });
+  assert.equal(result.advance, 99);
+  assert.equal(result.balance, 1599);
+  const input = admin.calls.find((c) => c.op === 'BrixPartialCodCode').variables.input;
+  assert.deepEqual(input.customerGets.value, { discountAmount: { amount: '1500.00', appliesOnEachItem: false } }, '₹1,599 item, ₹99 left to pay online');
+  await assert.rejects(createPartialCod(fakeAdmin(), {
+    shop: 'demo.myshopify.com', settings: { partialCod: { ...SETTINGS.partialCod, mode: 'charges' } },
+    lines: [{ variantId: '41', quantity: 1 }], address: ADDRESS, surface: 'product', db: fakeDb(), now: NOW, random: fixedRandom,
+    priceOrder: async () => ({ quote: { total: 1599, shipping: 0, codFee: 0, currency: 'INR' } }),
+  }), { code: 'partial_unavailable' }, 'no charges = no part payment');
 });
 
 test('code: refused when Partial COD is off for this total or an item is gone', async () => {

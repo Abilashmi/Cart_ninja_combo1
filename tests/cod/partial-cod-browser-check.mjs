@@ -28,7 +28,7 @@ const check = (name, ok, detail = '') => { results.push({ name, ok }); console.l
 
 const browser = await chromium.launch();
 
-async function run({ partialCod, partialAnswer }) {
+async function run({ partialCod, partialAnswer, quoteFor = quote }) {
   const page = await browser.newPage({ viewport: { width: 390, height: 800 } });
   const posted = [];
   let checkoutUrl = null;
@@ -53,7 +53,7 @@ async function run({ partialCod, partialAnswer }) {
     if (url.origin === PHP && url.pathname === '/cod_checkout.php') {
       if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST' } });
       posted.push(body);
-      if (body.endpoint === 'quote') return json({ success: true, quote });
+      if (body.endpoint === 'quote') return json({ success: true, quote: quoteFor });
       if (body.endpoint === 'partial-cod') return partialAnswer.ok ? json({ success: true, ...partialAnswer.body }) : json({ success: false, ...partialAnswer.body }, 422);
       if (body.endpoint === 'order') return json({ success: true, order: { orderName: '#1047', orderId: 'gid://shopify/Order/1047', total: 2698, currency: 'INR', statusPageUrl: null } });
     }
@@ -150,6 +150,32 @@ async function run({ partialCod, partialAnswer }) {
   const { page, inSheet, errors } = await run({ partialCod: { mode: 'fixed', amount: 50, percent: 10, minOrder: 0, maxOrder: 2000, only: true }, partialAnswer: { ok: true, body: {} } });
   check('only, order outside the Partial COD range: normal COD', (await inSheet('button.pay').count()) === 0 && (await inSheet('button[type="submit"]').textContent()).includes('Place COD order'));
   check('only, outside the range: no page errors', errors.length === 0, errors.join('; '));
+  await page.close();
+}
+
+// 2c) Advance = shipping + COD fee: ₹60 shipping + ₹39 fee now, the items on delivery;
+// an order with free shipping and no fee gets normal COD.
+{
+  const charged = { ...quote, shipping: 60, codFee: 39, total: 2797 };
+  const { page, inSheet, errors, getCheckout } = await run({
+    partialCod: { mode: 'charges', amount: 50, percent: 10, minOrder: 0, maxOrder: 0 },
+    partialAnswer: { ok: true, body: { code: 'PCTESTCODE03', advance: 99, balance: 2698, total: 2797, currency: 'INR' } },
+    quoteFor: charged,
+  });
+  check('charges: Part payment card offers ₹99 now, ₹2,698 on delivery', /₹99\b/.test(await inSheet('button.pay[data-mode="partial"]').textContent()) && (await inSheet('button.pay[data-mode="partial"]').textContent()).includes('2,698'));
+  await inSheet('button.pay[data-mode="partial"]').click();
+  check('charges: the button pays ₹99', /^Pay ₹99(\.00)? now$/.test((await inSheet('button[type="submit"]').textContent()).trim()));
+  await inSheet('[name="policy"]').check();
+  await inSheet('button[type="submit"]').click();
+  await page.waitForURL(/\/cart\//, { timeout: 5000 });
+  check('charges: goes to Shopify checkout with the code', getCheckout()?.searchParams.get('discount') === 'PCTESTCODE03');
+  check('charges: no page errors', errors.length === 0, errors.join('; '));
+  await page.close();
+}
+{
+  const { page, inSheet, errors } = await run({ partialCod: { mode: 'charges', amount: 50, percent: 10, minOrder: 0, maxOrder: 0, only: true }, partialAnswer: { ok: true, body: {} } });
+  check('charges, free shipping and no fee: normal COD (even with only part payment)', (await inSheet('button.pay').count()) === 0 && (await inSheet('button[type="submit"]').textContent()).includes('Place COD order'));
+  check('charges, no charges: no page errors', errors.length === 0, errors.join('; '));
   await page.close();
 }
 

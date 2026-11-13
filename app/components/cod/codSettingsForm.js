@@ -134,7 +134,7 @@ export function toForm(s) {
     maxOrder: numText(s.maxOrder),
     // Partial COD (utils/partial-cod.shared.js).
     partialEnabled: Boolean(s.partialCod?.enabled),
-    partialMode: s.partialCod?.mode === 'percent' ? 'percent' : 'fixed',
+    partialMode: ['percent', 'charges'].includes(s.partialCod?.mode) ? s.partialCod.mode : 'fixed',
     partialAmount: numText(s.partialCod?.amount ?? 50),
     partialPercent: numText(s.partialCod?.percent ?? 10),
     partialMinOrder: numText(s.partialCod?.minOrder ?? 0),

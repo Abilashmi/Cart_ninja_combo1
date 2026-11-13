@@ -129,14 +129,17 @@
   }
   // Partial COD: { advance, balance } for an order total, or null when it isn't on
   // offer (mirrors partialCodSplit in app/utils/partial-cod.shared.js; the app
-  // server works out the real amounts again).
-  function partialSplit(cfg, total) {
+  // server works out the real amounts again). `q` = the quote: its shipping +
+  // COD fee are the advance in `charges` mode.
+  function partialSplit(cfg, q) {
     var p = cfg && cfg.partialCod;
-    var t = Number(total);
+    var t = Number(q && q.total);
     if (!p || !isFinite(t) || t <= 0) return null;
     if (Number(p.minOrder) > 0 && t < Number(p.minOrder)) return null;
     if (Number(p.maxOrder) > 0 && t > Number(p.maxOrder)) return null;
-    var raw = p.mode === 'percent' ? (t * Number(p.percent)) / 100 : Number(p.amount);
+    var raw = p.mode === 'percent' ? (t * Number(p.percent)) / 100
+      : p.mode === 'charges' ? (Number(q.shipping) || 0) + (Number(q.codFee) || 0)
+        : Number(p.amount);
     if (!isFinite(raw) || raw <= 0) return null;
     var advance = Math.max(1, Math.ceil(raw - 1e-9));
     if (advance >= t) return null;
@@ -1574,7 +1577,7 @@
   Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
     // Partial COD: offered for this total? Picked? (this.payMode)
-    var split = partialSplit(this.cfg, q.total);
+    var split = partialSplit(this.cfg, q);
     // "Only part payment": no full Cash on Delivery where Partial COD is offered.
     var partialOnly = Boolean(split) && Boolean(this.cfg.partialCod && this.cfg.partialCod.only);
     if (!split) this.payMode = 'cod';
@@ -1768,7 +1771,7 @@
     if (this.submitAction === 'place') {
       var active = (this.shadow && this.shadow.activeElement) || document.activeElement;
       if (active && active.name === 'coupon') return this.applyCoupon();
-      if (this.payMode === 'partial' && this.quote && partialSplit(this.cfg, this.quote.total)) return this.payPartial();
+      if (this.payMode === 'partial' && this.quote && partialSplit(this.cfg, this.quote)) return this.payPartial();
       return this.placeOrder();
     }
   };
