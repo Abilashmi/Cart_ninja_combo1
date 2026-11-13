@@ -5,6 +5,7 @@ import enTranslations from '@shopify/polaris/locales/en.json';
 import '@shopify/polaris/build/esm/styles.css';
 import AccountPage from '../../../app/routes/app.additional.jsx';
 import DashboardPage from '../../../app/routes/app._index.jsx';
+import SupportChat from '../../../app/components/support/SupportChat.jsx';
 import { I18nProvider } from '../../../app/i18n/admin.jsx';
 import { pickAdminMessages, ADMIN_LANGUAGE_CHOICES, LANGUAGE_NAMES } from '../../../app/i18n/admin.shared.js';
 import { PlanProvider } from '../../../app/components/PlanContext.jsx';
@@ -46,7 +47,9 @@ const router = createMemoryRouter([
   },
   ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),
   { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: rangeFor(new URL(request.url).searchParams.get('range')), moduleStatus: { cart: true, combo: false, cod: true, packs: false, fbt: true, coupon: null } }) },
-], { initialEntries: [pageName === 'home' ? '/app' : '/app/additional'] });
+  // The support chat widget alone (tests/support-chat/widget-browser-check.mjs mocks /api/support-chat).
+  { path: '/app/chat', Component: function ChatPage() { return <div><h1>Some BRIX page</h1><SupportChat /></div>; } },
+], { initialEntries: [pageName === 'home' ? '/app' : pageName === 'chat' ? '/app/chat' : '/app/additional'] });
 
 createRoot(document.getElementById('root')).render(
   <AppProvider i18n={enTranslations}>

@@ -1,6 +1,6 @@
 // The frame of the internal pages (/internal/...): plain server-rendered HTML,
-// outside root.jsx so none of the admin's third-party scripts (Clarity,
-// Zingbot) see client data.
+// outside root.jsx so none of the admin's third-party scripts (Clarity) see
+// client data.
 
 export const escHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

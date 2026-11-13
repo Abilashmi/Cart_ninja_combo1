@@ -127,6 +127,54 @@
     "status": "ai",
     "srcHash": "07aa9fe2"
   },
+  "admin.chat.ai_label": {
+    "status": "ai",
+    "srcHash": "6e909dba"
+  },
+  "admin.chat.ai_note": {
+    "status": "ai",
+    "srcHash": "1c5f41ee"
+  },
+  "admin.chat.away": {
+    "status": "ai",
+    "srcHash": "aa129018"
+  },
+  "admin.chat.close": {
+    "status": "ai",
+    "srcHash": "91e91987"
+  },
+  "admin.chat.error": {
+    "status": "ai",
+    "srcHash": "4cde638d"
+  },
+  "admin.chat.online": {
+    "status": "ai",
+    "srcHash": "bc3b88aa"
+  },
+  "admin.chat.open": {
+    "status": "ai",
+    "srcHash": "da0d38a9"
+  },
+  "admin.chat.placeholder": {
+    "status": "ai",
+    "srcHash": "4a37dcc2"
+  },
+  "admin.chat.send": {
+    "status": "ai",
+    "srcHash": "f28e14cf"
+  },
+  "admin.chat.talk_to_team": {
+    "status": "ai",
+    "srcHash": "feef4b88"
+  },
+  "admin.chat.typing": {
+    "status": "ai",
+    "srcHash": "0bc5a905"
+  },
+  "admin.chat.unread": {
+    "status": "ai",
+    "srcHash": "37dac977"
+  },
   "admin.common.close": {
     "status": "ai",
     "srcHash": "cd86acc3"
@@ -361,7 +409,7 @@
   },
   "admin.home.mod_cod_desc": {
     "status": "ai",
-    "srcHash": "d3e53036"
+    "srcHash": "5e9fbab4"
   },
   "admin.home.mod_cod_title": {
     "status": "ai",
