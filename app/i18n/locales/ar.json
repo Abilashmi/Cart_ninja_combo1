@@ -467,5 +467,12 @@
   "storefront.upsell.title_alt": "منتجات مقترحة",
   "storefront.packs.cod": "اشترِ بالدفع عند الاستلام",
   "storefront.packs.cod_unavailable": "الدفع عند الاستلام غير متاح الآن.",
-  "storefront.packs.opening_cod": "جارٍ الفتح…"
+  "storefront.packs.opening_cod": "جارٍ الفتح…",
+  "error.cod.partial_unavailable": "الدفع الجزئي غير متاح لهذا الطلب. اختر الدفع عند الاستلام أو ادفع عبر الإنترنت.",
+  "storefront.cod.opening_checkout": "جارٍ فتح الدفع الآمن…",
+  "storefront.cod.partial_button": "ادفع {amount} الآن",
+  "storefront.cod.partial_desc": "ادفع {advance} الآن عبر الإنترنت و{balance} عند الاستلام",
+  "storefront.cod.partial_note": "ستدفع {advance} في صفحة الدفع الآمنة للمتجر. جهّز {balance} عند الاستلام.",
+  "storefront.cod.partial_pay_now": "ادفع الآن",
+  "storefront.cod.partial_title": "دفع جزئي"
 }

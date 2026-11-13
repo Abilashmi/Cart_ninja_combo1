@@ -1,0 +1,11 @@
+query Input {
+  cart {
+    partialCod: attribute(key: "_brix_partial_cod") {
+      value
+    }
+  }
+  paymentMethods {
+    id
+    name
+  }
+}

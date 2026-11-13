@@ -8,6 +8,7 @@
 
 import { DEFAULT_PRODUCT_PAYMENT, sanitizeProductPayment } from './product-payment.shared.js';
 import { DEFAULT_CONTINUE_SHOPPING, sanitizeContinueShopping } from './continue-shopping.shared.js';
+import { DEFAULT_PARTIAL_COD, sanitizePartialCod } from './partial-cod.shared.js';
 
 export const COD_SURFACES = ['drawer', 'product', 'combo'];
 export const COD_SOURCES = COD_SURFACES; // where an order was placed from
@@ -169,6 +170,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // Product page payment selector (Pay Online / Cash on Delivery) and the
   // prepaid discount it advertises. See utils/product-payment.shared.js.
   productPayment: DEFAULT_PRODUCT_PAYMENT,
+  // Partial COD: a small advance paid online in Shopify checkout, the rest on
+  // delivery (utils/partial-cod.shared.js, services/partial-cod.server.js).
+  partialCod: DEFAULT_PARTIAL_COD,
 });
 
 export const GA4_ID_RE = /^G-[A-Z0-9]{4,12}$/;
@@ -547,6 +551,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     sheet,
     tracking,
     productPayment: sanitizeProductPayment(p.productPayment, b.productPayment),
+    partialCod: sanitizePartialCod(p.partialCod, b.partialCod),
   };
   return out;
 }

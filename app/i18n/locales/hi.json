@@ -467,5 +467,12 @@
   "storefront.upsell.title_alt": "सुझाए गए प्रोडक्ट",
   "storefront.packs.cod": "COD से खरीदें",
   "storefront.packs.cod_unavailable": "कैश ऑन डिलीवरी अभी उपलब्ध नहीं है।",
-  "storefront.packs.opening_cod": "खुल रहा है…"
+  "storefront.packs.opening_cod": "खुल रहा है…",
+  "error.cod.partial_unavailable": "इस ऑर्डर के लिए आंशिक भुगतान उपलब्ध नहीं है। कृपया कैश ऑन डिलीवरी चुनें या ऑनलाइन भुगतान करें।",
+  "storefront.cod.opening_checkout": "सुरक्षित चेकआउट खुल रहा है…",
+  "storefront.cod.partial_button": "अभी {amount} चुकाएँ",
+  "storefront.cod.partial_desc": "अभी {advance} ऑनलाइन चुकाएँ, {balance} डिलीवरी पर",
+  "storefront.cod.partial_note": "आप स्टोर के सुरक्षित चेकआउट में {advance} चुकाएँगे। डिलीवरी पर {balance} तैयार रखें।",
+  "storefront.cod.partial_pay_now": "अभी चुकाएँ",
+  "storefront.cod.partial_title": "आंशिक भुगतान"
 }

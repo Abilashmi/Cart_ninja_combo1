@@ -132,6 +132,13 @@ export function toForm(s) {
     shippingMode: s.shippingMode === 'advanced' ? 'advanced' : 'simple',
     minOrder: numText(s.minOrder),
     maxOrder: numText(s.maxOrder),
+    // Partial COD (utils/partial-cod.shared.js).
+    partialEnabled: Boolean(s.partialCod?.enabled),
+    partialMode: s.partialCod?.mode === 'percent' ? 'percent' : 'fixed',
+    partialAmount: numText(s.partialCod?.amount ?? 50),
+    partialPercent: numText(s.partialCod?.percent ?? 10),
+    partialMinOrder: numText(s.partialCod?.minOrder ?? 0),
+    partialMaxOrder: numText(s.partialCod?.maxOrder ?? 0),
     requireOtp: s.requireOtp,
     dailyLimitPerPhone: String(s.dailyLimitPerPhone),
     blockedPincodes: s.blockedPincodes.join(', '),
@@ -271,6 +278,14 @@ export function toSettings(f) {
       dataLayer: f.dataLayer,
     },
     productPayment: paymentSettings(f.pp),
+    partialCod: {
+      enabled: f.partialEnabled,
+      mode: f.partialMode,
+      amount: Number(f.partialAmount) || 0,
+      percent: Number(f.partialPercent) || 0,
+      minOrder: Number(f.partialMinOrder) || 0,
+      maxOrder: Number(f.partialMaxOrder) || 0,
+    },
   };
 }
 
@@ -280,6 +295,10 @@ export function formErrors(f) {
   ['codFee', 'codFeePercentFrom', 'shippingFee', 'freeShippingAbove', 'minOrder', 'maxOrder', 'couponMaxDiscount', 'codFeeOwnAmount'].forEach(money);
   if (f.codFeePercent !== '' && !(Number(f.codFeePercent) >= 0 && Number(f.codFeePercent) <= COD_FEE_PERCENT_MAX)) e.codFeePercent = `Enter 0 to ${COD_FEE_PERCENT_MAX}%, or leave it empty.`;
   if (!e.maxOrder && Number(f.maxOrder) > 0 && Number(f.minOrder) > Number(f.maxOrder)) e.maxOrder = 'Maximum must be more than the minimum.';
+  ['partialMinOrder', 'partialMaxOrder'].forEach(money);
+  if (f.partialEnabled && f.partialMode === 'fixed' && !(Number(f.partialAmount) >= 1 && Number(f.partialAmount) <= 100000)) e.partialAmount = 'Enter an amount from ₹1 to ₹1,00,000.';
+  if (f.partialEnabled && f.partialMode === 'percent' && !(Number(f.partialPercent) >= 1 && Number(f.partialPercent) <= 90)) e.partialPercent = 'Enter 1 to 90%.';
+  if (!e.partialMaxOrder && Number(f.partialMaxOrder) > 0 && Number(f.partialMinOrder) > Number(f.partialMaxOrder)) e.partialMaxOrder = 'Maximum must be more than the minimum.';
   if (f.codFeeEnabled && !e.codFee && !(Number(f.codFee) > 0) && !(Number(f.codFeePercent) > 0)) e.codFee = 'Enter the fee amount, or turn the fee off.';
   if (f.pbBuyNowSelector.trim() && !isValidDrawerSelector(f.pbBuyNowSelector)) e.pbBuyNowSelector = 'That doesn\'t look like a CSS selector, e.g. .product-form__buy-now';
   if (f.product && f.pbShowMode !== 'all' && nonePicked(f.pbShowOn)) e.pbShowOn = 'Choose at least one product or collection.';

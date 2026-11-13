@@ -623,6 +623,10 @@
     "status": "ai",
     "srcHash": "fd52b035"
   },
+  "error.cod.partial_unavailable": {
+    "status": "ai",
+    "srcHash": "5cf5463e"
+  },
   "error.cod.rate_limited": {
     "status": "ai",
     "srcHash": "9d31d0f7"
@@ -931,6 +935,10 @@
     "status": "needs-review",
     "srcHash": "e9137bf3"
   },
+  "storefront.cod.opening_checkout": {
+    "status": "ai",
+    "srcHash": "724601ce"
+  },
   "storefront.cod.order_confirmed": {
     "status": "ai",
     "srcHash": "2e3d0ccd"
@@ -966,6 +974,26 @@
   "storefront.cod.packed_shipped": {
     "status": "ai",
     "srcHash": "ace22ac3"
+  },
+  "storefront.cod.partial_button": {
+    "status": "ai",
+    "srcHash": "e3d2c73b"
+  },
+  "storefront.cod.partial_desc": {
+    "status": "ai",
+    "srcHash": "ad090599"
+  },
+  "storefront.cod.partial_note": {
+    "status": "ai",
+    "srcHash": "045870c6"
+  },
+  "storefront.cod.partial_pay_now": {
+    "status": "ai",
+    "srcHash": "a6895ee5"
+  },
+  "storefront.cod.partial_title": {
+    "status": "ai",
+    "srcHash": "f6fad042"
   },
   "storefront.cod.paste": {
     "status": "ai",

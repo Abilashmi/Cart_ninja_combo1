@@ -467,5 +467,12 @@
   "storefront.upsell.title_alt": "Productos recomendados",
   "storefront.packs.cod": "Comprar con pago contra entrega",
   "storefront.packs.cod_unavailable": "El pago contra entrega no está disponible en este momento.",
-  "storefront.packs.opening_cod": "Abriendo…"
+  "storefront.packs.opening_cod": "Abriendo…",
+  "error.cod.partial_unavailable": "El pago parcial no está disponible para este pedido. Elige pago contra entrega o paga en línea.",
+  "storefront.cod.opening_checkout": "Abriendo el pago seguro…",
+  "storefront.cod.partial_button": "Pagar {amount} ahora",
+  "storefront.cod.partial_desc": "Paga {advance} ahora en línea y {balance} a la entrega",
+  "storefront.cod.partial_note": "Pagarás {advance} en el pago seguro de la tienda. Ten {balance} listo para la entrega.",
+  "storefront.cod.partial_pay_now": "Pagar ahora",
+  "storefront.cod.partial_title": "Pago parcial"
 }

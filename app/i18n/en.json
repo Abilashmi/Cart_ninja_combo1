@@ -240,7 +240,6 @@
   "storefront.cod.order_summary": "Order summary",
   "storefront.cod.other_discounts": "Other discounts",
   "storefront.cod.otp_intro": "We'll text you a 4-digit code to confirm this Cash on Delivery order.",
-  "storefront.cod.pack_discount": "Pack discount",
   "storefront.cod.packed_shipped": "Packed and shipped",
   "storefront.cod.paste": "Paste",
   "storefront.cod.pay_on_delivery": "Pay on delivery",
@@ -468,5 +467,12 @@
   "storefront.upsell.scroll_right": "Scroll right",
   "storefront.upsell.this_product": "this product",
   "storefront.upsell.title": "Recommended for you",
-  "storefront.upsell.title_alt": "Product Recommendations"
+  "storefront.upsell.title_alt": "Product Recommendations",
+  "error.cod.partial_unavailable": "Part payment is not available for this order. Please choose Cash on Delivery or pay online.",
+  "storefront.cod.opening_checkout": "Opening secure checkout…",
+  "storefront.cod.partial_button": "Pay {amount} now",
+  "storefront.cod.partial_desc": "Pay {advance} now online, {balance} on delivery",
+  "storefront.cod.partial_note": "You'll pay {advance} in the store's secure checkout. Keep {balance} ready at delivery.",
+  "storefront.cod.partial_pay_now": "Pay now",
+  "storefront.cod.partial_title": "Part payment"
 }

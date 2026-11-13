@@ -217,6 +217,23 @@ function cods_tracking($tracking) {
     ];
 }
 
+// Partial COD for the popup (mirrors sanitizePartialCod in
+// app/utils/partial-cod.shared.js); null = off. The popup shows the split, the
+// app server (api/cod/partial-cod) works out and checks the real amounts.
+function cods_partial_cod($value) {
+    $p = is_array($value) ? $value : [];
+    if (empty($p['enabled'])) return null;
+    $amount = is_numeric($p['amount'] ?? null) ? max(1, min(100000, round((float)$p['amount'], 2))) : 50;
+    $percent = is_numeric($p['percent'] ?? null) ? max(1, min(90, round((float)$p['percent'], 2))) : 10;
+    return [
+        'mode' => ($p['mode'] ?? '') === 'percent' ? 'percent' : 'fixed',
+        'amount' => $amount,
+        'percent' => $percent,
+        'minOrder' => cods_num($p['minOrder'] ?? 0),
+        'maxOrder' => cods_num($p['maxOrder'] ?? 0),
+    ];
+}
+
 function cods_collection_ids($list) {
     return cods_id_list($list, 50);
 }
@@ -482,6 +499,9 @@ if ($action === 'config') {
         'sheet' => cods_sheet($s['sheet'] ?? null),
         'tracking' => cods_tracking($s['tracking'] ?? null),
         'productPayment' => $payment,
+        // Partial COD (app/utils/partial-cod.shared.js): null = off. The popup
+        // only shows the split; the app server works out the real amounts.
+        'partialCod' => cods_partial_cod($s['partialCod'] ?? null),
     ], 30);
 }
 

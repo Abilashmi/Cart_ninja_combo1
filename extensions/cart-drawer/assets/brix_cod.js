@@ -95,6 +95,7 @@
     invalid_phone: ['error.cod.invalid_phone', 'Enter a valid 10-digit mobile number.'],
     invalid_pincode: ['error.cod.invalid_pincode', 'Enter a valid 6-digit PIN code.'],
     otp_invalid: ['error.cod.otp_invalid', 'Enter the 4-digit code from the SMS.'],
+    partial_unavailable: ['error.cod.partial_unavailable', 'Part payment is not available for this order. Please choose Cash on Delivery or pay online.'],
     otp_locked: ['error.cod.otp_locked', 'Too many wrong tries. Ask for a new code.'],
     otp_expired: ['error.cod.otp_expired', 'This code has expired. Ask for a new one.'],
     otp_wrong: ['error.cod.otp_wrong', 'That code doesn\'t match. {attemptsLeft, plural, one {# try left.} other {# tries left.}}'],
@@ -125,6 +126,22 @@
     v[name] = '\u0001';
     return esc(bxT(key, en, v)).replace('\u0001', html);
   }
+  // Partial COD: { advance, balance } for an order total, or null when it isn't on
+  // offer (mirrors partialCodSplit in app/utils/partial-cod.shared.js; the app
+  // server works out the real amounts again).
+  function partialSplit(cfg, total) {
+    var p = cfg && cfg.partialCod;
+    var t = Number(total);
+    if (!p || !isFinite(t) || t <= 0) return null;
+    if (Number(p.minOrder) > 0 && t < Number(p.minOrder)) return null;
+    if (Number(p.maxOrder) > 0 && t > Number(p.maxOrder)) return null;
+    var raw = p.mode === 'percent' ? (t * Number(p.percent)) / 100 : Number(p.amount);
+    if (!isFinite(raw) || raw <= 0) return null;
+    var advance = Math.max(1, Math.ceil(raw - 1e-9));
+    if (advance >= t) return null;
+    return { advance: advance, balance: Math.round((t - advance) * 100) / 100 };
+  }
+
   function errorText(res) {
     var known = res && res.code && Object.prototype.hasOwnProperty.call(COD_ERRORS, res.code) ? COD_ERRORS[res.code] : null;
     var vars = res && res.details && res.details.vars;
@@ -646,6 +663,11 @@
     '.pay{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid #eef0f3}',
     '.pay .ic{flex:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--cod-bg,#111827)}',
     '.pay .cb{flex:1;font-size:13px;color:#6b7280}.pay .cb b{display:block;font-size:14.5px;color:#111827}',
+    // Partial COD: Cash on Delivery and Part payment as two choices.
+    'button.pay{width:100%;background:#fff;font:inherit;text-align:start;cursor:pointer;margin:0 0 8px}',
+    'button.pay[aria-pressed="true"]{border-color:var(--cod-bg,#111827);box-shadow:0 0 0 1px var(--cod-bg,#111827)}',
+    'button.pay .rd{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid #d0d5dd}',
+    'button.pay[aria-pressed="true"] .rd{border:6px solid var(--cod-bg,#111827)}',
     '.nud{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);color:#1e3a8a;font-size:13px}',
     '.nud .cb{flex:1}',
     '.nud .b{width:auto;padding:8px 12px;font-size:13px;border-radius:10px;background:#fff;color:#1e3a8a;border-color:#c7d2fe;flex:none}',
@@ -1550,6 +1572,10 @@
 
   Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
+    // Partial COD: offered for this total? Picked? (this.payMode)
+    var split = partialSplit(this.cfg, q.total);
+    if (!split) this.payMode = 'cod';
+    var partial = Boolean(split) && this.payMode === 'partial';
     var prevBody = this.sh.querySelector('.bd');
     var scrollTop = prevBody ? prevBody.scrollTop : 0;
     var rows = '<div class="rows">' +
@@ -1561,8 +1587,11 @@
       discountRows(q, fmt) +
       chargeRows(this.cfg, q, fmt) +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>' + esc(bxT('storefront.cod.taxes', 'Taxes')) + '</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
-      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>' + esc(bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(q.total) + '</span></div>' +
+      // Part payment: the full amount is the order total, split into Pay now / Pay on delivery below.
+      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>' + esc(partial ? bxT('storefront.drawer.total', 'Total') : bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(q.total) + '</span></div>' +
       (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>' + esc(bxT('storefront.cod.includes_tax', 'Includes {amount} in taxes', { amount: fmt(q.tax) })) + '</span></div>' : '') +
+      (partial ? '<div><span>' + esc(bxT('storefront.cod.partial_pay_now', 'Pay now')) + '</span><span class="num">' + fmt(split.advance) + '</span></div>' +
+        '<div><span>' + esc(bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(split.balance) + '</span></div>' : '') +
       '</div>';
     // The coupon card already shows its saving; this banner is for automatic discounts.
     var autoSaving = (q.comboDiscount || 0) + (q.packDiscount || 0) + (q.coupon && q.coupon.applied ? 0 : q.discounts);
@@ -1574,13 +1603,21 @@
       '<br><span dir="ltr">+91 ' + esc(prettyPhone(this.phone)) + '</span></div><button type="button" class="lk" data-go="address">' + esc(bxT('storefront.common.edit', 'Edit')) + '</button></div>';
     var pay = '<div class="pay"><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div>' +
       icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>';
+    if (split) {
+      // Two choices: the whole amount on delivery, or the advance now online + the rest on delivery.
+      pay = '<button type="button" class="pay" data-act="pay-mode" data-mode="cod" aria-pressed="' + String(!partial) + '"><span class="rd"></span><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div></button>' +
+        '<button type="button" class="pay" data-act="pay-mode" data-mode="partial" aria-pressed="' + String(partial) + '"><span class="rd"></span><div class="ic">' + icon('card', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.partial_title', 'Part payment')) + '</b>' + esc(bxT('storefront.cod.partial_desc', 'Pay {advance} now online, {balance} on delivery', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</div></button>' +
+        (partial ? '<p class="mu" style="margin:0 0 4px;font-size:12.5px">' + esc(bxT('storefront.cod.partial_note', 'You\'ll pay {advance} in the store\'s secure checkout. Keep {balance} ready at delivery.', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</p>' : '');
+    }
     this.frame(bxT('storefront.cod.review_title', 'Review your order'), 'address', 'review',
       this.lineList(q) + this.couponBlock() + save + rows +
       '<div class="ttl">' + esc(bxT('storefront.cod.deliver_to', 'Deliver to')) + '</div>' + ship + this.deliveryBlock() +
       '<div class="ttl">' + esc(bxT('storefront.cod.payment', 'Payment')) + '</div>' + pay + nudge + '<div data-err></div>',
       '<label class="agr"><input type="checkbox" name="policy"' + (this.policyOk ? ' checked' : '') + '>' +
       '<span>' + bxHtml('storefront.cod.agree', 'I agree to the {terms}', 'terms', '<a href="' + esc(termsUrl(this.cfg)) + '" target="_blank" rel="noopener">' + esc(bxT('storefront.cod.terms', 'Terms and conditions')) + '</a>') + '</span></label>' +
-      '<button type="submit" class="b p">' + esc(bxT('storefront.cod.place_order', 'Place COD order')) + ' \u00b7 ' + fmt(q.total) + '</button>');
+      '<button type="submit" class="b p">' + (partial
+        ? esc(bxT('storefront.cod.partial_button', 'Pay {amount} now', { amount: fmt(split.advance) }))
+        : esc(bxT('storefront.cod.place_order', 'Place COD order')) + ' \u00b7 ' + fmt(q.total)) + '</button>');
     this.submitAction = 'place';
     var body = this.sh.querySelector('.bd');
     if (body) body.scrollTop = scrollTop;
@@ -1638,6 +1675,7 @@
       if (typeof cb === 'function') { try { cb(); } catch (err) { /* caller */ } }
       return;
     }
+    if (act === 'pay-mode') { this.payMode = t.getAttribute('data-mode') === 'partial' ? 'partial' : 'cod'; this.setError(''); this.renderReview(); return; }
     if (act === 'resend') { this.sendCode(true); return; }
     if (act === 'summary') {
       var box = t.closest('.sum');
@@ -1721,6 +1759,7 @@
     if (this.submitAction === 'place') {
       var active = (this.shadow && this.shadow.activeElement) || document.activeElement;
       if (active && active.name === 'coupon') return this.applyCoupon();
+      if (this.payMode === 'partial' && this.quote && partialSplit(this.cfg, this.quote.total)) return this.payPartial();
       return this.placeOrder();
     }
   };
@@ -1848,6 +1887,76 @@
       });
     });
   };
+
+  // Partial COD: the app server prices the order like a COD order and makes a
+  // one-time code that leaves only the advance to pay (app/services/
+  // partial-cod.server.js). Shopify checkout then opens for these items with
+  // the code, the shopper's address filled in, and the _brix_partial_cod
+  // attribute (BRIX's payment customization hides Cash on Delivery there, so
+  // the advance is paid online). When the order comes in, BRIX adds the rest
+  // back as "Balance payable on delivery" and Shopify shows it Partially paid.
+  Sheet.prototype.payPartial = function () {
+    var self = this;
+    var policy = this.sh.querySelector('[name="policy"]');
+    if (policy && !policy.checked) {
+      this.setError(bxT('storefront.cod.need_terms', 'Please agree to the Terms and conditions to place your order.'));
+      policy.parentNode.classList.add('bad');
+      vibrate(50);
+      return;
+    }
+    this.setError('');
+    this.setBusy(true, bxT('storefront.cod.opening_checkout', 'Opening secure checkout\u2026'));
+    api('partial-cod', {
+      surface: this.opts.surface,
+      items: this.items,
+      coupon: this.quote && this.quote.coupon && this.quote.coupon.applied ? this.quote.coupon.code : null,
+      cartCodes: this.cartCodes,
+      cartAttributes: this.cartAttributes,
+      address: this.addr,
+      delivery: this.delivery,
+    }).then(function (json) {
+      if (!json.success || !json.code) {
+        self.setBusy(false);
+        if (json.code === 'delivery_changed') { self.reviewNotice = json.error; self.go('review'); return; }
+        self.setError(errorText(json));
+        return;
+      }
+      window.location.href = partialCheckoutUrl(self.items, json, self.addr, self.phone);
+    });
+  };
+
+  // The Shopify checkout of a Partial COD order: a cart permalink for exactly
+  // these items, with the code, the address filled in and the attribute that
+  // keeps Cash on Delivery off that checkout.
+  function partialCheckoutUrl(items, res, addr, phone) {
+    var merged = {};
+    var order = [];
+    (items || []).forEach(function (it) {
+      var id = String(it.variantId || it.id || '');
+      if (!/^\d+$/.test(id)) return;
+      if (!merged[id]) { merged[id] = 0; order.push(id); }
+      merged[id] += Number(it.quantity) || 1;
+    });
+    var a = addr || {};
+    var name = String(a.name || '').trim().split(/\s+/);
+    var first = name.shift() || '';
+    var params = [
+      ['discount', res.code],
+      ['attributes[_brix_partial_cod]', String(res.advance)],
+      ['checkout[email]', a.email || ''],
+      ['checkout[shipping_address][first_name]', first],
+      ['checkout[shipping_address][last_name]', name.join(' ') || first],
+      ['checkout[shipping_address][address1]', a.address1 || ''],
+      ['checkout[shipping_address][address2]', a.address2 || ''],
+      ['checkout[shipping_address][city]', a.city || ''],
+      ['checkout[shipping_address][province]', a.state || ''],
+      ['checkout[shipping_address][zip]', a.pincode || ''],
+      ['checkout[shipping_address][country]', 'IN'],
+      ['checkout[shipping_address][phone]', phone ? '+91' + phone : ''],
+    ].filter(function (pair) { return pair[1]; });
+    return ROOT + 'cart/' + order.map(function (id) { return id + ':' + merged[id]; }).join(',') + '?' +
+      params.map(function (pair) { return encodeURIComponent(pair[0]).replace(/%5B/g, '[').replace(/%5D/g, ']') + '=' + encodeURIComponent(pair[1]); }).join('&');
+  }
 
   /* ---------- public: open ---------- */
 

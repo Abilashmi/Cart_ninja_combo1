@@ -6,10 +6,12 @@ require_once __DIR__ . '/config.php';
  * order (extensions/cart-drawer/assets/brix_cod.js). The shopper's browser
  * only ever talks to this PHP backend.
  *
- *   POST { endpoint: 'otp' | 'quote' | 'order' | 'prepaid-code', shop, ...payload }
+ *   POST { endpoint: 'otp' | 'quote' | 'order' | 'prepaid-code' | 'partial-cod', shop, ...payload }
  *
  * 'prepaid-code' = the one-time code for the product page's prepaid saving
  * when Pay Online goes to Shiprocket (app/services/prepaid-code.server.js).
+ * 'partial-cod' = Partial COD: the one-time code that leaves only the advance
+ * to pay in Shopify checkout (app/services/partial-cod.server.js).
  *
  * Sending the SMS code, pricing the cart through Shopify and creating the
  * Shopify order need the store's Shopify access, which only the BRIX app
@@ -44,7 +46,7 @@ $body = json_decode($raw ?: '{}', true);
 if (!is_array($body)) codc_fail(400, 'invalid_request', 'Refresh the page and try again.');
 
 $endpoint = $body['endpoint'] ?? '';
-if (!in_array($endpoint, ['otp', 'quote', 'order', 'prepaid-code'], true)) codc_fail(400, 'invalid_request', 'Refresh the page and try again.');
+if (!in_array($endpoint, ['otp', 'quote', 'order', 'prepaid-code', 'partial-cod'], true)) codc_fail(400, 'invalid_request', 'Refresh the page and try again.');
 unset($body['endpoint']);
 
 $secret = getenv('SHOPIFY_API_KEY') ?: '';
