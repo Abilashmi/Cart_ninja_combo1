@@ -163,9 +163,73 @@
     "status": "ai",
     "srcHash": "01f2289a"
   },
+  "admin.home.art_total": {
+    "status": "ai",
+    "srcHash": "ad066d9d"
+  },
   "admin.home.beginner": {
     "status": "ai",
     "srcHash": "d08ad5a7"
+  },
+  "admin.home.cart_art_away": {
+    "status": "ai",
+    "srcHash": "4d311530"
+  },
+  "admin.home.cart_art_checkout": {
+    "status": "ai",
+    "srcHash": "4a06ab59"
+  },
+  "admin.home.cart_art_unlocked": {
+    "status": "ai",
+    "srcHash": "26c4fc34"
+  },
+  "admin.home.cod_art_fee": {
+    "status": "ai",
+    "srcHash": "06894ef9"
+  },
+  "admin.home.cod_art_otp": {
+    "status": "ai",
+    "srcHash": "674fa1f1"
+  },
+  "admin.home.cod_art_rules": {
+    "status": "ai",
+    "srcHash": "6032d7c2"
+  },
+  "admin.home.combo_art_offer": {
+    "status": "ai",
+    "srcHash": "43919009"
+  },
+  "admin.home.combo_art_title": {
+    "status": "ai",
+    "srcHash": "dfcb0727"
+  },
+  "admin.home.combo_art_unlocked": {
+    "status": "ai",
+    "srcHash": "825a0dbc"
+  },
+  "admin.home.coupon_art_applied": {
+    "status": "ai",
+    "srcHash": "3c43c66a"
+  },
+  "admin.home.coupon_art_apply": {
+    "status": "ai",
+    "srcHash": "ca77bbdb"
+  },
+  "admin.home.coupon_art_code": {
+    "status": "ai",
+    "srcHash": "91f7bf18"
+  },
+  "admin.home.coupon_art_off": {
+    "status": "ai",
+    "srcHash": "b5a652ce"
+  },
+  "admin.home.coupon_art_saved": {
+    "status": "ai",
+    "srcHash": "da1d9abf"
+  },
+  "admin.home.coupon_art_title": {
+    "status": "ai",
+    "srcHash": "832e8b77"
   },
   "admin.home.embed": {
     "status": "ai",
@@ -198,6 +262,18 @@
   "admin.home.embed_turn_on_title": {
     "status": "ai",
     "srcHash": "b72e95e7"
+  },
+  "admin.home.explore_sub": {
+    "status": "ai",
+    "srcHash": "78ffcc18"
+  },
+  "admin.home.fbt_art_add": {
+    "status": "ai",
+    "srcHash": "e7651b52"
+  },
+  "admin.home.fbt_art_title": {
+    "status": "ai",
+    "srcHash": "8f866ea7"
   },
   "admin.home.feedback": {
     "status": "ai",
@@ -235,6 +311,14 @@
     "status": "ai",
     "srcHash": "d1632f3e"
   },
+  "admin.home.help": {
+    "status": "ai",
+    "srcHash": "b89df01a"
+  },
+  "admin.home.help_label": {
+    "status": "ai",
+    "srcHash": "2aa714c7"
+  },
   "admin.home.intermediate": {
     "status": "ai",
     "srcHash": "75fece84"
@@ -247,9 +331,17 @@
     "status": "ai",
     "srcHash": "312d3185"
   },
+  "admin.home.kpi_orders": {
+    "status": "ai",
+    "srcHash": "8de8e37e"
+  },
   "admin.home.kpi_revenue": {
     "status": "ai",
     "srcHash": "0004fb3b"
+  },
+  "admin.home.kpi_revenue_generated": {
+    "status": "ai",
+    "srcHash": "08221eae"
   },
   "admin.home.kpi_upsell": {
     "status": "ai",
@@ -259,9 +351,73 @@
     "status": "ai",
     "srcHash": "33dad1af"
   },
+  "admin.home.mod_cart_desc": {
+    "status": "ai",
+    "srcHash": "e2110774"
+  },
+  "admin.home.mod_cart_title": {
+    "status": "ai",
+    "srcHash": "30e692d0"
+  },
+  "admin.home.mod_cod_desc": {
+    "status": "ai",
+    "srcHash": "d3e53036"
+  },
+  "admin.home.mod_cod_title": {
+    "status": "ai",
+    "srcHash": "2d67def9"
+  },
+  "admin.home.mod_combo_desc": {
+    "status": "ai",
+    "srcHash": "f8ef3eec"
+  },
+  "admin.home.mod_combo_title": {
+    "status": "ai",
+    "srcHash": "2ef2bd7e"
+  },
+  "admin.home.mod_coupon_desc": {
+    "status": "ai",
+    "srcHash": "e4303ea5"
+  },
+  "admin.home.mod_coupon_title": {
+    "status": "ai",
+    "srcHash": "d554478b"
+  },
+  "admin.home.mod_fbt_desc": {
+    "status": "ai",
+    "srcHash": "7085fc75"
+  },
+  "admin.home.mod_fbt_title": {
+    "status": "ai",
+    "srcHash": "33dad1af"
+  },
+  "admin.home.mod_packs_desc": {
+    "status": "ai",
+    "srcHash": "ded15ec8"
+  },
+  "admin.home.mod_packs_title": {
+    "status": "ai",
+    "srcHash": "c1060409"
+  },
+  "admin.home.mod_toggle": {
+    "status": "ai",
+    "srcHash": "5bc34714"
+  },
   "admin.home.open_theme_editor": {
     "status": "ai",
     "srcHash": "e10a0435"
+  },
+  "admin.home.packs_art_add": {
+    "status": "ai",
+    "srcHash": "d5a50b39"
+  },
+  "admin.home.packs_art_buy": {
+    "status": "ai",
+    "srcHash": "e0196760"
+  },
+  "admin.home.packs_art_save": {
+    "status": "ai",
+    "srcHash": "b3314f8c"
   },
   "admin.home.plan_badge": {
     "status": "ai",
@@ -274,6 +430,26 @@
   "admin.home.quick_links": {
     "status": "ai",
     "srcHash": "922c9915"
+  },
+  "admin.home.range_30": {
+    "status": "ai",
+    "srcHash": "d0778b33"
+  },
+  "admin.home.range_7": {
+    "status": "ai",
+    "srcHash": "35b9d98f"
+  },
+  "admin.home.range_90": {
+    "status": "ai",
+    "srcHash": "87c706e5"
+  },
+  "admin.home.range_label": {
+    "status": "ai",
+    "srcHash": "8998724b"
+  },
+  "admin.home.range_today": {
+    "status": "ai",
+    "srcHash": "e7c0775e"
   },
   "admin.home.rate_again": {
     "status": "ai",
@@ -466,6 +642,10 @@
   "admin.home.welcome_back": {
     "status": "ai",
     "srcHash": "48e13026"
+  },
+  "admin.home.welcome_modules": {
+    "status": "ai",
+    "srcHash": "0a0dcfbd"
   },
   "admin.home.welcome_sub": {
     "status": "ai",
