@@ -1,9 +1,9 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useEffect, useState } from 'react';
 import { BlockStack, Box, ButtonGroup, Button, Card, Checkbox, InlineStack, RangeSlider, Text, TextField } from '@shopify/polaris';
-import { checkCodRules, codButtonLook, codCharges, codFeeOf, codPriceValues, DEFAULT_COD_SETTINGS, fillPriceTags, showsCodFee } from '../../utils/cod.shared';
+import { checkCodRules, codButtonLook, codCharges, codFeeOf, codPriceValues, DEFAULT_COD_SETTINGS, fillPriceTags } from '../../utils/cod.shared';
 import { tagMoney } from '../../utils/price-tags.shared.js';
-import { codButtonColors, codButtonType, codDrawerLayout, codDrawerSize, codFeeHint, codFeeLabel } from './codButtonLook';
+import { codButtonColors, codButtonType, codDrawerLayout, codDrawerSize, codFeeLabel } from './codButtonLook';
 import { PaymentOptionsScreen } from './PaymentOptionsPreview';
 import { prepaidUsable, productPaymentPricing } from '../../utils/product-payment.shared';
 import { sanitizeContinueShopping, continueShoppingStyle } from '../../utils/continue-shopping.shared.js';
@@ -158,7 +158,7 @@ function DrawerScreen({ settings, money, cart, codState, hiddenWhy }) {
       key="cod"
       settings={settings}
       label={codText(settings, settings.buttons.drawerText, cart, money)}
-      sub={codState.reason || (showsCodFee(settings.buttons.drawerText) ? '' : codState.sub)}
+      sub={codState.reason || ''}
       disabled={Boolean(codState.reason)}
       size={codDrawerSize(settings, where)}
       scale={1}
@@ -253,7 +253,6 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
   const minMaxReason = rule && (rule.code === 'below_min' || rule.code === 'above_max')
     ? (rule.code === 'below_min' ? `Available on orders from ${money(settings.minOrder)}` : `Available on orders up to ${money(settings.maxOrder)}`)
     : '';
-  const feeHint = codFeeHint(settings, money, cart);
   const feeShown = settings.showCodFee !== false;
   const toFreeShipping = settings.shippingFee > 0 && settings.freeShippingAbove > 0 && cart < settings.freeShippingAbove
     ? settings.freeShippingAbove - cart : 0;
@@ -272,7 +271,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
     else if (excluded && settings.excludedBehavior === 'hide') hiddenWhy = 'cart has an excluded product';
     else if (excluded) codState = { reason: 'Not available for some items in your cart' };
     else if (minMaxReason) codState = { reason: minMaxReason };
-    else codState = { sub: feeHint };
+    else codState = { sub: '' }; // no fee line under the button: {cod_fee} / {cod_price} in its text show the fee
     screen = <DrawerScreen settings={settings} money={money} cart={cart} codState={codState} hiddenWhy={hiddenWhy} />;
     caption = codState ? PLACEMENT_NOTE[settings.drawerPlacement || 'above'] : null;
     if (codState?.reason && settings.drawerPlacement === 'replace') caption = 'COD can\'t be used for this cart, so Checkout stays and COD shows as unavailable above it.';
@@ -304,7 +303,7 @@ export function buildCodScreen({ settings, money, surface, cart, excludedOn = fa
                 ? (picked.replace ? 'replace' : pb.restPlacement === 'below' ? 'below' : 'above')
                 : pb.buyNowPlacement || (pb.replaceBuyNow === false ? 'above' : 'replace');
               const cod = codHidden ? <Hidden key="cod">COD button hidden: {why}</Hidden>
-                : <CodButton key="cod" settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : showsCodFee(settings.buttons.productText) ? '' : feeHint} disabled={excluded} size={pb} />;
+                : <CodButton key="cod" settings={settings} look={codButtonLook(settings, 'product')} label={codText(settings, settings.buttons.productText, cart, money)} sub={excluded ? 'Not available for this product' : ''} disabled={excluded} size={pb} />;
               // Buy it now is only hidden while a usable COD button replaces it, as on the storefront.
               const bin = (codHidden || excluded || place !== 'replace') && (
                 <div key="bin" className="cod-scr-bin">

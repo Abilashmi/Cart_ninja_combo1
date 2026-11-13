@@ -206,7 +206,6 @@
   // {{tag}} too. Mirrors app/utils/price-tags.shared.js fillPriceTags.
   var PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving|partial_cod_amount)\s*\}?\}/g;
   function hasPriceTags(text) { return new RegExp(PRICE_TAG.source).test(String(text || '')); }
-  function showsCodFee(text) { return /\{\{?\s*(cod_fee|cod_price)\s*\}?\}/.test(String(text || '')); }
   function priceTags(text, values, fmt) {
     return String(text || '').replace(PRICE_TAG, function (all, key) {
       var n = values ? values[key] : null;
@@ -2109,12 +2108,9 @@
     });
   }
 
-  // "+₹40 Cash on Delivery Fee" under the button, unless the merchant hides
-  // the fee; `price` = the order it's for (a % fee needs it).
-  function feeHint(cfg, fmt, price, ids) {
-    var fee = codFeeFor(cfg, price, ids);
-    return fee > 0 && cfg.showCodFee !== false ? '+' + fmt(fee) + ' ' + feeLabel(cfg) : '';
-  }
+  // No "+₹40 Cash on Delivery Fee" line under the COD buttons: the fee shows
+  // on a button only where the merchant puts {cod_fee} / {cod_price} in its
+  // text (it is always in the popup's bill).
 
   var PLACEMENTS = ['replace', 'above', 'below'];
   function placementOf(cfg) { return PLACEMENTS.indexOf(cfg.drawerPlacement) !== -1 ? cfg.drawerPlacement : 'above'; }
@@ -2297,7 +2293,7 @@
     total = Math.round((total - shownSaving) * 100) / 100;
     var saving = Math.round((codTotal - total) * 100) / 100;
     var ids = cartProductIds(cart);
-    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal, saving: saving, ids: ids } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt, codTotal, ids), subtotal: subtotal, total: total, codTotal: codTotal, saving: saving, ids: ids };
+    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal, saving: saving, ids: ids } : { sub: '', subtotal: subtotal, total: total, codTotal: codTotal, saving: saving, ids: ids };
   }
 
   // Show-only prepaid (paymentValue.prepaid.showOnly): the saving the online
@@ -3236,11 +3232,10 @@
     }
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
-    var fmt = buttonMoney(cfg.currency);
     var text = productText(cfg);
     var here = info && info.id ? [info.id] : null;
     var label = codLabel(cfg, text, productPrice(form, info), here);
-    var sub = excluded ? bxT('storefront.cod.not_for_product', 'Not available for this product') : showsCodFee(text) ? '' : feeHint(cfg, fmt, productPrice(form, info), here);
+    var sub = excluded ? bxT('storefront.cod.not_for_product', 'Not available for this product') : '';
     slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
     var keepsBuyNow = !replacing;
@@ -3249,10 +3244,6 @@
       var price = packOrder && packPrice != null ? packPrice : productPrice(form, info);
       var next = codLabel(cfg, text, price, here);
       if (el && el.textContent !== next) el.textContent = next;
-      // A % COD fee follows the variant and quantity too.
-      var subEl = slot.querySelector('[data-brix-cod-sub]');
-      var nextSub = excluded || showsCodFee(text) ? null : feeHint(cfg, fmt, price, here);
-      if (subEl && nextSub && subEl.textContent !== nextSub) subEl.textContent = nextSub;
       if (keepsBuyNow) relabelBuyNow(cfg, form, info);
     };
     productMount.relabel();

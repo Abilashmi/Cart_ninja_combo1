@@ -246,7 +246,7 @@ if (scenario === 'live') {
     }));
     const num = (x) => Number(String(x).replace(/[^\d.]/g, ''));
     const m = /^Buy it for (.+) COD$/.exec(t.label);
-    check('Price tags: {price} shows the cart total, and the fee line stays', Boolean(m) && num(m[1]) === num(t.subtotal) && /49/.test(t.sub), JSON.stringify(t));
+    check('Price tags: {price} shows the cart total, no fee line under the button', Boolean(m) && num(m[1]) === num(t.subtotal) && t.sub === '', JSON.stringify(t));
   }
   await page.getByLabel('Button text', { exact: true }).fill('Pay cash on delivery');
   await page.waitForTimeout(200);

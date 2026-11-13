@@ -134,7 +134,7 @@ await page.waitForFunction(() => window.BrixCod);
 const productBtn = page.locator('[data-brix-cod-slot] [data-brix-cod-btn]');
 await productBtn.waitFor({ timeout: 5000 });
 check('product page: button injected under Add to cart', (await productBtn.textContent()).includes('Buy with Cash on Delivery'));
-check('product page: fee shown on the button', (await productBtn.textContent()).includes('49'));
+check('product page: no fee line under the button (the text has no fee tag)', !(await productBtn.textContent()).includes('49'));
 
 // Drawer button rendering rules
 await page.evaluate(() => {

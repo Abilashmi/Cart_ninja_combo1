@@ -891,7 +891,7 @@ export default function CodCustomizePage() {
                   </BlockStack>
                   <Checkbox
                     label="Show fee to customers"
-                    helpText={form.showCodFee ? 'Its own line in the order summary, and under the COD button.' : 'Still charged, but shown inside one "Delivery charges" line, and not on the COD button.'}
+                    helpText={form.showCodFee ? 'Its own line in the COD popup\'s order summary. To show it on a COD button, put {cod_fee} or {cod_price} in the button text.' : 'Still charged, but shown inside one "Delivery charges" line in the COD popup.'}
                     checked={form.showCodFee}
                     onChange={set('showCodFee')}
                   />
