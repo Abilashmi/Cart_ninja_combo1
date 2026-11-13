@@ -60,6 +60,10 @@ export function createQuickShopKit(core) {
     qs_filter_sort_label: 'Sort By',
     qs_filter_instock: false,
     qs_filter_instock_label: 'In stock',
+    // Type, Brand, the own tag filter and Sort: dropdowns, or each as its own
+    // labelled row of chips (like a collection filter group: a tap picks, a
+    // tap on the picked one clears).
+    qs_filter_dd_style: 'dropdown', // dropdown | chips
     // Collection filter groups: each group is one filter ("Weight", "Years")
     // whose options are store collections (any collection, not only the
     // page's), shown as a dropdown or a chip row; one option per group.
@@ -822,8 +826,15 @@ export function createQuickShopKit(core) {
 
     var dd = ui.dd || {};
     var menus = [];
+    var ddChips = opt(config, 'qs_filter_dd_style') === 'chips';
     function addMenu(id, label, values) {
       if (values.length < 2) return;
+      if (ddChips) {
+        var chipOptions = [];
+        for (var ci = 0; ci < values.length; ci++) chipOptions.push({ value: values[ci], label: values[ci], on: dd[id] === values[ci] });
+        chipGroups.push({ id: id, label: label, style: 'chips', value: dd[id] || '', options: chipOptions });
+        return;
+      }
       var options = [{ value: '', label: 'All' }];
       for (var i = 0; i < values.length; i++) options.push({ value: values[i], label: values[i] });
       menus.push({ id: id, label: label, value: dd[id] || '', options: options, open: ui.menu === id });
@@ -859,7 +870,14 @@ export function createQuickShopKit(core) {
       addMenu('custom', opt(config, 'qs_filter_custom_label'), present.length ? present : custom);
     }
     if (on(config, 'qs_filter_sort')) {
-      menus.push({ id: 'sort', label: opt(config, 'qs_filter_sort_label'), value: dd.sort && dd.sort !== 'featured' ? dd.sort : '', options: SORTS, open: ui.menu === 'sort', isSort: true });
+      var sortValue = dd.sort && dd.sort !== 'featured' ? dd.sort : '';
+      if (ddChips) {
+        var sortChips = [];
+        for (var si = 0; si < SORTS.length; si++) sortChips.push({ value: SORTS[si].value, label: SORTS[si].label, on: (sortValue || 'featured') === SORTS[si].value });
+        chipGroups.push({ id: 'sort', label: opt(config, 'qs_filter_sort_label'), style: 'chips', value: sortValue, options: sortChips });
+      } else {
+        menus.push({ id: 'sort', label: opt(config, 'qs_filter_sort_label'), value: sortValue, options: SORTS, open: ui.menu === 'sort', isSort: true });
+      }
     }
     var active = (ui.chip && ui.chip !== 'all') || !!ui.instock || !!dd.type || !!dd.brand || !!dd.custom || (dd.sort && dd.sort !== 'featured');
     for (var ga = 0; ga < groups.length; ga++) if (groups[ga].value) active = true;

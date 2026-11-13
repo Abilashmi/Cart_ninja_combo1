@@ -534,7 +534,15 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         {toggleWithLabel('qs_filter_price', 'qs_filter_price_label', 'Price slider', 'Shoppers drag from – to between the cheapest and dearest product on the page.')}
         {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.')}
         {toggleWithLabel('qs_filter_instock', 'qs_filter_instock_label', '“In stock” chip', 'Hides sold-out products when on.')}
-        <Text as="p" variant="bodySm" tone="subdued">A dropdown only shows when the products on the page have at least two values for it.</Text>
+        {(isOn(config, 'qs_filter_type') || isOn(config, 'qs_filter_brand') || isOn(config, 'qs_filter_custom') || isOn(config, 'qs_filter_sort')) && (
+          <Select
+            label="Type, Brand, your tag filter and Sort shown as"
+            options={[{ label: 'Dropdowns', value: 'dropdown' }, { label: 'Rows of chips', value: 'chips' }]}
+            value={val(config, 'qs_filter_dd_style')} onChange={(v) => updateConfig('qs_filter_dd_style', v)}
+            helpText={val(config, 'qs_filter_dd_style') === 'chips' ? 'Each one is its own labelled row of chips. A tap picks, a tap on the picked chip clears it.' : 'Each one is a chip that opens a list.'}
+          />
+        )}
+        <Text as="p" variant="bodySm" tone="subdued">A filter only shows when the products on the page have at least two values for it.</Text>
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Filter look</Text></div>
         <Select
           label="Where filters show on desktop"

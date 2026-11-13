@@ -802,6 +802,26 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   check('tap again clears', (await titles(page)).length === 5);
   await page.close();
 
+  // Type / Brand / Cut / Sort as rows of chips instead of dropdowns.
+  ({ page } = await openCombo({ ...baseConfig, qs_filter_dd_style: 'chips' }, wp(QUANTITY)));
+  const rowsOf = () => page.$$eval('.bxq-gchips', (els) => els.map((e) => e.querySelector('.bxq-gchips-label').textContent + ': ' + [...e.querySelectorAll('[data-combo-action="qs-group"]')].map((b) => b.textContent).join(', ')));
+  const rows = await rowsOf();
+  check('chips style: Type, Brand, Cut and Sort are labelled chip rows, no dropdowns', ['Type: ', 'Brand: ', 'Cut: ', 'Sort By: '].every((l) => rows.some((r) => r.startsWith(l))) && (await page.$$('[data-combo-action="qs-menu"]')).length === 0, rows.join(' | '));
+  check('chips style: Sort lists every order, Featured picked', rows.some((r) => r === 'Sort By: Featured, Price: low to high, Price: high to low, Biggest discount, Name: A to Z') && (await page.$eval('[data-menu="sort"][data-value="featured"]', (b) => b.classList.contains('is-on'))), rows.join(' | '));
+  await page.click('[data-combo-action="qs-group"][data-menu="brand"][data-value="Licious"]');
+  check('chips style: Brand chip filters to Licious and is shown picked', (await titles(page)).length === 2 && (await page.$eval('[data-menu="brand"][data-value="Licious"]', (b) => b.getAttribute('aria-pressed') === 'true')));
+  await page.click('[data-combo-action="qs-group"][data-menu="sort"][data-value="price_desc"]');
+  check('chips style: Sort chip orders high to low (₹399 before ₹199)', (await titles(page)).join('|') === 'Mutton Drumstick Pack|Licious Chicken Curry Cut (Large Pieces)', (await titles(page)).join('|'));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-dd-chips.png') });
+  await page.click('[data-combo-action="qs-group"][data-menu="brand"][data-value="Licious"]');
+  check('chips style: tap the picked chip again clears it', (await titles(page)).length === 5);
+  await page.close();
+  ({ page } = await openCombo({ ...baseConfig, qs_filter_dd_style: 'chips' }, wp(QUANTITY), { viewport: { width: 390, height: 844 } }));
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  check('chips style on a phone: chip rows scroll inside, the page does not widen', overflow <= 0, String(overflow));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-dd-chips-phone.png') });
+  await page.close();
+
   // Filters in a left column (desktop) and a slider inside a dropdown.
   ({ page } = await openCombo({ ...baseConfig, ...qty, qs_filter_position: 'left', qs_filter_weight: true, qs_filter_price: true, qs_filter_brand: true }, wp(QUANTITY)));
   const side = await page.$eval('.bxq-side', (e) => { const r = e.getBoundingClientRect(); const g = document.querySelector('.bxq-grid').getBoundingClientRect(); return { w: Math.round(r.width), left: r.left < g.left, top: Math.abs(r.top - g.top) < 4 }; });
