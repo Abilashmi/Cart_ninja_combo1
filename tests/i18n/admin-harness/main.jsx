@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { RouterProvider, createMemoryRouter } from 'react-router';
+import { RouterProvider, createMemoryRouter, useLocation } from 'react-router';
 import { AppProvider } from '@shopify/polaris';
 import enTranslations from '@shopify/polaris/locales/en.json';
 import '@shopify/polaris/build/esm/styles.css';
@@ -37,7 +37,8 @@ const router = createMemoryRouter([
       return form.intent === 'language' ? { ok: true, language: form.language } : { ok: true, priceDisplay: { wholePrices: form.wholePrices === 'true' } };
     },
   },
-  { path: '/app', Component: DashboardPage, loader: () => ({ shop: 'demo.myshopify.com', initialAnalytics: {} }) },
+  ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),
+  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: new URL(request.url).searchParams.get('range') || '30d' }) },
 ], { initialEntries: [pageName === 'home' ? '/app' : '/app/additional'] });
 
 createRoot(document.getElementById('root')).render(

@@ -199,6 +199,10 @@
     "status": "ai",
     "srcHash": "b72e95e7"
   },
+  "admin.home.explore_sub": {
+    "status": "ai",
+    "srcHash": "78ffcc18"
+  },
   "admin.home.feedback": {
     "status": "ai",
     "srcHash": "3055fe22"
@@ -235,6 +239,14 @@
     "status": "ai",
     "srcHash": "d1632f3e"
   },
+  "admin.home.help": {
+    "status": "ai",
+    "srcHash": "b89df01a"
+  },
+  "admin.home.help_label": {
+    "status": "ai",
+    "srcHash": "2aa714c7"
+  },
   "admin.home.intermediate": {
     "status": "ai",
     "srcHash": "75fece84"
@@ -247,9 +259,17 @@
     "status": "ai",
     "srcHash": "312d3185"
   },
+  "admin.home.kpi_orders": {
+    "status": "ai",
+    "srcHash": "8de8e37e"
+  },
   "admin.home.kpi_revenue": {
     "status": "ai",
     "srcHash": "0004fb3b"
+  },
+  "admin.home.kpi_revenue_generated": {
+    "status": "ai",
+    "srcHash": "08221eae"
   },
   "admin.home.kpi_upsell": {
     "status": "ai",
@@ -258,6 +278,58 @@
   "admin.home.link_fbt": {
     "status": "ai",
     "srcHash": "33dad1af"
+  },
+  "admin.home.mod_cart_desc": {
+    "status": "ai",
+    "srcHash": "e2110774"
+  },
+  "admin.home.mod_cart_title": {
+    "status": "ai",
+    "srcHash": "30e692d0"
+  },
+  "admin.home.mod_cod_desc": {
+    "status": "ai",
+    "srcHash": "d3e53036"
+  },
+  "admin.home.mod_cod_title": {
+    "status": "ai",
+    "srcHash": "2d67def9"
+  },
+  "admin.home.mod_combo_desc": {
+    "status": "ai",
+    "srcHash": "f8ef3eec"
+  },
+  "admin.home.mod_combo_title": {
+    "status": "ai",
+    "srcHash": "2ef2bd7e"
+  },
+  "admin.home.mod_coupon_desc": {
+    "status": "ai",
+    "srcHash": "e4303ea5"
+  },
+  "admin.home.mod_coupon_title": {
+    "status": "ai",
+    "srcHash": "d554478b"
+  },
+  "admin.home.mod_fbt_desc": {
+    "status": "ai",
+    "srcHash": "7085fc75"
+  },
+  "admin.home.mod_fbt_title": {
+    "status": "ai",
+    "srcHash": "33dad1af"
+  },
+  "admin.home.mod_packs_desc": {
+    "status": "ai",
+    "srcHash": "ded15ec8"
+  },
+  "admin.home.mod_packs_title": {
+    "status": "ai",
+    "srcHash": "c1060409"
+  },
+  "admin.home.mod_toggle": {
+    "status": "ai",
+    "srcHash": "5bc34714"
   },
   "admin.home.open_theme_editor": {
     "status": "ai",
@@ -274,6 +346,26 @@
   "admin.home.quick_links": {
     "status": "ai",
     "srcHash": "922c9915"
+  },
+  "admin.home.range_30": {
+    "status": "ai",
+    "srcHash": "d0778b33"
+  },
+  "admin.home.range_7": {
+    "status": "ai",
+    "srcHash": "35b9d98f"
+  },
+  "admin.home.range_90": {
+    "status": "ai",
+    "srcHash": "87c706e5"
+  },
+  "admin.home.range_label": {
+    "status": "ai",
+    "srcHash": "8998724b"
+  },
+  "admin.home.range_today": {
+    "status": "ai",
+    "srcHash": "e7c0775e"
   },
   "admin.home.rate_again": {
     "status": "ai",
@@ -466,6 +558,10 @@
   "admin.home.welcome_back": {
     "status": "ai",
     "srcHash": "48e13026"
+  },
+  "admin.home.welcome_modules": {
+    "status": "ai",
+    "srcHash": "0a0dcfbd"
   },
   "admin.home.welcome_sub": {
     "status": "ai",

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useFetcher, useLoaderData, useNavigate } from 'react-router';
+import { useFetcher, useLoaderData, useLocation, useNavigate } from 'react-router';
 import { authenticate } from '../shopify.server';
 import {
   Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon, Checkbox, Select,
@@ -13,6 +13,7 @@ import { ExternalIcon, CheckCircleIcon, LockIcon } from '@shopify/polaris-icons'
 import { getShopPlan } from '../services/plan-permissions.server';
 import { PLANS } from '../config/plans';
 import { usePlan } from '../components/PlanContext';
+import TutorialsSection from '../components/home/TutorialsSection';
 
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
@@ -178,9 +179,17 @@ function InfoRow({ label, value }) {
 export default function AccountPage() {
   const { shop, shopInfo, planKey, subscriptionId, priceDisplay, language } = useLoaderData();
   const navigate = useNavigate();
+  const location = useLocation();
   const { canAccessFeature } = usePlan();
   const t = useT();
   const adminLocale = useAdminLocale();
+
+  // The Help link on Home opens this page at #tutorials.
+  useEffect(() => {
+    if (location.hash !== '#tutorials') return undefined;
+    const timer = setTimeout(() => { const node = document.getElementById('tutorials'); if (node) node.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 150);
+    return () => clearTimeout(timer);
+  }, [location.hash]);
 
   const plan = PLANS[planKey] || PLANS.free;
   const isPro = planKey === 'pro' || planKey === 'scale' || planKey === 'enterprise';
@@ -307,6 +316,9 @@ export default function AccountPage() {
             </InlineStack>
           </BlockStack>
         </Card>
+
+        {/* Video tutorials, Academy intro and tips (moved here from Home) */}
+        <TutorialsSection />
       </BlockStack>
 
       {/* Clears the floating BrixBar (--brix-bar-clearance, app/global.css) so it
