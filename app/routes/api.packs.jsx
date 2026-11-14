@@ -3,8 +3,8 @@ import { getFeatureState } from '../config/plans';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
 import { PackError, packErrorResponse, getPack, listPacks, listActivePacks, savePack, deletePack, setPackStatus, parsePackId } from '../services/packs.server';
-import { fetchProduct, verifyProductVariant, verifyPackCoverage, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
-import { VALID_TEMPLATES, calculateTier, resolveSaveStatus, normalizeTiers, sanitizeCustomization, validateTiers, toNumericId } from '../utils/packs.shared.js';
+import { fetchProduct, verifyProductVariant, verifyPackCoverage, verifyExtraProducts, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
+import { VALID_TEMPLATES, calculateTier, resolveSaveStatus, normalizeTiers, sanitizeCustomization, validateTiers, toNumericId, sanitizeShowOn } from '../utils/packs.shared.js';
 
 /**
  * Admin JSON API for BRIX Packs. Response contract (always):
@@ -117,11 +117,23 @@ export async function action({ request }) {
   }
 }
 
+/**
+ * The price a fixed-amount discount is checked against. A pack with extra products can be filled with any
+ * of their variants, so it is the cheapest eligible variant of ANY product (a pack of only the main product
+ * keeps its anchor variant's price, as before).
+ */
+function priceFloor(anchorVariant, applicableVariants, extraPrices) {
+  if (!extraPrices.length) return anchorVariant.price;
+  return Math.min(...applicableVariants.map((variant) => variant.price), ...extraPrices);
+}
+
 /** Tiers + live variant coverage must be valid before a Pack may go (or stay) live. */
 async function assertActivatable(admin, pack, currency) {
-  const { anchorVariant } = await verifyPackCoverage(admin, pack.productId, { packType: pack.packType, variantScope: pack.variantScope, allowedVariantIds: pack.allowedVariantIds }, { requireAvailable: true });
+  const { anchorVariant, applicableVariants } = await verifyPackCoverage(admin, pack.productId, { packType: pack.packType, variantScope: pack.variantScope, allowedVariantIds: pack.allowedVariantIds }, { requireAvailable: true });
+  // Extra products are re-checked against Shopify too: one that went inactive / off the Online Store blocks going live.
+  const extra = await verifyExtraProducts(admin, { packType: pack.packType, productId: pack.productId, extraProducts: pack.extraProducts }, { requireAvailable: true });
   const tiers = normalizeTiers(pack.tiers);
-  const check = validateTiers(tiers, { basePrice: anchorVariant.price, currencyCode: currency.code });
+  const check = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code });
   if (!check.valid) throw new PackError('invalid_tiers', `Fix the Pack tiers before enabling: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
 }
 
@@ -161,17 +173,21 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
 
   // Re-verifies product + every allowed/scope='all' variant against Shopify —
   // the browser's own variant list/ids are never trusted for what gets saved.
-  const { product, anchorVariant, allowedVariantIds } = await verifyPackCoverage(
+  const { product, anchorVariant, applicableVariants, allowedVariantIds } = await verifyPackCoverage(
     admin, body.productId,
     { packType: body.packType, variantScope: body.variantScope, allowedVariantIds: body.allowedVariantIds },
     { requireAvailable: status === 'active' }
   );
-  const priced = validateTiers(tiers, { basePrice: anchorVariant.price, currencyCode: currency.code });
+  // Other products (Mix & Match only): verified the same way, never from what the browser sent.
+  const extra = await verifyExtraProducts(admin, { packType: body.packType, productId: product.id, extraProducts: body.extraProducts }, { requireAvailable: status === 'active' });
+  const showOn = body.packType === 'mix_match' ? sanitizeShowOn(body.showOn).filter((id) => id !== product.id) : [];
+  const priced = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code });
   if (!priced.valid) throw new PackError('invalid_tiers', priced.errors[0].message, { status: 422, details: { errors: priced.errors } });
 
   const saved = await savePack(shop, {
     id: existing?.id || null,
     productId: product.id,
+    productHandle: product.handle,
     variantId: anchorVariant.id,
     productTitle: product.title,
     variantTitle: anchorVariant.title,
@@ -182,6 +198,8 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
     packType: body.packType,
     variantScope: body.variantScope,
     allowedVariantIds,
+    extraProducts: extra.extraProducts,
+    showOn,
     tiers,
     customization: custom.value,
   });

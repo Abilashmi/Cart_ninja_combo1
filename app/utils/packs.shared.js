@@ -119,6 +119,94 @@ export function validateVariantCoverage({ packType, variantScope, allowedVariant
   return { valid: errors.length === 0, errors, allowedVariantIds: owned };
 }
 
+// ─── Extra products (a Mix & Match pack may draw from other products too) ─────
+//
+// The pack's own product stays the "main" product (productId / variantId /
+// variantScope, unchanged). `extraProducts` are more products shoppers can pick
+// items from, each with its own variant coverage. `showOn` = extra product
+// pages the pack is shown on (it always shows on the main product's page).
+
+export const MAX_EXTRA_PRODUCTS = 6;
+export const MAX_SHOW_ON = 20;
+const HANDLE_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/;
+
+/** Browser-submitted extra products → a clean list (numeric ids, safe handle, https image). Never throws. */
+export function sanitizeExtraProducts(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    const productId = toNumericId(item?.productId);
+    if (!productId || seen.has(productId)) continue;
+    seen.add(productId);
+    const variantScope = item?.variantScope === 'all' ? 'all' : 'selected';
+    out.push({
+      productId,
+      handle: HANDLE_RE.test(String(item?.handle || '')) ? String(item.handle) : '',
+      title: String(item?.title || '').slice(0, 255),
+      image: /^https:\/\//.test(String(item?.image || '')) ? String(item.image).slice(0, 500) : '',
+      variantScope,
+      allowedVariantIds: variantScope === 'all' ? [] : normalizeVariantIds(item?.allowedVariantIds),
+    });
+    if (out.length >= MAX_EXTRA_PRODUCTS) break;
+  }
+  return out;
+}
+
+/** Product ids (numeric strings) of extra pages a pack is shown on, deduped and capped. */
+export function sanitizeShowOn(raw) {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map((id) => toNumericId(id)).filter(Boolean))].slice(0, MAX_SHOW_ON);
+}
+
+/**
+ * Rules that need no Shopify data. Extra products only make sense when shoppers
+ * pick each item (Mix & Match); the main product can't be listed twice; every
+ * "selected" product needs at least one variant. Returns { valid, errors }.
+ */
+export function validateExtraProducts({ packType, productId, extraProducts }) {
+  const errors = [];
+  const extras = Array.isArray(extraProducts) ? extraProducts : [];
+  if (extras.length === 0) return { valid: true, errors };
+  if (packType !== 'mix_match') errors.push({ field: 'extraProducts', message: 'Other products can only be added to a Mix & Match Pack.' });
+  if (extras.length > MAX_EXTRA_PRODUCTS) errors.push({ field: 'extraProducts', message: `A Pack can include at most ${MAX_EXTRA_PRODUCTS} other products.` });
+  const main = toNumericId(productId);
+  extras.forEach((item) => {
+    if (toNumericId(item.productId) === main) errors.push({ field: 'extraProducts', message: 'The Pack’s main product is already included.' });
+    else if (item.variantScope !== 'all' && normalizeVariantIds(item.allowedVariantIds).length === 0) {
+      errors.push({ field: 'extraProducts', message: `Select at least one variant of ${item.title || 'each added product'}.` });
+    }
+  });
+  return { valid: errors.length === 0, errors };
+}
+
+
+/**
+ * One flat list of variants for a Pack that draws from several products. The slot pickers
+ * (packs_widget.js) work on "option name -> values", so a multi-product Pack gets two synthetic
+ * options: Product (the product's title) and Variant (that variant's title, or "Standard" for a
+ * single-variant product). Each variant keeps its own price, stock, image and product id.
+ * Mirrored by flattenPackProducts in packs_widget.js: keep in sync.
+ *   products: [{ productId, title, image, variants: [{ id, title, price, ... }] }]  main product first
+ */
+export const PACK_PRODUCT_OPTION_NAMES = ['Product', 'Variant'];
+
+export function flattenPackProducts(products) {
+  const used = {};
+  const rows = [];
+  (products || []).forEach((product) => {
+    const base = String(product.title || 'Product');
+    used[base] = (used[base] || 0) + 1;
+    // Two products can share a title: the option value must stay unique.
+    const label = used[base] > 1 ? `${base} (${used[base]})` : base;
+    (product.variants || []).forEach((variant) => {
+      const title = variant.title && variant.title !== DEFAULT_OPTION_VALUE ? String(variant.title) : 'Standard';
+      rows.push({ ...variant, id: String(variant.id), productId: product.productId, productTitle: product.title, image: variant.image || product.image || '', options: [label, title] });
+    });
+  });
+  return { productOptions: PACK_PRODUCT_OPTION_NAMES.slice(), variants: rows };
+}
+
 // ─── Item selection: Shopify options -> real variants ────────────────────────
 //
 // A Pack of N lets the shopper pick N items, each a REAL Shopify variant. These

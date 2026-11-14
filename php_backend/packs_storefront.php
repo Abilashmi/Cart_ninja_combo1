@@ -68,6 +68,36 @@ function packs_normalize_tiers($raw) {
     return $tiers;
 }
 
+// Mirrors sanitizeExtraProducts in app/utils/packs.shared.js: the other products a Mix & Match pack draws from.
+function packs_extra_products($raw) {
+    $out = [];
+    $seen = [];
+    foreach ((array)$raw as $item) {
+        if (!is_array($item)) continue;
+        $id = packs_numeric_id($item['productId'] ?? '');
+        if (!$id || isset($seen[$id])) continue;
+        $seen[$id] = true;
+        $scope = ($item['variantScope'] ?? '') === 'all' ? 'all' : 'selected';
+        $allowed = [];
+        if ($scope !== 'all') {
+            foreach ((array)($item['allowedVariantIds'] ?? []) as $variantId) {
+                $numeric = packs_numeric_id($variantId);
+                if ($numeric && !in_array($numeric, $allowed, true)) $allowed[] = $numeric;
+            }
+        }
+        $handle = (string)($item['handle'] ?? '');
+        $out[] = [
+            'productId' => $id,
+            'handle' => preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', $handle) ? $handle : '',
+            'title' => mb_substr((string)($item['title'] ?? ''), 0, 255),
+            'variantScope' => $scope,
+            'allowedVariantIds' => $allowed,
+        ];
+        if (count($out) >= 6) break;
+    }
+    return $out;
+}
+
 // Mirrors rowToPack + publicPack in the Node app — only what the widget needs.
 function packs_public($row) {
     $template = $row['template'] ?? 'same_variant';
@@ -87,6 +117,10 @@ function packs_public($row) {
         'id' => (int)$row['id'],
         'version' => (int)($row['version'] ?? 1),
         'variantId' => $anchor,
+        // The main product (the widget needs it on the extra pages a pack is shown on) and the extra products.
+        'productId' => packs_numeric_id($row['product_id'] ?? '') ?: '',
+        'productHandle' => preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', (string)($row['product_handle'] ?? '')) ? $row['product_handle'] : '',
+        'extraProducts' => $packType === 'mix_match' ? packs_extra_products(packs_json($row['extra_products_json'] ?? '', [])) : [],
         'template' => $template,
         'packType' => $packType,
         'variantScope' => $scope,
@@ -120,8 +154,16 @@ try {
         packs_ok(array_merge($empty, ['reason' => 'order_cap_reached']));
     }
 
-    $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)");
-    $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId]);
+    // Packs of this product, plus packs the merchant chose to also show on this product's page
+    // (show_on_ids is ",101,102,"; before migrations/alter_brix_packs_extra_products.sql was run only the first part applies).
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND (product_id IN (?, ?) OR show_on_ids LIKE ?)");
+        $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId, '%,' . $productId . ',%']);
+    } catch (PDOException $e) {
+        if (stripos($e->getMessage(), 'show_on_ids') === false) throw $e;
+        $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)");
+        $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId]);
+    }
     $packs = array_map('packs_public', $stmt->fetchAll(PDO::FETCH_ASSOC));
     if (!$packs) packs_ok(array_merge($empty, ['reason' => 'no_active_pack']));
 } catch (PDOException $e) {

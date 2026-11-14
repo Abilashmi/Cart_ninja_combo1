@@ -9,7 +9,7 @@
  * first prototype stored full GIDs, so every lookup accepts both spellings.
  */
 import { getDb } from './db.server';
-import { defaultCustomization, mergeCustomization, sanitizeCustomization, toNumericId, toGid, VALID_STATUSES, VALID_PACK_TYPES, VALID_VARIANT_SCOPES, normalizeVariantIds } from '../utils/packs.shared.js';
+import { defaultCustomization, mergeCustomization, sanitizeCustomization, toNumericId, toGid, VALID_STATUSES, VALID_PACK_TYPES, VALID_VARIANT_SCOPES, normalizeVariantIds, sanitizeExtraProducts, sanitizeShowOn } from '../utils/packs.shared.js';
 
 /** Error with a stable machine-readable `code` and a merchant-safe message. */
 export class PackError extends Error {
@@ -45,6 +45,10 @@ function mapDbError(error) {
   if (/doesn't exist|does not exist|no such table|ER_NO_SUCH_TABLE|1146/i.test(message)) {
     console.error('[packs.server] brix_packs table missing:', message.slice(0, 200));
     return new PackError('storage_not_ready', 'Packs storage is not set up yet. Run migrations/create_brix_packs.sql on the database (see CLAUDE.md).', { status: 503 });
+  }
+  if (/unknown column '(extra_products_json|show_on_json|show_on_ids|product_handle)'/i.test(message)) {
+    console.error('[packs.server] brix_packs missing extra-product columns:', message.slice(0, 200));
+    return new PackError('storage_outdated', 'Adding other products to a Pack needs a storage update. Run migrations/alter_brix_packs_extra_products.sql on the database.', { status: 503 });
   }
   if (/unknown column '(pack_type|variant_scope|allowed_variant_ids_json)'|ER_BAD_FIELD_ERROR|1054/i.test(message)) {
     console.error('[packs.server] brix_packs missing variant-scope columns:', message.slice(0, 200));
@@ -94,6 +98,10 @@ export function rowToPack(row) {
     packType,
     variantScope,
     allowedVariantIds: variantScope === 'all' ? [] : allowedVariantIds,
+    // Columns from migrations/alter_brix_packs_extra_products.sql: absent / empty on a Pack that doesn't use them.
+    extraProducts: sanitizeExtraProducts(parseJson(row.extra_products_json, [])),
+    showOn: sanitizeShowOn(parseJson(row.show_on_json, [])),
+    productHandle: row.product_handle || '',
     version: Number(row.version || 1),
     tiers: parseJson(row.tiers_json, []),
     customization: mergeCustomization(parsedCustomization),
@@ -126,7 +134,19 @@ export async function listActivePacksForProduct(shop, productId) {
       "SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)",
       [shop, numeric, toGid('Product', numeric)]
     );
-    return (rows || []).map(rowToPack);
+    const packs = (rows || []).map(rowToPack);
+    // Packs that choose to show on this product's page too (only needs the new column when one exists).
+    try {
+      const [more] = await db.execute(
+        "SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND show_on_ids LIKE ?",
+        [shop, `%,${numeric},%`]
+      );
+      for (const row of more || []) if (!packs.some((pack) => pack.id === Number(row.id))) packs.push(rowToPack(row));
+    } catch (error) {
+      // Never lets the extra "also shown on this page" lookup break the main one (e.g. before the migration was run).
+      if (!/unknown column 'show_on_ids'/i.test(String(error?.message || ''))) console.error('[packs.server] show-on lookup failed:', String(error?.message || '').slice(0, 200));
+    }
+    return packs;
   });
 }
 
@@ -213,18 +233,27 @@ export async function savePack(shop, input) {
   const tiersJson = JSON.stringify(input.tiers);
   const customizationJson = JSON.stringify(customization);
   const allowedVariantIdsJson = JSON.stringify(allowedVariantIds);
+  // Only a Pack that uses extra products / more pages writes the new columns, so every other Pack keeps
+  // saving on a database that hasn't run migrations/alter_brix_packs_extra_products.sql yet.
+  const extraProducts = packType === 'mix_match' ? sanitizeExtraProducts(input.extraProducts) : [];
+  const showOn = packType === 'mix_match' ? sanitizeShowOn(input.showOn).filter((id) => id !== productId) : [];
+  const usesExtras = extraProducts.length > 0 || showOn.length > 0;
+  const hadExtras = Boolean(existing && (existing.extraProducts.length || existing.showOn.length));
+  const writeExtras = usesExtras || hadExtras;
+  const extraSet = writeExtras ? ', extra_products_json=?, show_on_json=?, show_on_ids=?, product_handle=?' : '';
+  const extraValues = writeExtras ? [JSON.stringify(extraProducts), JSON.stringify(showOn), showOn.length ? `,${showOn.join(',')},` : null, String(input.productHandle || '').slice(0, 255) || null] : [];
 
   return run(async (db) => {
     if (packId) {
       await db.execute(
-        'UPDATE brix_packs SET product_id=?, variant_id=?, product_title=?, variant_title=?, product_image=?, base_price=?, status=?, enabled=?, template=?, pack_type=?, variant_scope=?, allowed_variant_ids_json=?, version=version+1, tiers_json=?, customization_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND shop_domain=?',
-        [productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, packId, shop]
+        'UPDATE brix_packs SET product_id=?, variant_id=?, product_title=?, variant_title=?, product_image=?, base_price=?, status=?, enabled=?, template=?, pack_type=?, variant_scope=?, allowed_variant_ids_json=?, version=version+1, tiers_json=?, customization_json=?' + extraSet + ', updated_at=CURRENT_TIMESTAMP WHERE id=? AND shop_domain=?',
+        [productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, ...extraValues, packId, shop]
       );
       return getPack(shop, packId);
     }
     const [result] = await db.execute(
-      'INSERT INTO brix_packs (shop_domain, product_id, variant_id, product_title, variant_title, product_image, base_price, status, enabled, template, pack_type, variant_scope, allowed_variant_ids_json, tiers_json, customization_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [shop, productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson]
+      'INSERT INTO brix_packs (shop_domain, product_id, variant_id, product_title, variant_title, product_image, base_price, status, enabled, template, pack_type, variant_scope, allowed_variant_ids_json, tiers_json, customization_json' + (writeExtras ? ', extra_products_json, show_on_json, show_on_ids, product_handle' : '') + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?' + (writeExtras ? ', ?, ?, ?, ?' : '') + ')',
+      [shop, productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, ...extraValues]
     );
     return getPack(shop, result.insertId);
   });
