@@ -93,3 +93,30 @@ test('prices: a combo tier is this product + its items; two packs with the same 
   assert.equal(validateComboTiers([{ items: [] }, { items: [DUPATTA_RED] }, { items: [DUPATTA_RED, SCARF] }], '100').valid, true);
   assert.equal(validateComboTiers([{ items: [] }, { items: [] }], '100').valid, false, 'two "this product only" packs');
 });
+
+// A fake Admin API answering PackProduct with the given product nodes (by numeric id).
+const fakeAdmin = (nodes) => ({
+  graphql: async (query, { variables }) => ({ json: async () => ({ data: { product: nodes[String(variables.id).split('/').pop()] || null } }) }),
+});
+const productNode = (id, status, over = {}) => ({
+  id: `gid://shopify/Product/${id}`, title: `Product ${id}`, handle: `p-${id}`, status, onlineStoreUrl: status === 'ACTIVE' ? `https://shop.test/products/p-${id}` : null, featuredImage: null,
+  variants: { nodes: [{ id: `gid://shopify/ProductVariant/${id}1`, title: 'Default Title', price: '400.00', availableForSale: true, inventoryQuantity: 5, inventoryPolicy: 'DENY', image: null, selectedOptions: [] }] },
+  ...over,
+});
+
+test('unlisted products can be in a Pack (main product, Mix & Match extras, combo items); drafts and archived cannot', async () => {
+  const { verifyComboTiers, verifyExtraProducts, verifyPackCoverage, isSellableStatus } = await import('../../app/services/packs-shopify.server.js');
+  assert.deepEqual(['ACTIVE', 'UNLISTED', 'DRAFT', 'ARCHIVED'].map(isSellableStatus), [true, true, false, false]);
+  const admin = fakeAdmin({ 100: productNode(100, 'UNLISTED'), 201: productNode(201, 'UNLISTED'), 301: productNode(301, 'DRAFT'), 401: productNode(401, 'ARCHIVED') });
+  const tiers = normalizeTiers([{ discountType: 'none', items: [{ productId: '201', variantId: '2011', quantity: 1 }] }]);
+  const ok = await verifyComboTiers(admin, { productId: '100', tiers, mainPrice: 1599 }, { requireAvailable: true });
+  assert.deepEqual(ok.tiers[0].items.map((i) => [i.productId, i.handle]), [['201', 'p-201']]);
+  assert.deepEqual(ok.subtotals, [1999]);
+  for (const id of ['301', '401']) {
+    await assert.rejects(verifyComboTiers(admin, { productId: '100', tiers: normalizeTiers([{ discountType: 'none', items: [{ productId: id, variantId: `${id}1`, quantity: 1 }] }]), mainPrice: 1 }), { code: 'product_inactive' });
+  }
+  const extra = await verifyExtraProducts(admin, { packType: 'mix_match', productId: '100', extraProducts: [{ productId: '201', variantScope: 'all' }] }, { requireAvailable: true });
+  assert.equal(extra.extraProducts[0].productId, '201');
+  const coverage = await verifyPackCoverage(admin, '100', { packType: 'same_variant', variantScope: 'all', allowedVariantIds: [] }, { requireAvailable: true });
+  assert.equal(coverage.anchorVariant.id, '1001');
+});

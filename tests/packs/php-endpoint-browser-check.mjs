@@ -919,6 +919,16 @@ await check('fixed combo: the chosen pack goes in the cart as this product + its
   assert.deepEqual(units, { 201: 1, 1011: 1, 1012: 2 });
   const props = cartCalls[0].items.map((item) => item.properties);
   assert.ok(props.every((p) => p._brix_pack_id === '11' && p._brix_pack_quantity === '4' && p._brix_pack_group === props[0]._brix_pack_group));
+  assert.ok(props.every((p) => p._brix_pack_name === 'Full set'), 'the pack name rides along for the cart drawer\'s pack card');
+  await context.close();
+});
+
+await check('fixed combo: an unnamed pack sends what is in it as its name', async () => {
+  const { page, context, cartCalls } = await open({ body: phpBody([comboPack()]), productsJs: { 'soap-b': SOAP_B }, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  await page.locator('.brix-packs-widget select').first().selectOption({ label: 'M' });
+  await addPack(page);
+  assert.ok(cartCalls[0].items.every((item) => item.properties._brix_pack_name === 'Tee + Soap B (Rose)'), JSON.stringify(cartCalls[0].items[0].properties));
   await context.close();
 });
 

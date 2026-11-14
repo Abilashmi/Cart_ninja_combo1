@@ -391,6 +391,8 @@
   "storefront.drawer.opening_checkout": "Abriendo el pago…",
   "storefront.drawer.pack": "Pack",
   "storefront.drawer.pack_of": "Pack de {count}",
+  "storefront.drawer.pack_save": "Ahorras {amount}",
+  "storefront.drawer.remove_pack": "Quitar paquete",
   "storefront.drawer.powered": "Con tecnología de BRIX",
   "storefront.drawer.prev_announcement": "Anuncio anterior",
   "storefront.drawer.processing": "Procesando...",

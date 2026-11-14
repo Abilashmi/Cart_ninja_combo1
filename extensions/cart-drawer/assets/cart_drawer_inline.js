@@ -3801,6 +3801,56 @@
       '</div>';
   }
 
+  // BRIX Packs with more than one cart line (Fixed Combo, Mix & Match): one card for the
+  // whole pack (brix_cart_ui.css .bxcd-pack) instead of a row per product. Lines belong
+  // together by _brix_pack_id + _brix_pack_group (one add to cart). Display only: the
+  // lines, their prices and the checkout discount are Shopify's as before.
+  function ccPackGroupKey(item) {
+    var props = item && item.properties;
+    return props && props._brix_pack_id ? String(props._brix_pack_id) + ':' + String(props._brix_pack_group || '') : null;
+  }
+  function ccPackCards(items) {
+    var groups = {};
+    items.forEach(function (item) {
+      var key = ccPackGroupKey(item);
+      if (key) (groups[key] = groups[key] || []).push(item);
+    });
+    Object.keys(groups).forEach(function (key) { if (groups[key].length < 2) delete groups[key]; });
+    return groups;
+  }
+  function renderPackCardHtml(lines) {
+    var props = lines[0].properties || {};
+    var name = props._brix_pack_name
+      ? String(props._brix_pack_name).slice(0, 120)
+      : (props._brix_pack_quantity ? bxT('storefront.drawer.pack_of', 'Pack of {count}', { count: props._brix_pack_quantity }) : bxT('storefront.drawer.pack', 'Pack'));
+    var finalTotal = 0;
+    var originalTotal = 0;
+    lines.forEach(function (item) {
+      finalTotal += Number(item.final_line_price) || 0;
+      originalTotal += Number(item.original_line_price || item.original_price * item.quantity) || 0;
+    });
+    var saving = originalTotal - finalTotal;
+    var keys = lines.map(function (item) { return String(item.key).replace(/[^\w:.-]/g, ''); });
+    var rows = lines.map(function (item) {
+      var title = escapeHtml(item.product_title);
+      var variant = item.variant_title && item.variant_title !== 'Default Title' && !item.product_has_only_default_variant ? escapeHtml(item.variant_title) : '';
+      return '<li class="bxcd-pack__line">' +
+        '<span class="bxcd-pack__img">' + (item.image ? '<img src="' + escapeHtml(item.image) + '" alt="" loading="lazy">' : '') + '</span>' +
+        '<span class="bxcd-pack__text"><span class="bxcd-pack__name">' + (item.quantity > 1 ? item.quantity + ' \u00d7 ' : '') + title + '</span>' +
+        (variant ? '<span class="bxcd-pack__variant">' + variant + '</span>' : '') + '</span>' +
+        '</li>';
+    }).join('');
+    return '<div class="bxcd-pack" data-pack-keys="' + escapeHtml(keys.join(',')) + '">' +
+      '<div class="bxcd-pack__head"><span class="bxcd-pack__tag">' + escapeHtml(bxT('storefront.drawer.pack', 'Pack')) + '</span>' +
+      '<p class="bxcd-pack__title">' + escapeHtml(name) + '</p>' +
+      '<button type="button" class="bxcd-item__remove" aria-label="' + escapeHtml(bxT('storefront.drawer.remove_pack', 'Remove pack')) + '" title="' + escapeHtml(bxT('storefront.common.remove', 'Remove')) + '" onclick="ccRemovePack(\'' + keys.join(',') + '\')">' + CC_ICON_X + '</button></div>' +
+      '<ul class="bxcd-pack__lines">' + rows + '</ul>' +
+      '<div class="bxcd-pack__foot">' +
+      (saving > 0 ? '<span class="bxcd-pack__save">' + escapeHtml(bxT('storefront.drawer.pack_save', 'You save {amount}', { amount: formatMoney(saving / 100) })) + '</span>' : '<span></span>') +
+      '<span class="bxcd-pack__total">' + (saving > 0 ? '<span class="bxcd-pack__was">' + formatMoney(originalTotal / 100) + '</span>' : '') + formatMoney(finalTotal / 100) + '</span>' +
+      '</div></div>';
+  }
+
   // Subtotal / discounts / total: labels left, amounts right (brix_cart_ui.css .bxcd-summary).
   // cartDiscounts: Shopify's own order discounts already in the cart (e.g. the
   // BRIX prepaid discount), one named row each.
@@ -4303,10 +4353,18 @@
       });
 
       let itemsHtml = '';
+      // A pack of several lines is drawn once, as one card, where its first line is.
+      const packCards = ccPackCards(cart.items.filter((it) => !isGiftLine(it)));
+      const packsDrawn = new Set();
       // Gifts first, then the lines in Shopify's order (newest first): a new
       // product used to land above the gift and push it down on every add.
       [...cart.items.filter(isGiftLine), ...cart.items.filter((it) => !isGiftLine(it))].forEach((item) => {
         const isGift = isGiftLine(item);
+        const packKey = isGift ? null : ccPackGroupKey(item);
+        if (packKey && packCards[packKey]) {
+          if (!packsDrawn.has(packKey)) { packsDrawn.add(packKey); itemsHtml += renderPackCardHtml(packCards[packKey]); }
+          return;
+        }
         itemsHtml += renderCartItemHtml(item, {
           isGift,
           isRewardItem: isGift || rewardProductIds.has(String(item.product_id)),
@@ -5607,6 +5665,26 @@
   };
 
   // giftProductId: a reward line the shopper takes out stays out (ccDeclineGift).
+  // A pack card's remove: every line of that pack goes in one cart update (removing one
+  // product alone would leave the rest at full price).
+  window.ccRemovePack = async function (keyList) {
+    if (_ccUpdating) return;
+    var keys = String(keyList || '').split(',').filter(Boolean);
+    if (!keys.length) return;
+    _ccUpdating = true;
+    try {
+      var card = document.querySelector('[data-pack-keys="' + keys.join(',') + '"]');
+      if (card) card.style.opacity = '0.5';
+      var updates = {};
+      keys.forEach(function (key) { updates[key] = 0; });
+      await originalFetch('/cart/update.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ updates: updates }) });
+      await renderDrawer();
+    } catch (e) {
+    } finally {
+      _ccUpdating = false;
+    }
+  };
+
   window.ccRemoveItem = function (key, giftProductId) {
     if (giftProductId) ccDeclineGift(giftProductId);
     removeItem(key);

@@ -54,6 +54,8 @@ export const PACK_LINE_PROPERTIES = {
   quantity: '_brix_pack_quantity',
   version: '_brix_pack_version',
   group: '_brix_pack_group',
+  // Display only (the cart drawer's pack card): the pack's name, or a Fixed Combo's contents.
+  name: '_brix_pack_name',
 };
 
 // ─── Shopify ID helpers ──────────────────────────────────────────────────────

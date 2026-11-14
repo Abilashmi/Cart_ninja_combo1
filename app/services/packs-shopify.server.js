@@ -53,6 +53,11 @@ function optionNamesOf(nodes) {
   return (nodes[0]?.selectedOptions || []).map((option) => option.name);
 }
 
+// On sale: ACTIVE, or UNLISTED (API 2025-10+: on the Online Store by direct link only, left out of
+// search and collections; Shopify checkout sells it like an active one).
+export const SELLABLE_STATUSES = ['ACTIVE', 'UNLISTED'];
+export const isSellableStatus = (status) => SELLABLE_STATUSES.includes(status);
+
 /** A product and all (up to 100) of its variants, straight from Shopify. */
 export async function fetchProduct(admin, productId) {
   const gid = toGid('Product', productId);
@@ -71,8 +76,10 @@ export async function fetchProduct(admin, productId) {
     title: product.title,
     handle: product.handle,
     status: product.status,
-    // A product with an Online Store page: the storefront widget reads /products/<handle>.js.
-    published: Boolean(product.onlineStoreUrl),
+    // A product with an Online Store page: the storefront widget reads /products/<handle>.js. An
+    // unlisted product's page is reached by direct link (onlineStoreUrl isn't documented for it, so it
+    // isn't required); if its page can't be loaded, the widget simply doesn't offer that Pack.
+    published: Boolean(product.onlineStoreUrl) || product.status === 'UNLISTED',
     image: product.featuredImage?.url || '',
     options: optionNamesOf(product.variants.nodes),
     variants: product.variants.nodes.map(shapeVariant),
@@ -104,7 +111,7 @@ export async function verifyProductVariant(admin, productId, variantId, { requir
   if (!variant) throw new PackError('variant_not_found', 'The selected variant no longer exists on this product.', { status: 404 });
   if (variant.price === null || variant.price < 0) throw new PackError('price_unverified', 'Could not verify the current variant price with Shopify.', { status: 502 });
   if (requireAvailable && !variant.availableForSale) throw new PackError('variant_unavailable', 'The selected variant is out of stock, so this Pack cannot be activated.', { status: 409 });
-  if (requireAvailable && product.status !== 'ACTIVE') throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
+  if (requireAvailable && !isSellableStatus(product.status)) throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
   return { product, variant };
 }
 
@@ -128,7 +135,7 @@ export async function verifyPackCoverage(admin, productId, { packType, variantSc
     throw new PackError('price_unverified', 'Could not verify the current price of one of this Pack’s variants.', { status: 502 });
   }
   if (requireAvailable) {
-    if (product.status !== 'ACTIVE') throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
+    if (!isSellableStatus(product.status)) throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
     if (!applicableVariants.some((variant) => variant.availableForSale)) throw new PackError('variant_unavailable', 'None of this Pack’s variants are in stock, so it cannot be activated.', { status: 409 });
   }
 
@@ -140,7 +147,7 @@ export async function verifyPackCoverage(admin, productId, { packType, variantSc
 
 /**
  * Verify the extra products of a Mix & Match Pack against Shopify (never the browser's own data):
- * each must exist, be ACTIVE and on the Online Store (the widget loads /products/<handle>.js),
+ * each must exist, be ACTIVE or UNLISTED and on the Online Store (the widget loads /products/<handle>.js),
  * and have the variants the merchant picked. Returns the clean list to store, with live
  * titles / handles / images, plus every eligible variant's price (for the tier-price floor).
  */
@@ -152,7 +159,7 @@ export async function verifyExtraProducts(admin, { packType, productId, extraPro
   const prices = [];
   for (const item of wanted) {
     const product = await fetchProduct(admin, item.productId);
-    if (product.status !== 'ACTIVE') throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
+    if (!isSellableStatus(product.status)) throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
     if (!product.published) throw new PackError('product_unpublished', `${product.title} is not available on your Online Store, so shoppers can't pick it. Publish it first.`, { status: 409 });
     const check = validateVariantCoverage({ packType, variantScope: item.variantScope, allowedVariantIds: item.allowedVariantIds }, product.variants.map((variant) => variant.id));
     if (!check.valid) throw new PackError('invalid_extra_products', `${product.title}: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
@@ -174,7 +181,7 @@ export async function verifyExtraProducts(admin, { packType, productId, extraPro
 
 /**
  * Fixed Combo: every tier's items re-read from Shopify (never what the browser
- * sent): the product must be ACTIVE and on the Online Store (the widget loads
+ * sent): the product must be ACTIVE or UNLISTED and on the Online Store (the widget loads
  * /products/<handle>.js), the variant must be the product's. Fills in handle,
  * titles and image. Returns { tiers, subtotals } where subtotals[i] = the
  * tier's price before its discount (`mainPrice` for this product + its items).
@@ -192,7 +199,7 @@ export async function verifyComboTiers(admin, { productId, tiers, mainPrice }, {
     for (const item of sanitizeComboItems(tier.items)) {
       if (!products.has(item.productId)) products.set(item.productId, await fetchProduct(admin, item.productId));
       const product = products.get(item.productId);
-      if (product.status !== 'ACTIVE') throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
+      if (!isSellableStatus(product.status)) throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
       if (!product.published) throw new PackError('product_unpublished', `${product.title} is not available on your Online Store, so shoppers can't buy it in a Pack. Publish it first.`, { status: 409 });
       const variant = product.variants.find((v) => String(v.id) === String(item.variantId));
       if (!variant) throw new PackError('invalid_tiers', `The chosen variant of ${product.title} no longer exists. Pick it again.`, { status: 422 });
@@ -303,7 +310,7 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
           const applicable = item.variantScope === 'all' ? all : all.filter((variant) => (item.allowedVariantIds || []).includes(variant.id));
           let issue = null;
           if (!product) issue = 'This product could not be loaded from Shopify.';
-          else if (product.status !== 'ACTIVE') issue = 'This product is no longer active.';
+          else if (!isSellableStatus(product.status)) issue = 'This product is no longer active.';
           else if (!product.published) issue = 'This product is no longer on your Online Store.';
           return {
             ...item,

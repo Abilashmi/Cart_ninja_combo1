@@ -391,6 +391,8 @@
   "storefront.drawer.opening_checkout": "செக்அவுட் திறக்கப்படுகிறது…",
   "storefront.drawer.pack": "பேக்",
   "storefront.drawer.pack_of": "{count} பேக்",
+  "storefront.drawer.pack_save": "நீங்கள் சேமிப்பது {amount}",
+  "storefront.drawer.remove_pack": "பேக்கை நீக்கு",
   "storefront.drawer.powered": "BRIX மூலம் இயக்கப்படுகிறது",
   "storefront.drawer.prev_announcement": "முந்தைய அறிவிப்பு",
   "storefront.drawer.processing": "செயலாக்கப்படுகிறது...",

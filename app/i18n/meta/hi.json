@@ -1599,6 +1599,10 @@
     "status": "ai",
     "srcHash": "58de63de"
   },
+  "storefront.drawer.pack_save": {
+    "status": "ai",
+    "srcHash": "e89a010b"
+  },
   "storefront.drawer.powered": {
     "status": "ai",
     "srcHash": "91135be1"
@@ -1610,6 +1614,10 @@
   "storefront.drawer.processing": {
     "status": "ai",
     "srcHash": "0b398004"
+  },
+  "storefront.drawer.remove_pack": {
+    "status": "ai",
+    "srcHash": "143f8db2"
   },
   "storefront.drawer.remove_product": {
     "status": "ai",

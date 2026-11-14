@@ -391,6 +391,8 @@
   "storefront.drawer.opening_checkout": "Opening checkout…",
   "storefront.drawer.pack": "Pack",
   "storefront.drawer.pack_of": "Pack of {count}",
+  "storefront.drawer.pack_save": "You save {amount}",
+  "storefront.drawer.remove_pack": "Remove pack",
   "storefront.drawer.powered": "Powered by BRIX",
   "storefront.drawer.prev_announcement": "Previous announcement",
   "storefront.drawer.processing": "Processing...",

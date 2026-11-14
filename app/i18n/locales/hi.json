@@ -391,6 +391,8 @@
   "storefront.drawer.opening_checkout": "चेकआउट खुल रहा है…",
   "storefront.drawer.pack": "पैक",
   "storefront.drawer.pack_of": "{count} का पैक",
+  "storefront.drawer.pack_save": "आपकी बचत {amount}",
+  "storefront.drawer.remove_pack": "पैक हटाएं",
   "storefront.drawer.powered": "BRIX द्वारा संचालित",
   "storefront.drawer.prev_announcement": "पिछली घोषणा",
   "storefront.drawer.processing": "प्रोसेस हो रहा है...",

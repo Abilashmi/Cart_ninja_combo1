@@ -2046,6 +2046,10 @@
     // the checkout Function prices them together.
     function buildItems(pack, tier) {
       var properties = { _brix_pack_id: String(pack.id), _brix_pack_quantity: String(tier.quantity), _brix_pack_version: String(pack.version), _brix_pack_group: token() };
+      // The pack's name for the cart drawer's pack card (display only; the Function never reads it):
+      // the merchant's name for the pack, else for a Fixed Combo what's in it.
+      var packName = tier.name || (isCombo(pack) ? comboText(pack, tier) : '');
+      if (packName) properties._brix_pack_name = String(packName).slice(0, 120);
       var ids = itemsFor(pack, tier).map(function (item) { return item.variant.id; });
       return groupCartItems(ids).map(function (line) { return { id: Number(line.id), quantity: line.quantity, properties: properties }; });
     }

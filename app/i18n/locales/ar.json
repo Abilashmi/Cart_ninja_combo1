@@ -391,6 +391,8 @@
   "storefront.drawer.opening_checkout": "جارٍ فتح صفحة الدفع…",
   "storefront.drawer.pack": "باقة",
   "storefront.drawer.pack_of": "باقة من {count}",
+  "storefront.drawer.pack_save": "توفر {amount}",
+  "storefront.drawer.remove_pack": "إزالة الحزمة",
   "storefront.drawer.powered": "مدعوم من BRIX",
   "storefront.drawer.prev_announcement": "الإعلان السابق",
   "storefront.drawer.processing": "جارٍ المعالجة...",

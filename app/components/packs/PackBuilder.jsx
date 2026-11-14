@@ -459,7 +459,8 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                     <BlockStack gap="100">
                       <Text as="span" variant="headingSm">{productData.product.title}</Text>
                       <Text as="span" tone="subdued" variant="bodySm">{variants.length} variant{variants.length === 1 ? '' : 's'}</Text>
-                      {productData.product.status !== 'ACTIVE' && <Badge tone="warning">{`Product is ${productData.product.status.toLowerCase()}`}</Badge>}
+                      {productData.product.status === 'UNLISTED' && <Badge tone="info">Unlisted: shoppers reach it by direct link</Badge>}
+                      {!['ACTIVE', 'UNLISTED'].includes(productData.product.status) && <Badge tone="warning">{`Product is ${productData.product.status.toLowerCase()}`}</Badge>}
                     </BlockStack>
                   </InlineStack>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
