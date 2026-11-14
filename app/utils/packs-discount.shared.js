@@ -40,10 +40,34 @@ export function packCoversLine(pack, line) {
     const allowed = Array.isArray(pack.allowedVariantIds) ? pack.allowedVariantIds : [String(pack.variantId)];
     return allowed.some((id) => String(id) === variantId);
   }
+  // Fixed Combo: one of the exact variants a tier holds (tiers[].items = [{ p, v, q }]).
+  if (pack.packType === 'combo') {
+    return (pack.tiers || []).some((tier) => (tier.items || []).some((item) => String(item.v) === variantId && String(item.p) === productId));
+  }
   const extra = pack.extraProducts && typeof pack.extraProducts === 'object' ? pack.extraProducts[productId] : null;
   if (!extra) return false;
   if (extra.scope === 'all') return true;
   return Array.isArray(extra.allowedVariantIds) && extra.allowedVariantIds.some((id) => String(id) === variantId);
+}
+
+// Fixed Combo: the tier whose exact contents the group holds, N times over: N units of this
+// product (any covered variant) and N x each item's quantity of each item's variant, nothing
+// else. Several tiers can hold the same number of items, so the contents decide; no match =
+// no discount (the cart doesn't hold a pack the merchant made).
+function comboTierFor(pack, packQuantity, groupLines) {
+  const mainUnits = groupLines.filter((line) => String(line.productId) === String(pack.productId)).reduce((sum, line) => sum + line.quantity, 0);
+  if (mainUnits <= 0) return null;
+  const byVariant = new Map();
+  for (const line of groupLines) {
+    if (String(line.productId) === String(pack.productId)) continue;
+    byVariant.set(String(line.variantId), (byVariant.get(String(line.variantId)) || 0) + line.quantity);
+  }
+  return (pack.tiers || []).find((tier) => {
+    if (Number(tier.quantity) !== packQuantity) return false;
+    const items = Array.isArray(tier.items) ? tier.items : [];
+    if (items.length !== byVariant.size) return false;
+    return items.every((item) => byVariant.get(String(item.v)) === Number(item.q) * mainUnits);
+  }) || null;
 }
 
 function positiveInt(value) {
@@ -73,7 +97,9 @@ export function packDiscountsFor(config, lines) {
   // 2. One discount per group whose quantity is a whole multiple of a tier.
   const out = [];
   for (const { pack, packQuantity, lines: groupLines } of groups.values()) {
-    const tier = pack.tiers.find((item) => Number(item.quantity) === packQuantity);
+    const tier = pack.packType === 'combo'
+      ? comboTierFor(pack, packQuantity, groupLines)
+      : pack.tiers.find((item) => Number(item.quantity) === packQuantity);
     if (!tier || tier.discountType === 'none') continue;
     const total = groupLines.reduce((sum, line) => sum + line.quantity, 0);
     if (total <= 0 || total % packQuantity !== 0) continue;

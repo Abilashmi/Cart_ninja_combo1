@@ -456,6 +456,8 @@
   "storefront.packs.in_pack": "आपके पैक में {name}",
   "storefront.packs.item_n": "आइटम {n}",
   "storefront.packs.items": "{count, plural, one {# आइटम} other {# आइटम}}",
+  "storefront.packs.includes": "शामिल है",
+  "storefront.packs.this_item": "यह आइटम",
   "storefront.packs.items_selected": "चुने गए आइटम",
   "storefront.packs.low_stock": "स्टॉक कम है",
   "storefront.packs.n_of_total_selected": "{done} / {total} चुने गए",

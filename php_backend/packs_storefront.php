@@ -48,6 +48,32 @@ function packs_json($value, $fallback) {
     return $decoded === null ? $fallback : $decoded;
 }
 
+// Fixed Combo items, as saved (mirrors sanitizeComboItems in app/utils/packs.shared.js; the
+// app server already checked each one with Shopify): numeric ids, 1-10 each, at most 5.
+function packs_combo_items($raw) {
+    $items = [];
+    foreach ($raw as $item) {
+        if (!is_array($item)) continue;
+        $productId = preg_replace('/\D+/', '', (string)($item['productId'] ?? ''));
+        $variantId = preg_replace('/\D+/', '', (string)($item['variantId'] ?? ''));
+        $quantity = (int)($item['quantity'] ?? 1);
+        if ($productId === '' || $variantId === '' || $quantity < 1) continue;
+        $handle = is_string($item['handle'] ?? null) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', $item['handle']) ? $item['handle'] : '';
+        $image = is_string($item['image'] ?? null) && strpos($item['image'], 'https://') === 0 ? $item['image'] : '';
+        $items[] = [
+            'productId' => $productId,
+            'variantId' => $variantId,
+            'quantity' => min(10, $quantity),
+            'handle' => $handle,
+            'title' => is_string($item['title'] ?? null) ? mb_substr(trim($item['title']), 0, 255) : '',
+            'variantTitle' => is_string($item['variantTitle'] ?? null) ? mb_substr(trim($item['variantTitle']), 0, 255) : '',
+            'image' => $image,
+        ];
+        if (count($items) >= 5) break;
+    }
+    return $items;
+}
+
 // Mirrors normalizeTiers in app/utils/packs.shared.js.
 function packs_normalize_tiers($raw) {
     if (!is_array($raw)) return [];
@@ -55,13 +81,16 @@ function packs_normalize_tiers($raw) {
     foreach ($raw as $tier) {
         if (!is_array($tier)) continue;
         $type = in_array($tier['discountType'] ?? null, ['none', 'percentage', 'fixed'], true) ? $tier['discountType'] : 'none';
-        $tiers[] = [
+        $out = [
             'quantity' => (int)($tier['quantity'] ?? 0),
             'name' => is_string($tier['name'] ?? null) ? trim($tier['name']) : '',
             'badge' => is_string($tier['badge'] ?? null) ? trim($tier['badge']) : '',
             'discountType' => $type,
             'discountValue' => $type === 'none' ? 0 : (float)($tier['discountValue'] ?? 0),
         ];
+        // Fixed Combo: the tier's products besides the page's own (sanitizeComboItems).
+        if (isset($tier['items']) && is_array($tier['items'])) $out['items'] = packs_combo_items($tier['items']);
+        $tiers[] = $out;
     }
     $tiers = array_values(array_filter($tiers, function ($tier) { return $tier['quantity'] > 0; }));
     usort($tiers, function ($a, $b) { return $a['quantity'] - $b['quantity']; });

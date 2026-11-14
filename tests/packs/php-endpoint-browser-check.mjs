@@ -876,6 +876,64 @@ await check('multi-product: a Pack without extra products is exactly as before (
   await context.close();
 });
 
+// ── Fixed Combo: each pack = this product (shopper's variant) + fixed items the merchant chose ──
+const comboPack = (over = {}) => pack({
+  id: 11, productId: '100', productHandle: 'tee', template: 'fixed_combo', packType: 'combo', variantScope: 'all', allowedVariantIds: [],
+  tiers: [
+    { quantity: 2, name: '', badge: '', discountType: 'percentage', discountValue: 10, items: [{ productId: '101', variantId: '1011', quantity: 1, handle: 'soap-b', title: 'Soap B', variantTitle: 'Rose', image: '' }] },
+    { quantity: 4, name: 'Full set', badge: 'Best value', discountType: 'fixed', discountValue: 30, items: [
+      { productId: '101', variantId: '1011', quantity: 1, handle: 'soap-b', title: 'Soap B', variantTitle: 'Rose', image: '' },
+      { productId: '101', variantId: '1012', quantity: 2, handle: 'soap-b', title: 'Soap B', variantTitle: 'Mint', image: '' },
+    ] },
+  ],
+  ...over,
+});
+
+await check('fixed combo: each pack lists its products and is priced from them (live prices)', async () => {
+  const { page, context, productJsCalls } = await open({ body: phpBody([comboPack()]), productsJs: { 'soap-b': SOAP_B }, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  assert.deepEqual(productJsCalls, ['soap-b']);
+  const text = await page.locator('.brix-packs-widget').innerText();
+  assert.match(text, /Tee \+ Soap B \(Rose\)/);
+  assert.match(text, /Tee \+ Soap B \(Rose\) \+ 2 × Soap B \(Mint\)/);
+  assert.match(text, /₹117\.00/, '(80 + 50) - 10%');
+  assert.match(text, /₹220\.00/, '80 + 50 + 2 x 60 - 30');
+  await context.close();
+});
+
+await check('fixed combo: the chosen pack goes in the cart as this product + its items, one Pack', async () => {
+  const { page, context, cartCalls } = await open({ body: phpBody([comboPack()]), productsJs: { 'soap-b': SOAP_B }, dawn: true, variantInput: '201' });
+  await page.waitForSelector('.brix-packs-widget');
+  await card(page, 1).click();
+  // The shopper picks only this product's size; the pack's other products are fixed.
+  assert.equal(await page.locator('.brix-packs-widget select').count(), 1, 'one picker: this product');
+  await page.locator('.brix-packs-widget select').first().selectOption({ label: 'L' });
+  const text = await page.locator('.brix-packs-widget').innerText();
+  assert.match(text, /Includes/);
+  assert.match(text, /₹240\.00/, 'with size L (100): 100 + 50 + 120 - 30');
+  if (process.env.PACKS_SHOTS) await page.locator('.brix-packs-widget').screenshot({ path: path.join(process.env.PACKS_SHOTS, 'combo-widget.png') });
+  await addPack(page);
+  assert.equal(cartCalls.length, 1);
+  const units = {};
+  for (const item of cartCalls[0].items) units[item.id] = (units[item.id] || 0) + item.quantity;
+  assert.deepEqual(units, { 201: 1, 1011: 1, 1012: 2 });
+  const props = cartCalls[0].items.map((item) => item.properties);
+  assert.ok(props.every((p) => p._brix_pack_id === '11' && p._brix_pack_quantity === '4' && p._brix_pack_group === props[0]._brix_pack_group));
+  await context.close();
+});
+
+await check('fixed combo: a pack whose product is gone or sold out is not offered', async () => {
+  const gone = await open({ body: phpBody([comboPack()]), productsJs: {}, dawn: true });
+  await gone.page.waitForSelector('.brix-packs-widget');
+  assert.equal(await gone.page.locator('.brix-packs-card[aria-disabled="true"], .brix-packs-tier[aria-disabled="true"], .brix-packs-card[disabled], .brix-packs-tier[disabled]').count(), 2, 'both packs hold Soap B, which could not be loaded');
+  await gone.context.close();
+  const soldOut = { ...SOAP_B, variants: SOAP_B.variants.map((v) => (v.id === 1012 ? { ...v, available: false } : v)) };
+  const { page, context } = await open({ body: phpBody([comboPack()]), productsJs: { 'soap-b': soldOut }, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  assert.equal(await page.locator('.brix-packs-card[aria-disabled="true"], .brix-packs-tier[aria-disabled="true"], .brix-packs-card[disabled], .brix-packs-tier[disabled]').count(), 1, 'only the pack with the Mint soap');
+  await context.close();
+});
+
 await browser.close();
 const failed = results.filter((ok) => !ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);

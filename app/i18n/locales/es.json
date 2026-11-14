@@ -456,6 +456,8 @@
   "storefront.packs.in_pack": "{name} en tu pack",
   "storefront.packs.item_n": "Artículo {n}",
   "storefront.packs.items": "{count, plural, one {# artículo} other {# artículos}}",
+  "storefront.packs.includes": "Incluye",
+  "storefront.packs.this_item": "Este artículo",
   "storefront.packs.items_selected": "Artículos elegidos",
   "storefront.packs.low_stock": "Pocas unidades",
   "storefront.packs.n_of_total_selected": "{done} / {total} elegidos",

@@ -456,6 +456,8 @@
   "storefront.packs.in_pack": "உங்கள் பேக்கில் {name}",
   "storefront.packs.item_n": "பொருள் {n}",
   "storefront.packs.items": "{count, plural, one {# பொருள்} other {# பொருட்கள்}}",
+  "storefront.packs.includes": "உள்ளடக்கம்",
+  "storefront.packs.this_item": "இந்தப் பொருள்",
   "storefront.packs.items_selected": "தேர்ந்தெடுத்த பொருட்கள்",
   "storefront.packs.low_stock": "குறைந்த இருப்பு",
   "storefront.packs.n_of_total_selected": "{done} / {total} தேர்ந்தெடுக்கப்பட்டது",

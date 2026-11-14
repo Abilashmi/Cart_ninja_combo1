@@ -456,6 +456,8 @@
   "storefront.packs.in_pack": "{name} في باقتك",
   "storefront.packs.item_n": "المنتج {n}",
   "storefront.packs.items": "{count, plural, zero {لا منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجًا} other {# منتج}}",
+  "storefront.packs.includes": "يشمل",
+  "storefront.packs.this_item": "هذا المنتج",
   "storefront.packs.items_selected": "المنتجات المختارة",
   "storefront.packs.low_stock": "كمية قليلة",
   "storefront.packs.n_of_total_selected": "تم اختيار {done} / {total}",

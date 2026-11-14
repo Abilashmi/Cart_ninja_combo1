@@ -16,6 +16,7 @@ export const PACK_TEMPLATES = [
   { id: 'same_variant', name: 'Same Variant', description: 'Shoppers pick a quantity of the selected variant. Simple list of offers.', preview: 'Buy 1 · Buy 2 · Buy 3', recommended: 'Best for repeat purchases' },
   { id: 'choose_each_item', name: 'Choose Each Item', description: 'Shoppers pick a real Shopify variant for every item in the Pack.', preview: 'M · S · L', recommended: 'Best for mix and match' },
   { id: 'visual_offer', name: 'Visual Offer', description: 'Large promotional cards with product image and prominent savings.', preview: 'BEST VALUE — Save 12%', recommended: 'Best for promotions' },
+  { id: 'fixed_combo', name: 'Fixed Combo', description: 'Each pack is this product plus products you choose, e.g. a kurta + its dupatta.', preview: 'Kurta + Dupatta', recommended: 'Best for sets and outfits' },
 ];
 // Customer-facing Pack types. `template` (stored) stays the source of truth
 // for rendering/behavior family: Standard = same_variant (or visual_offer,
@@ -26,6 +27,10 @@ export const PACK_TEMPLATES = [
 export const PACK_TYPES = [
   { id: 'same_variant', name: 'Same Variant', templates: ['same_variant', 'visual_offer'], defaultTemplate: 'same_variant', description: 'Customer buys multiple quantities. With Horizontal Select or Image Variant Select each item is still chosen separately; Quick Add Picker uses one variant for all.', example: 'Black / Medium × 3' },
   { id: 'mix_match', name: 'Mix & Match', templates: ['choose_each_item'], defaultTemplate: 'choose_each_item', description: 'Customer can combine different variants in one Pack.', example: 'Black / Medium + White / Small + Blue / Medium' },
+  // Fixed Combo: each tier is this product (the shopper picks its variant) plus fixed
+  // products the merchant chose for that tier (tier.items, exact variants). The shopper
+  // picks a pack; every item goes into the cart as one Pack.
+  { id: 'combo', name: 'Fixed Combo', templates: ['fixed_combo'], defaultTemplate: 'fixed_combo', description: 'Each pack is this product plus fixed products you choose, e.g. Pack 2 = kurta + dupatta. Shoppers only pick this product\'s variant.', example: 'Kurta (M) + Dupatta (Red)' },
 ];
 export const VALID_PACK_TYPES = new Set(PACK_TYPES.map((type) => type.id));
 export const packTypeOf = (template) => PACK_TYPES.find((type) => type.templates.includes(template)) || PACK_TYPES[0];
@@ -117,6 +122,67 @@ export function validateVariantCoverage({ packType, variantScope, allowedVariant
     errors.push({ field: 'allowedVariantIds', message: packType === 'mix_match' ? 'Select at least one variant customers can choose from.' : 'Select at least one variant this Pack applies to.' });
   }
   return { valid: errors.length === 0, errors, allowedVariantIds: owned };
+}
+
+// ─── Fixed Combo items (pack type 'combo') ─────────────────────────────────
+//
+// tier.items = [{ productId, variantId, quantity, handle, title, variantTitle, image }]:
+// the products in that pack besides this product (one unit of it, the shopper's
+// variant). The tier's quantity is always 1 + the items' quantities.
+
+export const COMBO_MAX_ITEMS = 5;
+export const COMBO_MAX_ITEM_QUANTITY = 10;
+
+export function sanitizeComboItems(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const item of raw) {
+    const productId = toNumericId(item?.productId);
+    const variantId = toNumericId(item?.variantId);
+    const quantity = Math.round(Number(item?.quantity ?? 1));
+    if (!productId || !variantId || !Number.isFinite(quantity) || quantity < 1) continue;
+    const existing = out.find((x) => x.variantId === variantId);
+    if (existing) { existing.quantity = Math.min(COMBO_MAX_ITEM_QUANTITY, existing.quantity + quantity); continue; }
+    out.push({
+      productId,
+      variantId,
+      quantity: Math.min(COMBO_MAX_ITEM_QUANTITY, quantity),
+      handle: typeof item?.handle === 'string' ? item.handle.trim().slice(0, 255) : '',
+      title: typeof item?.title === 'string' ? item.title.trim().slice(0, 255) : '',
+      variantTitle: typeof item?.variantTitle === 'string' ? item.variantTitle.trim().slice(0, 255) : '',
+      image: typeof item?.image === 'string' && /^https:\/\//.test(item.image.trim()) ? item.image.trim().slice(0, 1000) : '',
+    });
+    if (out.length >= COMBO_MAX_ITEMS) break;
+  }
+  return out;
+}
+
+function comboContentsKey(items) {
+  return items.map((item) => `${item.variantId}x${item.quantity}`).sort().join(',');
+}
+
+/** A combo tier's item count: this product (1) + its fixed items. */
+export function comboTierQuantity(tier) {
+  return 1 + sanitizeComboItems(tier?.items).reduce((sum, item) => sum + item.quantity, 0);
+}
+
+/**
+ * Combo tiers are valid when each fixed item is another product (not this
+ * one). Returns { valid, errors: [{ index, field, message }] }.
+ */
+export function validateComboTiers(tiers, productId) {
+  const errors = [];
+  const main = toNumericId(productId);
+  (Array.isArray(tiers) ? tiers : []).forEach((tier, index) => {
+    const items = sanitizeComboItems(tier?.items);
+    if (items.some((item) => item.productId === main)) errors.push({ index, field: 'items', message: 'A pack\'s other products can\'t include this product itself.' });
+    if (Array.isArray(tier?.items) && tier.items.length > COMBO_MAX_ITEMS) errors.push({ index, field: 'items', message: `A pack can hold at most ${COMBO_MAX_ITEMS} other products.` });
+    // Two packs with the same contents: checkout couldn't tell which one the shopper chose.
+    const key = comboContentsKey(items);
+    const twin = (Array.isArray(tiers) ? tiers : []).findIndex((other, i) => i < index && comboContentsKey(sanitizeComboItems(other?.items)) === key);
+    if (twin >= 0) errors.push({ index, field: 'items', message: items.length ? `This pack holds the same products as pack ${twin + 1}. Change its products.` : `Pack ${twin + 1} is already this product on its own. Add the products in this pack.` });
+  });
+  return { valid: errors.length === 0, errors };
 }
 
 // ─── Extra products (a Mix & Match pack may draw from other products too) ─────
@@ -379,11 +445,30 @@ export function calculateTierFromPrices(unitPrices, tier, decimals = 2) {
 }
 
 /** Price a tier for `quantity` copies of one variant, with formatted strings. */
-export function calculateTier(basePrice, tier, { currencyCode = null, locale } = {}) {
-  const decimals = currencyCode ? currencyDecimals(currencyCode) : 2;
+export function calculateTier(basePrice, tier, options = {}) {
   const quantity = Number(tier.quantity);
-  const result = calculateTierFromPrices(Array.from({ length: Math.max(0, quantity) }, () => Number(basePrice)), tier, decimals);
-  result.baseUnitPrice = Number(basePrice);
+  return calculateTierForPrices(Array.from({ length: Math.max(0, quantity) }, () => Number(basePrice)), tier, options, Number(basePrice));
+}
+
+/**
+ * Fixed Combo: a tier priced from this product's price (one unit) plus each of
+ * its items' prices (`itemPrices` = { variantId: price }). An item without a
+ * known price makes the result null (never priced from a guess).
+ */
+export function calculateComboTier(basePrice, tier, itemPrices, options = {}) {
+  const prices = [Number(basePrice)];
+  for (const item of sanitizeComboItems(tier?.items)) {
+    const price = itemPrices?.[item.variantId];
+    if (price === null || price === undefined || !Number.isFinite(Number(price))) return null;
+    for (let i = 0; i < item.quantity; i += 1) prices.push(Number(price));
+  }
+  return calculateTierForPrices(prices, { ...tier, quantity: prices.length }, options, Number(basePrice));
+}
+
+function calculateTierForPrices(unitPrices, tier, { currencyCode = null, locale } = {}, baseUnitPrice = unitPrices[0] ?? 0) {
+  const decimals = currencyCode ? currencyDecimals(currencyCode) : 2;
+  const result = calculateTierFromPrices(unitPrices, tier, decimals);
+  result.baseUnitPrice = Number(baseUnitPrice);
   if (!currencyCode) return result;
   const fmt = (value) => formatMoney(value, { currencyCode, locale });
   return {
@@ -410,6 +495,11 @@ export function normalizeTiers(rawTiers) {
     const discountValue = discountType === 'none' ? 0 : Number(tier?.discountValue === '' ? NaN : tier?.discountValue ?? 0);
     const badge = typeof tier?.badge === 'string' ? tier.badge.trim() : '';
     const name = typeof tier?.name === 'string' ? tier.name.trim() : '';
+    // Fixed Combo: the tier's products; its quantity follows them.
+    if (Array.isArray(tier?.items)) {
+      const items = sanitizeComboItems(tier.items);
+      return { name, quantity: comboTierQuantity({ items }), discountType, discountValue, badge, items };
+    }
     return { name, quantity, discountType, discountValue, badge };
   });
   return tiers.sort((a, b) => (Number.isFinite(a.quantity) ? a.quantity : Infinity) - (Number.isFinite(b.quantity) ? b.quantity : Infinity));
@@ -421,7 +511,7 @@ export function normalizeTiers(rawTiers) {
  * Pass basePrice/currencyCode to also reject fixed discounts that would make
  * the Pack price negative.
  */
-export function validateTiers(rawTiers, { basePrice = null, currencyCode = null } = {}) {
+export function validateTiers(rawTiers, { basePrice = null, currencyCode = null, packType = null, tierSubtotals = null } = {}) {
   const errors = [];
   if (!Array.isArray(rawTiers) || rawTiers.length === 0) {
     return { valid: false, errors: [{ index: null, field: 'tiers', message: 'Add at least one Pack tier.' }] };
@@ -436,8 +526,9 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null 
     } else if (quantity > MAX_TIER_QUANTITY) {
       errors.push({ index, field: 'quantity', message: `Quantity cannot exceed ${MAX_TIER_QUANTITY}.` });
     } else {
-      if (seen.has(quantity)) errors.push({ index, field: 'quantity', message: 'Each tier needs a unique quantity.' });
-      else if (quantity < previous) errors.push({ index, field: 'quantity', message: 'Tiers must be in ascending quantity order.' });
+      // Fixed Combo packs may hold the same number of items (kurta + dupatta, kurta + scarf).
+      if (packType !== 'combo' && seen.has(quantity)) errors.push({ index, field: 'quantity', message: 'Each tier needs a unique quantity.' });
+      else if (packType !== 'combo' && quantity < previous) errors.push({ index, field: 'quantity', message: 'Tiers must be in ascending quantity order.' });
       seen.add(quantity);
       previous = Math.max(previous, quantity);
     }
@@ -457,7 +548,13 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null 
         errors.push({ index, field: 'discountValue', message: 'Percentage must be greater than 0 and at most 100.' });
       } else if (discountType === 'fixed') {
         if (value <= 0) errors.push({ index, field: 'discountValue', message: 'Fixed discount must be greater than 0.' });
-        else if (basePrice !== null && Number.isInteger(quantity) && quantity > 0) {
+        else if (Array.isArray(tierSubtotals) && Number.isFinite(Number(tierSubtotals[index]))) {
+          // Fixed Combo: against what this pack's own items cost.
+          const decimals = currencyCode ? currencyDecimals(currencyCode) : 2;
+          if (Math.round(value * 10 ** decimals) > Math.round(Number(tierSubtotals[index]) * 10 ** decimals)) {
+            errors.push({ index, field: 'discountValue', message: 'Fixed discount cannot be larger than the Pack subtotal.' });
+          }
+        } else if (basePrice !== null && Number.isInteger(quantity) && quantity > 0) {
           const decimals = currencyCode ? currencyDecimals(currencyCode) : 2;
           if (Math.round(value * 10 ** decimals) > Math.round(Number(basePrice) * quantity * 10 ** decimals)) {
             errors.push({ index, field: 'discountValue', message: 'Fixed discount cannot be larger than the Pack subtotal.' });

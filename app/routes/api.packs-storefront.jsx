@@ -59,7 +59,9 @@ function publicPack(pack) {
     tiers: pack.tiers.map((tier) => ({
       quantity: tier.quantity, name: tier.name, badge: tier.badge, discountType: tier.discountType, discountValue: tier.discountValue,
       subtotal: tier.subtotal, discountAmount: tier.discountAmount, price: tier.price, savings: tier.savings, effectiveUnitPrice: tier.effectiveUnitPrice,
+      ...(pack.packType === 'combo' ? { items: tier.items || [] } : {}),
     })),
+    productId: pack.productId,
     customization: pack.customization,
     // Needed whenever the widget must price/offer more than the anchor variant:
     // mix_match (any item can be any allowed variant) or same_variant covering

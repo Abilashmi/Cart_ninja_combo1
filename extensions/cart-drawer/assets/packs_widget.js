@@ -282,7 +282,21 @@
         var t = shallow(tier);
         if (t.discountType === 'fixed') t.discountValue = Number(t.discountValue) * rate;
         var prices = [];
-        for (var i = 0; i < t.quantity; i += 1) prices.push(anchor.price);
+        if (pack.packType === 'combo') {
+          // Fixed Combo: this product (one) + the tier's items at their live prices. An item that
+          // can't be found (unpublished, gone) makes the pack unavailable; never priced from a guess.
+          prices.push(anchor.price);
+          t.comboItems = [];
+          (tier.items || []).forEach(function (item) {
+            var catalog = catalogFor(item.productId);
+            var v = catalog && catalog.byId[numericId(item.variantId)];
+            if (!v || v.price === null) { t.comboMissing = true; return; }
+            t.comboItems.push({ variant: shallow(v, { productTitle: catalog.title || item.title, image: v.image || catalog.image || item.image || '' }), quantity: Number(item.quantity) || 1, title: catalog.title || item.title || '', variantTitle: item.variantTitle || '' });
+            for (var q = 0; q < (Number(item.quantity) || 1); q += 1) prices.push(v.price);
+          });
+        } else {
+          for (var i = 0; i < t.quantity; i += 1) prices.push(anchor.price);
+        }
         var priced = calc(prices, t, decimals);
         t.subtotal = priced.subtotal;
         t.savings = priced.savings;
@@ -898,6 +912,12 @@
     '.brix-packs-islot{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:var(--brix-packs-card);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 1.5)}',
     '.brix-packs-islot[data-state="done"]{border-color:var(--brix-packs-primary)}',
     '.brix-packs-islot[data-state="problem"]{border-color:#b42318}',
+    // Fixed Combo: what else is in the pack.
+    '.brix-packs-includes{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px;font-size:13px;color:var(--brix-packs-text)}',
+    '.brix-packs-includes-title{font-weight:700;margin-right:2px}',
+    '.brix-packs-include{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px 3px 3px;border:1px solid var(--brix-packs-border);border-radius:999px;background:var(--brix-packs-card)}',
+    '.brix-packs-include img{width:26px;height:26px;flex-shrink:0;border-radius:50%;object-fit:cover;background:#f3f3f4}',
+    '.brix-packs-include span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.brix-packs-islot-photo{flex-shrink:0;width:64px;height:64px;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 1.5);background:#f3f3f4;border:1px solid rgba(0,0,0,.06)}',
     '.brix-packs-islot-photo img{display:block;width:100%;height:100%;object-fit:cover}',
     '.brix-packs-islot-name{font-size:14px;font-weight:600;overflow-wrap:anywhere}',
@@ -1152,6 +1172,19 @@
       return !variant.title || variant.title === DEFAULT_OPTION_VALUE ? (pack.productTitle || '') : variant.title;
     }
 
+    // Fixed Combo: the pack's other items, as a small list with pictures.
+    function comboIncludes(tier) {
+      return el('div', { class: 'brix-packs-includes' }, [
+        el('span', { class: 'brix-packs-includes-title', text: bxT('storefront.packs.includes', 'Includes') }),
+      ].concat(((tier && tier.comboItems) || []).map(function (item) {
+        var image = item.variant && item.variant.image;
+        return el('span', { class: 'brix-packs-include' }, [
+          image ? el('img', { src: image, alt: '', loading: 'lazy' }) : null,
+          el('span', { text: (item.quantity > 1 ? item.quantity + ' \u00d7 ' : '') + item.title + (item.variantTitle ? ' (' + item.variantTitle + ')' : '') }),
+        ]);
+      })));
+    }
+
     function tierName(tier) {
       return tier.name || bxT('storefront.packs.buy_n', 'Buy {count}', { count: tier.quantity });
     }
@@ -1208,11 +1241,47 @@
       return content.hideVariants === true;
     }
 
+    // Fixed Combo: this product's item (the one thing the shopper picks) + the tier's fixed items.
+    function isCombo(pack) { return Boolean(pack) && pack.packType === 'combo'; }
+    function comboMainItem(pack) {
+      var m = model(pack);
+      if (hideVariantsFor(pack)) {
+        var chosen = defaultVariant(m);
+        return chosen ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
+      }
+      if (layoutFor(pack) === 'quick_add') {
+        var picked = state.picks[0] ? variantById(m, state.picks[0]) : null;
+        return picked ? { variant: picked, problem: forSale(picked) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
+      }
+      return selectionStatus(m.variants, m.options, state.slots[0]);
+    }
+    function comboFixedItems(tier) {
+      var out = [];
+      ((tier && tier.comboItems) || []).forEach(function (item) {
+        for (var q = 0; q < item.quantity; q += 1) out.push({ variant: item.variant, problem: forSale(item.variant) ? null : 'sold_out', missing: [], fixed: true });
+      });
+      return out;
+    }
+    // The tier the pickers draw for a combo: just this product's one item.
+    function pickTier(pack, tier) { return isCombo(pack) && tier ? shallow(tier, { quantity: 1 }) : tier; }
+    function pickItems(pack, items) { return isCombo(pack) ? items.slice(0, 1) : items; }
+    // "Kurta + Dupatta (Red) + 2 × Palazzo"
+    function comboText(pack, tier) {
+      var parts = [pack.productTitle || bxT('storefront.packs.this_item', 'This item')];
+      ((tier && tier.comboItems) || []).forEach(function (item) {
+        var name = item.title + (item.variantTitle ? ' (' + item.variantTitle + ')' : '');
+        parts.push(item.quantity > 1 ? item.quantity + ' \u00d7 ' + name : name);
+      });
+      return parts.join(' + ');
+    }
+
     function itemsFor(pack, tier) {
       var m = model(pack);
       var items = [];
       var i;
-      if (hideVariantsFor(pack)) {
+      if (isCombo(pack)) {
+        items = [comboMainItem(pack)].concat(comboFixedItems(tier));
+      } else if (hideVariantsFor(pack)) {
         var chosen = defaultVariant(m);
         var hiddenStatus = chosen ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
         for (i = 0; i < tier.quantity; i += 1) items.push(hiddenStatus);
@@ -1262,6 +1331,9 @@
       var prices = [];
       if (index === state.tierIndex) {
         itemsFor(pack, tier).forEach(function (item) { prices.push(item.variant && item.variant.price !== null && item.variant.price !== undefined ? Number(item.variant.price) : unit); });
+      } else if (isCombo(pack)) {
+        prices.push(unit);
+        ((tier.comboItems) || []).forEach(function (item) { for (var q = 0; q < item.quantity; q += 1) prices.push(Number(item.variant.price) || 0); });
       } else {
         for (var i = 0; i < tier.quantity; i += 1) prices.push(unit);
       }
@@ -1287,6 +1359,12 @@
     // A pack size is offered only if the Pack's variants can supply it.
     function tierDisabled(pack, tier) {
       if (pack.available === false) return true;
+      if (isCombo(pack)) {
+        // Items never priced on this page (comboItems unset) = not offered, never sold short.
+        if (!tier || tier.comboMissing || ((tier.items || []).length && !tier.comboItems)) return true;
+        if (!model(pack).variants.some(forSale)) return true;
+        return ((tier.comboItems) || []).some(function (item) { return !forSale(item.variant) || (hasStockCap(item.variant) && Number(item.variant.maxQuantity) < item.quantity); });
+      }
       var m = model(pack);
       var sellable = m.variants.filter(forSale);
       if (!sellable.length) return true;
@@ -1717,7 +1795,7 @@
           onkeydown: function (event) { onTierKey(event, index); },
         };
         if (rows) {
-          var meta = itemsText(t.quantity) + (!money.hidden && shown.savings > 0 ? ' \u00b7 ' + bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) : '');
+          var meta = isCombo(pack) ? comboText(pack, t) : itemsText(t.quantity) + (!money.hidden && shown.savings > 0 ? ' \u00b7 ' + bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) : '');
           var row = el('div', { class: 'brix-packs-stack-item', 'data-selected': selected ? '1' : null }, [
             el('button', shallow(tierProps, { 'data-image': rowImage ? '1' : null }), [
               el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
@@ -1733,7 +1811,8 @@
               ]),
             ]),
           ]);
-          if (selected && !hideVars) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [renderImageSlots(pack, t, itemsFor(pack, t))]));
+          var comboList = isCombo(pack) && t.comboItems && t.comboItems.length ? comboIncludes(t) : null;
+          if (selected && (!hideVars || comboList)) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [hideVars ? null : renderImageSlots(pack, pickTier(pack, t), pickItems(pack, itemsFor(pack, t))), comboList]));
           cards.appendChild(row);
           return;
         }
@@ -1741,7 +1820,7 @@
           t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
           el('span', { class: 'brix-packs-card-check', 'aria-hidden': 'true' }),
           el('span', { class: 'brix-packs-card-name', text: tierName(t) }),
-          el('span', { class: 'brix-packs-card-count', text: itemsText(t.quantity) }),
+          el('span', { class: 'brix-packs-card-count', text: isCombo(pack) ? comboText(pack, t) : itemsText(t.quantity) }),
           money.hidden ? null : el('span', { class: 'brix-packs-card-price' }, [
             el('strong', { text: priceText(shown.price) }),
             showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shown.subtotal) }) : null,
@@ -1765,18 +1844,23 @@
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
       } else if (tier) {
         var body = el('div', { class: 'brix-packs-body', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items'), role: 'group' });
+        // Fixed Combo: the shopper picks only this product; the pack's other items are listed.
+        var pTier = pickTier(pack, tier);
+        var pItems = pickItems(pack, items);
+        var pDone = readyCount(pItems);
         if (layout === 'quick_add') {
-          body.appendChild(progress(m.rules.sameVariant ? progressTitle(m, tier) : bxT('storefront.packs.choose_x', 'Choose {name}', { name: itemsText(tier.quantity) }), done, tier.quantity, bxT('storefront.packs.selected_n', 'Selected: {done} / {total}', { done: done, total: tier.quantity })));
-          renderQuickAdd(pack, tier, items).forEach(function (node) { body.appendChild(node); });
+          body.appendChild(progress(m.rules.sameVariant ? progressTitle(m, pTier) : bxT('storefront.packs.choose_x', 'Choose {name}', { name: itemsText(pTier.quantity) }), pDone, pTier.quantity, bxT('storefront.packs.selected_n', 'Selected: {done} / {total}', { done: pDone, total: pTier.quantity })));
+          renderQuickAdd(pack, pTier, pItems).forEach(function (node) { body.appendChild(node); });
         } else {
-          body.appendChild(progress(progressTitle(m, tier), done, tier.quantity));
-          body.appendChild(renderSlots(pack, tier, items, custom));
+          body.appendChild(progress(isCombo(pack) ? tierName(tier) + ' \u2014 ' + bxT('storefront.packs.choose_your_item', 'Choose your item') : progressTitle(m, tier), pDone, pTier.quantity));
+          body.appendChild(renderSlots(pack, pTier, pItems, custom));
         }
+        if (isCombo(pack) && tier.comboItems && tier.comboItems.length) body.appendChild(comboIncludes(tier));
         section.appendChild(body);
 
         var shownCurrent = shownTier(pack, tier, state.tierIndex);
         section.appendChild(el('div', { class: 'brix-packs-total' }, [
-          el('span', { class: 'brix-packs-total-label', text: tierName(tier) + ' \u00b7 ' + itemsText(tier.quantity) }),
+          el('span', { class: 'brix-packs-total-label', text: tierName(tier) + ' \u00b7 ' + (isCombo(pack) ? comboText(pack, tier) : itemsText(tier.quantity)) }),
           money.hidden ? null : el('span', { class: 'brix-packs-total-price' }, [
             showWas && shownCurrent.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shownCurrent.subtotal) }) : null,
             el('strong', { text: priceText(shownCurrent.price) }),
@@ -2460,6 +2544,14 @@
     var wanted = {};
     (packs || []).forEach(function (pack) {
       if (pack.productId && String(pack.productId) !== String(productId) && pack.productHandle) wanted[String(pack.productId)] = pack.productHandle;
+      if (pack.packType === 'combo') {
+        (pack.tiers || []).forEach(function (tier) {
+          (tier.items || []).forEach(function (item) {
+            if (item.handle && String(item.productId) !== String(productId)) wanted[String(item.productId)] = item.handle;
+          });
+        });
+        return;
+      }
       if (pack.packType !== 'mix_match') return;
       (pack.extraProducts || []).forEach(function (item) {
         if (item.handle && String(item.productId) !== String(productId)) wanted[String(item.productId)] = item.handle;
