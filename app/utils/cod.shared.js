@@ -33,7 +33,10 @@ export const COD_UNLISTED_MODES = ['all', 'only'];
 // The most products / collections one pick list holds (all settings share
 // cod_settings.php's 60,000 byte limit).
 export const COD_PICK_MAX = Object.freeze({ products: 50, collections: 25 });
-export const COD_SHIPPING_MODES = ['simple', 'advanced'];
+// simple = one price (shippingFee / freeShippingAbove); advanced = BRIX's dynamic
+// rules (cod_shipping); shopify = the store's own Shopify shipping rates for the
+// address and cart (draftOrderCalculate availableShippingRates).
+export const COD_SHIPPING_MODES = ['simple', 'advanced', 'shopify'];
 
 // Price tags in button texts ({price}, {cod_price}, ...): price-tags.shared.js.
 export { COD_PRICE_TAGS, hasPriceTags, showsCodFee, fillPriceTags, codPriceValues, paymentPriceValues } from './price-tags.shared.js';
@@ -659,7 +662,8 @@ export function codProductFee(settings, normal, productIds) {
  */
 export function codCharges(settings, subtotal, shipping = null, productIds = null) {
   if (shipping == null) {
-    shipping = settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
+    // Shopify's rates are known only with an address (quoteCod): none until then.
+    shipping = settings.shippingMode !== 'shopify' && settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
       ? settings.shippingFee
       : 0;
   }

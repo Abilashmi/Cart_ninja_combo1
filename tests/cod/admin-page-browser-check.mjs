@@ -78,6 +78,8 @@ const orders = Array.from({ length: 18 }, (_, i) => ({
   orderNumericId: 5000 + i, orderName: `#${1047 - i}`, customer: names[i % names.length], phone: `98XXXX${String(3210 + i).slice(-4)}`,
   phoneVerified: i % 3 !== 2, pincode: String(560001 + i * 7), source: sources[i % 3], total: 499 + ((i * 337) % 2500),
   currency: 'INR', status: statuses[i % statuses.length], lifecycle: lifecycles[i % lifecycles.length], tracking: sent[i % sent.length], createdAt: new Date(now - Math.floor(i * 0.7) * day - i * 3600000).toISOString(),
+  // The newest is a Partial COD order (loadPartialCodOrders): advance paid online, balance due.
+  ...(i === 0 ? { partial: { advance: 138, balance: 361 } } : {}),
 }));
 const sum = (l) => l.reduce((a, o) => a + o.total, 0);
 const scenario = process.argv[2] || 'live';
@@ -216,6 +218,8 @@ if (scenario === 'live') {
   await page.waitForTimeout(200);
   await shot('orders-lifecycle');
   console.log('order row:', await page.locator('.Polaris-IndexTable__TableRow').first().textContent());
+  const first = await page.locator('.Polaris-IndexTable__TableRow').first().textContent();
+  check('orders: a Partial COD order is marked, with what was paid and what is due', first.includes('Part payment') && /₹138(\.00)? paid/.test(first) && /₹361(\.00)? due/.test(first), first);
 }
 console.log('errors:', errors.length ? errors.join('\n') : 'none');
 check('no page or console errors', errors.length === 0);

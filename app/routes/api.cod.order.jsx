@@ -28,7 +28,8 @@ export async function action({ request }) {
     const { address, error: addressError } = validateAddress(body.address);
     if (addressError) throw new CodError('invalid_address', addressError);
 
-    const ctx = await loadCodContext(shop);
+    // withShipping: dynamic shipping's rules, so the order charges what the quote showed.
+    const ctx = await loadCodContext(shop, { withShipping: true });
     assertLive(ctx, surface);
 
     let phone = normalizeIndianPhone(body.phone);

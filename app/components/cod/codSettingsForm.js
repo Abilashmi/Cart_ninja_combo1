@@ -129,7 +129,7 @@ export function toForm(s) {
     codFeeLabel: s.codFeeLabel,
     shippingFee: numText(s.shippingFee),
     freeShippingAbove: numText(s.freeShippingAbove),
-    shippingMode: s.shippingMode === 'advanced' ? 'advanced' : 'simple',
+    shippingMode: ['advanced', 'shopify'].includes(s.shippingMode) ? s.shippingMode : 'simple',
     minOrder: numText(s.minOrder),
     maxOrder: numText(s.maxOrder),
     // Partial COD (utils/partial-cod.shared.js).

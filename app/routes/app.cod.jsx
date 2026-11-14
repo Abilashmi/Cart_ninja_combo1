@@ -21,6 +21,7 @@ import {
   CodError, getCodSettings, getCodSecrets, msg91Creds, syncCodRuntime, loadCodOrders, summarizeCodOrders, getCodShippingStats, getShopTimezone,
   COD_ORDERS_VIEW_MAX,
 } from '../services/cod.server';
+import { loadPartialCodOrders } from '../services/partial-cod.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { resolveCodRange } from '../utils/cod-dates.shared';
 import CodOrdersChart from '../components/cod/CodOrdersChart';
@@ -46,6 +47,13 @@ export async function loader({ request }) {
     await syncCodRuntime(shop, { admin });
     sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
     ({ orders, total: ordersTotal } = await loadCodOrders(admin, shop, { limit: COD_ORDERS_VIEW_MAX, startMs: range.startMs, endMs: range.endMs }));
+    // Partial COD orders (paid in part in Shopify checkout) count as COD orders too.
+    const partial = await loadPartialCodOrders(admin, shop, { startMs: range.startMs, endMs: range.endMs, limit: COD_ORDERS_VIEW_MAX })
+      .catch((e) => { console.warn('[app.cod] partial COD orders:', e?.message); return []; });
+    if (partial.length) {
+      orders = [...orders, ...partial].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, COD_ORDERS_VIEW_MAX);
+      ordersTotal += partial.length;
+    }
     // Shipping charged on COD orders (recorded since dynamic shipping; older
     // orders and an older cod_orders.php on the PHP server just show nothing).
     shippingStats = await getCodShippingStats(shop, range.days, { startMs: range.startMs, endMs: range.endMs }).catch(() => null);
@@ -277,8 +285,18 @@ export default function CodCheckoutPage() {
         <IndexTable.Cell>{o.customer}</IndexTable.Cell>
         <IndexTable.Cell><InlineStack gap="100" blockAlign="center" wrap={false}><span>{o.phone}</span>{o.phoneVerified ? <Badge tone="success" size="small">OTP</Badge> : null}</InlineStack></IndexTable.Cell>
         <IndexTable.Cell>{o.pincode}</IndexTable.Cell>
-        <IndexTable.Cell>{src ? <span className="cod-src"><Icon source={src.icon} />{src.label}</span> : o.source}</IndexTable.Cell>
-        <IndexTable.Cell><Text as="span" alignment="end" numeric fontWeight="semibold">{formatMoney(o.total, { currencyCode: o.currency || data.currencyCode })}</Text></IndexTable.Cell>
+        <IndexTable.Cell>
+          <InlineStack gap="100" blockAlign="center" wrap={false}>
+            {src ? <span className="cod-src"><Icon source={src.icon} />{src.label}</span> : o.source}
+            {o.partial ? <Badge tone="info" size="small">Part payment</Badge> : null}
+          </InlineStack>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <BlockStack gap="0" inlineAlign="end">
+            <Text as="span" alignment="end" numeric fontWeight="semibold">{formatMoney(o.total, { currencyCode: o.currency || data.currencyCode })}</Text>
+            {o.partial ? <Text as="span" variant="bodySm" tone="subdued" numeric>{formatMoney(o.partial.advance, { currencyCode: o.currency || data.currencyCode })} paid · {formatMoney(o.partial.balance, { currencyCode: o.currency || data.currencyCode })} due</Text> : null}
+          </BlockStack>
+        </IndexTable.Cell>
         <IndexTable.Cell><Badge tone={STATUS[o.status]?.tone} progress={o.status === 'paid' ? 'complete' : o.status === 'pending' ? 'incomplete' : undefined}>{STATUS[o.status]?.label || o.status}</Badge></IndexTable.Cell>
         <IndexTable.Cell><Badge tone={LIFECYCLE[deliveryOf(o)]?.tone}>{LIFECYCLE[deliveryOf(o)]?.label}</Badge></IndexTable.Cell>
         {trackingOn && (
@@ -412,7 +430,7 @@ export default function CodCheckoutPage() {
                             <Avatar name={o.customer} />
                             <span className="cod-recent-m">
                               <Text as="span" variant="bodySm" fontWeight="semibold" truncate>{o.customer}</Text>
-                              <Text as="span" variant="bodySm" tone="subdued">{o.orderName} · {ago(o.createdAt)}</Text>
+                              <Text as="span" variant="bodySm" tone="subdued">{o.orderName} · {ago(o.createdAt)}{o.partial ? ' · Part payment' : ''}</Text>
                             </span>
                             <span className="cod-recent-r">
                               <Text as="span" variant="bodySm" fontWeight="semibold" numeric>{formatMoney(o.total, { currencyCode: o.currency || data.currencyCode })}</Text>

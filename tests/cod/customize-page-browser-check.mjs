@@ -687,6 +687,12 @@ if (width > 900) {
   await page.evaluate(() => { window.__SUBMITTED__ = null; });
   await openSec('Shipping charges');
   check('Shipping: one price by default; zones, rules and the rest hidden', await page.getByLabel('One price').isChecked() && (await row('Zones').count()) === 0);
+  // My Shopify shipping rates: no price fields of its own, says where the rates come from.
+  await page.getByLabel('My Shopify shipping rates').check({ force: true });
+  await page.waitForTimeout(150);
+  check('Shipping: "My Shopify shipping rates" hides the one-price fields and explains', (await page.getByLabel('Free shipping from').count()) === 0
+    && (await page.getByText('the same zones, prices, free-shipping thresholds', { exact: false }).count()) === 1
+    && (await page.getByText('Open Shipping and delivery in Shopify').count()) === 1);
   await page.getByLabel('Dynamic shipping').check({ force: true }); // Polaris draws its own radio over the input
   await page.waitForTimeout(150);
   const std = await page.locator('.shp-card').first().textContent();

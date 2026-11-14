@@ -77,6 +77,27 @@ export function ensurePartialCodTable(db = getDb()) {
   return tableReady;
 }
 
+// The shopper's name, PIN code and where they started (drawer / product /
+// combo), for the COD dashboard; added to tables made before they existed.
+let columnsReady = null;
+function ensurePartialCodColumns(db) {
+  if (!columnsReady) {
+    columnsReady = (async () => {
+      await ensurePartialCodTable(db);
+      for (const ddl of [
+        'ADD COLUMN customer_name VARCHAR(120) NULL',
+        'ADD COLUMN pincode VARCHAR(10) NULL',
+        'ADD COLUMN surface VARCHAR(16) NULL',
+      ]) {
+        try { await db.execute(`ALTER TABLE partial_cod_orders ${ddl}`); } catch (error) {
+          if (!/duplicate column/i.test(String(error?.message || ''))) throw error;
+        }
+      }
+    })().catch((error) => { columnsReady = null; throw error; });
+  }
+  return columnsReady;
+}
+
 /**
  * Price the order like a COD order, split it, make the code and remember the
  * order's expected total. Returns { code, advance, balance, total, currency, endsAt }.
@@ -146,10 +167,10 @@ export async function createPartialCod(admin, {
   if (errors.length || !data?.discountCodeBasicCreate?.codeDiscountNode?.id) {
     throw new Error(`discountCodeBasicCreate failed: ${JSON.stringify(errors).slice(0, 300)}`);
   }
-  await ensurePartialCodTable(db);
+  await ensurePartialCodColumns(db);
   await db.execute(
-    'INSERT INTO partial_cod_orders (code, shop, expected_total, advance, currency) VALUES (?, ?, ?, ?, ?)',
-    [code, shop, quote.total, split.advance, quote.currency || currencyCode],
+    'INSERT INTO partial_cod_orders (code, shop, expected_total, advance, currency, customer_name, pincode, surface) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [code, shop, quote.total, split.advance, quote.currency || currencyCode, String(address?.name || '').trim().slice(0, 120) || null, String(address?.pincode || '').slice(0, 10) || null, ['drawer', 'product', 'combo'].includes(surface) ? surface : null],
   );
   cleanupExpiredCodes(admin, shop, PARTIAL_COD_CODE_PREFIX).catch(() => {});
   return { code, advance: split.advance, balance: split.balance, total: quote.total, currency: quote.currency || currencyCode, endsAt };
@@ -256,6 +277,75 @@ export async function completePartialCodOrder(shop, payload, {
 /* ───────────── the payment rule (extensions/brix-partial-cod-payment) ───────────── */
 
 export const PARTIAL_COD_FUNCTION_HANDLE = 'brix-partial-cod-payment';
+/**
+ * Partial COD orders for the COD dashboard (routes/app.cod.jsx), in the same
+ * row shape as loadCodOrders, newest first: orders that came in (a code was
+ * used), created in [startMs, endMs) when given. Status from Shopify's live
+ * order: Partially paid = pending (the balance is still to collect), Paid =
+ * paid, cancelled / refunded / voided = cancelled. `partial` = { advance,
+ * balance }: what was paid online and what is left to collect.
+ */
+export async function loadPartialCodOrders(admin, shop, { startMs = null, endMs = null, limit = 500 } = {}, { db = getDb() } = {}) {
+  await ensurePartialCodColumns(db);
+  const windowed = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs;
+  const [rows] = await db.execute(
+    `SELECT code, expected_total, advance, currency, status, order_id, order_name, paid, balance_added, customer_name, pincode, surface,
+            UNIX_TIMESTAMP(created_at) AS created_ts
+       FROM partial_cod_orders
+      WHERE shop = ? AND order_id IS NOT NULL AND status IN ('processing', 'done', 'failed')
+        ${windowed ? 'AND created_at >= FROM_UNIXTIME(?) AND created_at < FROM_UNIXTIME(?)' : ''}
+      ORDER BY created_at DESC LIMIT ${Math.max(1, Math.min(500, Number(limit) || 500))}`,
+    windowed ? [shop, Math.floor(startMs / 1000), Math.floor(endMs / 1000)] : [shop],
+  );
+  const list = Array.isArray(rows) ? rows : [];
+  const live = new Map();
+  const ids = list.map((r) => toOrderGid(r.order_id));
+  for (let i = 0; i < ids.length && admin; i += 250) {
+    try {
+      const data = await gql(admin, `#graphql
+        query PartialCodOrders($ids: [ID!]!) {
+          nodes(ids: $ids) { ... on Order { id displayFinancialStatus displayFulfillmentStatus cancelledAt
+            currentTotalPriceSet { shopMoney { amount } } totalOutstandingSet { shopMoney { amount } } } }
+        }`, { ids: ids.slice(i, i + 250) });
+      for (const node of data?.nodes || []) if (node?.id) live.set(node.id, node);
+    } catch (error) {
+      console.warn('[partial-cod] could not load live order status:', error?.message);
+    }
+  }
+  const num = (v, fallback = 0) => (Number.isFinite(Number(v)) && v !== null && v !== '' ? Number(v) : fallback);
+  return list.map((r) => {
+    const gid = toOrderGid(r.order_id);
+    const node = live.get(gid);
+    let status = 'unknown';
+    if (node) {
+      if (node.cancelledAt || ['REFUNDED', 'VOIDED'].includes(node.displayFinancialStatus)) status = 'cancelled';
+      else if (node.displayFinancialStatus === 'PAID') status = 'paid';
+      else status = 'pending';
+    }
+    const total = node ? num(node.currentTotalPriceSet?.shopMoney?.amount, num(r.expected_total)) : num(r.expected_total);
+    const advance = num(r.paid, num(r.advance));
+    const balance = node ? num(node.totalOutstandingSet?.shopMoney?.amount, Math.max(0, total - advance)) : num(r.balance_added, Math.max(0, total - advance));
+    return {
+      orderId: gid,
+      orderName: r.order_name || `#${String(r.order_id).split('/').pop()}`,
+      orderNumericId: String(r.order_id || '').split('/').pop(),
+      source: r.surface || null,
+      phone: '',
+      phoneVerified: false,
+      customer: r.customer_name || 'Shopper',
+      pincode: r.pincode || '',
+      total,
+      currency: r.currency,
+      createdAt: Number(r.created_ts) ? new Date(Number(r.created_ts) * 1000).toISOString() : null,
+      lifecycle: 'placed',
+      tracking: { ga4: null, meta: null },
+      status,
+      fulfillment: node?.displayFulfillmentStatus || null,
+      partial: { advance, balance, needsCheck: r.status === 'failed' },
+    };
+  });
+}
+
 export const PARTIAL_COD_RULE_TITLE = 'BRIX Partial COD: advance paid online';
 
 /**

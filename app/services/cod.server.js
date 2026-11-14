@@ -570,6 +570,51 @@ function shippingLines(calc, info) {
 }
 
 /** The shopper's pick of delivery option / date / slot from the popup (untrusted). */
+/**
+ * The address Shopify prices shipping for: always the PIN code; with Shopify
+ * rates also the city and state (zones by state need it).
+ */
+export function rateAddress(where, full = false) {
+  const provinceCode = full ? provinceCodeFor(where.state) : null;
+  return {
+    countryCode: 'IN',
+    zip: String(where.pincode),
+    ...(full && where.city ? { city: String(where.city) } : {}),
+    ...(provinceCode ? { provinceCode } : {}),
+  };
+}
+
+/**
+ * The store's Shopify rates (availableShippingRates) as COD delivery options,
+ * cheapest first (one per name, its lowest price): id = the name made safe
+ * for cleanDeliveryChoice, kind 'shopify'. `choice` = the shopper's pick
+ * ({ option }); none or gone = the cheapest (choiceError 'option' when gone).
+ */
+export function shopifyShipping(rates, choice = null) {
+  const byName = new Map();
+  for (const r of Array.isArray(rates) ? rates : []) {
+    const name = String(r?.title || '').trim().slice(0, 80);
+    const price = Math.round(Number(r?.price?.amount) * 100) / 100;
+    if (!name || !Number.isFinite(price) || price < 0) continue;
+    if (!byName.has(name) || byName.get(name).price > price) byName.set(name, { name, price });
+  }
+  const used = new Set();
+  const options = [...byName.values()].sort((a, b) => a.price - b.price || a.name.localeCompare(b.name)).map((r) => {
+    const base = `s-${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'rate'}`;
+    let id = base;
+    for (let n = 2; used.has(id); n += 1) id = `${base}-${n}`;
+    used.add(id);
+    return { id, kind: 'shopify', name: r.name, price: r.price, free: r.price === 0 };
+  });
+  const wanted = choice?.option ? options.find((o) => o.id === choice.option) : null;
+  return {
+    options,
+    selected: wanted || options[0] || null,
+    choiceError: choice?.option && !wanted ? 'option' : null,
+    zone: null, date: null, slot: null, noShipping: false,
+  };
+}
+
 export function cleanDeliveryChoice(value) {
   const v = value && typeof value === 'object' ? value : {};
   const pick = (x, re) => (typeof x === 'string' && re.test(x) ? x : null);
@@ -874,7 +919,7 @@ function boxLinesStacked(calc, lines, combo) {
 // Function and code ones) with its title and amount, so the popup can name
 // them. Validated against the 2026-01 schema; if the store's API version
 // rejects it, calculate() falls back to CALCULATE_BASIC for good.
-const CALCULATE_FIELDS = (withPlatform) => `#graphql
+const CALCULATE_FIELDS = (withPlatform, withRates = false) => `#graphql
   mutation CodCalculate($input: DraftOrderInput!) {
     draftOrderCalculate(input: $input) {
       calculatedDraftOrder {
@@ -882,6 +927,7 @@ const CALCULATE_FIELDS = (withPlatform) => `#graphql
         taxesIncluded
         discountCodes
         ${withPlatform ? 'platformDiscounts { title code automaticDiscount totalAmountPriceSet { shopMoney { amount } } }' : ''}
+        ${withRates ? 'availableShippingRates { handle title price { amount } }' : ''}
         lineItems {
           name title variantTitle quantity sku
           variant { id }
@@ -902,17 +948,20 @@ const CALCULATE_FIELDS = (withPlatform) => `#graphql
   }`;
 const CALCULATE = CALCULATE_FIELDS(true);
 const CALCULATE_BASIC = CALCULATE_FIELDS(false);
+// Shipping from Shopify (settings.shippingMode 'shopify'): the same, plus the store's rates.
+const CALCULATE_RATES = CALCULATE_FIELDS(true, true);
+const CALCULATE_BASIC_RATES = CALCULATE_FIELDS(false, true);
 let platformDiscountsSupported = true;
 
-async function calculate(admin, input) {
+async function calculate(admin, input, { rates = false } = {}) {
   let data;
   try {
-    data = await gql(admin, platformDiscountsSupported ? CALCULATE : CALCULATE_BASIC, { input });
+    data = await gql(admin, platformDiscountsSupported ? (rates ? CALCULATE_RATES : CALCULATE) : (rates ? CALCULATE_BASIC_RATES : CALCULATE_BASIC), { input });
   } catch (error) {
     if (!platformDiscountsSupported || !(error instanceof CodError) || error.code !== 'shopify_error') throw error;
     console.warn('[cod] draftOrderCalculate without platformDiscounts from now on');
     platformDiscountsSupported = false;
-    data = await gql(admin, CALCULATE_BASIC, { input });
+    data = await gql(admin, rates ? CALCULATE_BASIC_RATES : CALCULATE_BASIC, { input });
   }
   const result = data?.draftOrderCalculate;
   if (result?.userErrors?.length) {
@@ -933,10 +982,21 @@ function shippingLine(settings, charges, currencyCode, option = null) {
 
 // Codes from the shopper's cart (cart.js discount_codes / the BRIX drawer).
 const MAX_DISCOUNT_CODES = 5;
+// BRIX's own one-time codes (newBoxCode: 2 letters + 10 of its alphabet):
+// PC = Partial COD (partial-cod.server.js), PP = prepaid on Shiprocket
+// (prepaid-code.server.js), BX = a combo box (combo-box-code.server.js).
+// Each is worth everything but what that one checkout charges, so one left on
+// the shopper's cart (they went to that checkout and came back) must never
+// count as a discount in a COD quote: a Partial COD started again priced the
+// cart with the old code and booked a ₹461-short balance (14 Nov 2026), and a
+// plain COD order would have taken it off too.
+export const BRIX_ONE_TIME_CODE = /^(PC|PP|BX)[A-HJ-NP-Z2-9]{10}$/i;
+
 function cleanCartCodes(list) {
   const out = [];
   for (const raw of Array.isArray(list) ? list : []) {
     const c = typeof raw === 'string' ? raw.trim() : '';
+    if (BRIX_ONE_TIME_CODE.test(c)) continue;
     if (/^[^\s<>"'`\\]{1,60}$/.test(c) && !out.some((x) => x.toLowerCase() === c.toLowerCase())) out.push(c);
     if (out.length >= MAX_DISCOUNT_CODES) break;
   }
@@ -1039,6 +1099,8 @@ export async function quoteCod(admin, {
     throw new CodError('checkout_only', 'This cart has a free gift that is only available with online payment.', { status: 422 });
   }
   const advanced = settings.shippingMode === 'advanced' && shipping ? shipping : null;
+  // Shipping from the store's own Shopify rates (Settings > Shipping and delivery).
+  const fromShopify = settings.shippingMode === 'shopify';
   const where = destination || (pincode ? { pincode } : null);
   const { tags, info } = await loadVariants(admin, lines, { shipping: advanced, collections: codRuleCollections(settings, surface) });
   const productError = productRuleError(settings, info, surface);
@@ -1055,7 +1117,8 @@ export async function quoteCod(admin, {
   combo.packMinor = packs.amountMinor;
   const hasBoxes = combo.boxes.length > 0 || packs.amountMinor > 0;
 
-  const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
+  // A typed coupon that is one of BRIX's own one-time codes is ignored too (BRIX_ONE_TIME_CODE).
+  const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) && !BRIX_ONE_TIME_CODE.test(coupon.trim()) ? coupon.trim() : null;
   // The cart's own discounts (settings.cartDiscounts, default on): Shopify's
   // automatic discounts, including app / Function ones, and the codes already
   // on the shopper's cart, as in Shopify checkout. Off: none of them.
@@ -1073,13 +1136,13 @@ export async function quoteCod(admin, {
     // that here, COD leaves automatic discounts off for this order instead.
     acceptAutomaticDiscounts: withCartDiscounts,
     ...(codes.length ? { discountCodes: codes } : {}),
-    ...(where?.pincode ? { shippingAddress: { countryCode: 'IN', zip: String(where.pincode) } } : {}),
+    ...(where?.pincode ? { shippingAddress: rateAddress(where, fromShopify) } : {}),
   };
 
-  let calc = await calculate(admin, base);
+  let calc = await calculate(admin, base, { rates: fromShopify && Boolean(where?.pincode) });
   if (hasBoxes && boxLinesStacked(calc, lines, combo)) {
     base = { ...base, acceptAutomaticDiscounts: false };
-    calc = await calculate(admin, base);
+    calc = await calculate(admin, base, { rates: fromShopify && Boolean(where?.pincode) });
   }
   // The most a typed code may take off (settings.couponMaxDiscount).
   const capped = code ? await capCoupon(admin, { settings, code, base, calc, format }) : null;
@@ -1090,6 +1153,16 @@ export async function quoteCod(admin, {
 
   // Advanced shipping: the delivery option's price for this address and cart.
   let ship = null;
+  if (fromShopify && where?.pincode) {
+    const rated = calc.availableShippingRates ? calc : await calculate(admin, base, { rates: true });
+    ship = shopifyShipping(rated.availableShippingRates, delivery);
+    if (!ship.options.length) {
+      throw new CodError('no_delivery_option', 'No delivery option is available for this address and cart right now. Please try another address, or pay online.', { status: 422 });
+    }
+    if (strictDelivery && ship.choiceError) {
+      throw new CodError('delivery_changed', 'That delivery option is no longer available. Please check your order again.', { status: 409 });
+    }
+  }
   if (advanced) {
     ship = quoteShipping(advanced, { destination: where, subtotal, lines: shippingLines(calc, info), now, choice: delivery || {}, fmt: format });
     if (ship.blocked) throw new CodError('not_deliverable', ship.blocked.message, { status: 422 });
@@ -1103,7 +1176,8 @@ export async function quoteCod(admin, {
     }
   }
   // The order's products: some may have their own COD fee (codFeeProducts).
-  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : null, [...info.values()].map((v) => v.productId));
+  // Shopify rates before the address is known: no shipping yet (never the one-price setting).
+  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : fromShopify ? 0 : null, [...info.values()].map((v) => v.productId));
   const input = { ...base };
   input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode, ship?.selected?.name || null);
   if (charges.total > 0) calc = await calculate(admin, input);
@@ -1538,7 +1612,9 @@ export function summarizeCodOrders(orders) {
   const cancelled = orders.filter((o) => o.status === 'cancelled');
   return {
     count: orders.length,
-    toCollect: sum(pending),
+    // Partial COD: only the balance is still to collect (the advance was paid online).
+    toCollect: pending.reduce((a, o) => a + (o.partial ? o.partial.balance : o.total), 0),
+    partialCount: orders.filter((o) => o.partial).length,
     collected: sum(paid),
     paidCount: paid.length,
     cancelledCount: cancelled.length,

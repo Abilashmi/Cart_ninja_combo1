@@ -97,10 +97,15 @@ function fakeDb() {
     rows,
     async execute(sql, params = []) {
       if (/^CREATE TABLE/.test(sql.trim())) return [{}];
+      if (/^ALTER TABLE partial_cod_orders/.test(sql.trim())) return [{}];
       if (/^INSERT INTO partial_cod_orders/.test(sql)) {
-        const [code, shop, expected, advance, currency] = params;
-        rows.set(code, { code, shop, expected_total: String(expected), advance: String(advance), currency, status: 'created' });
+        const [code, shop, expected, advance, currency, customerName = null, pincode = null, surface = null] = params;
+        rows.set(code, { code, shop, expected_total: String(expected), advance: String(advance), currency, status: 'created', customer_name: customerName, pincode, surface, created_ts: 1763100000 });
         return [{ affectedRows: 1 }];
+      }
+      if (/UNIX_TIMESTAMP\(created_at\)/.test(sql)) {
+        const [shop] = params;
+        return [[...rows.values()].filter((r) => r.shop === shop && r.order_id && ['processing', 'done', 'failed'].includes(r.status))];
       }
       if (/^SELECT code/.test(sql)) {
         const [shop, ...codes] = params;
@@ -153,6 +158,7 @@ test('code: worth the items\' Shopify price minus the advance; order total remem
   assert.equal(input.endsAt, new Date(NOW + 2 * 60 * 60 * 1000).toISOString());
   assert.deepEqual(input.combinesWith, { productDiscounts: false, orderDiscounts: false, shippingDiscounts: true });
   assert.equal(db.rows.get('PCABCDEFGHJK').expected_total, '2698');
+  assert.deepEqual([db.rows.get('PCABCDEFGHJK').customer_name, db.rows.get('PCABCDEFGHJK').pincode, db.rows.get('PCABCDEFGHJK').surface], ['Asha K', '600001', 'product'], 'who and where, for the COD dashboard');
 });
 
 test('code: shipping + COD fee mode takes the advance from the priced order', async () => {
@@ -228,4 +234,28 @@ test('order: other orders are left alone; a failure retries, then tags partial-c
   assert.equal(admin.calls.filter((c) => c.op === 'BrixPartialCodEditBegin').length, 3);
   assert.deepEqual(admin.calls.find((c) => c.op === 'BrixPartialCodTags').variables.tags, ['partial-cod', 'BRIX-COD', 'partial-cod-check']);
   assert.equal(db.rows.get('PCABCDEFGHJK').status, 'failed');
+});
+
+test('COD dashboard: Partial COD orders listed with what was paid and what is left to collect', async () => {
+  const { loadPartialCodOrders } = await import('../../app/services/partial-cod.server.js');
+  const { summarizeCodOrders } = await import('../../app/services/cod.server.js');
+  const db = fakeDb();
+  db.rows.set('PCAAAAAAAAAA', { code: 'PCAAAAAAAAAA', shop: 'demo.myshopify.com', expected_total: '736.00', advance: '138.00', currency: 'INR', status: 'done', order_id: 'gid://shopify/Order/9001', order_name: '#1101', paid: '138.00', balance_added: '598.00', customer_name: 'Asha K', pincode: '600001', surface: 'product', created_ts: 1763100000 });
+  db.rows.set('PCBBBBBBBBBB', { code: 'PCBBBBBBBBBB', shop: 'demo.myshopify.com', expected_total: '500.00', advance: '50.00', currency: 'INR', status: 'done', order_id: 'gid://shopify/Order/9002', order_name: '#1102', paid: '50.00', balance_added: '450.00', customer_name: null, pincode: null, surface: null, created_ts: 1763000000 });
+  db.rows.set('PCCCCCCCCCCC', { code: 'PCCCCCCCCCCC', shop: 'demo.myshopify.com', expected_total: '300.00', advance: '30.00', currency: 'INR', status: 'created' });
+  const admin = { calls: [], async graphql(query, { variables }) {
+    this.calls.push(variables);
+    return { json: async () => ({ data: { nodes: [
+      { id: 'gid://shopify/Order/9001', displayFinancialStatus: 'PARTIALLY_PAID', displayFulfillmentStatus: 'UNFULFILLED', cancelledAt: null, currentTotalPriceSet: { shopMoney: { amount: '736.0' } }, totalOutstandingSet: { shopMoney: { amount: '598.0' } } },
+      { id: 'gid://shopify/Order/9002', displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'FULFILLED', cancelledAt: null, currentTotalPriceSet: { shopMoney: { amount: '500.0' } }, totalOutstandingSet: { shopMoney: { amount: '0.0' } } },
+    ] } }) };
+  } };
+  const orders = await loadPartialCodOrders(admin, 'demo.myshopify.com', {}, { db });
+  assert.deepEqual(orders.map((o) => [o.orderName, o.status, o.total, o.partial.advance, o.partial.balance, o.customer, o.source]),
+    [['#1101', 'pending', 736, 138, 598, 'Asha K', 'product'], ['#1102', 'paid', 500, 50, 0, 'Shopper', null]], 'started-but-unpaid codes are left out');
+  const stats = summarizeCodOrders(orders);
+  assert.equal(stats.count, 2);
+  assert.equal(stats.partialCount, 2);
+  assert.equal(stats.toCollect, 598, 'only the balance is still to collect');
+  assert.equal(stats.collected, 500);
 });

@@ -476,8 +476,9 @@ if ($action === 'config') {
         'codFeeProducts' => $feeOn ? cods_fee_products($s['codFeeProducts'] ?? null) : null,
         'showCodFee' => ($s['showCodFee'] ?? true) !== false,
         'codFeeLabel' => $feeLabel !== '' ? $feeLabel : 'Cash on Delivery Fee',
-        'shippingFee' => cods_num($s['shippingFee'] ?? 0),
-        'freeShippingAbove' => cods_num($s['freeShippingAbove'] ?? 0),
+        // Shipping from the store's Shopify rates: known only at review (the app server prices it).
+        'shippingFee' => ($s['shippingMode'] ?? '') === 'shopify' ? 0 : cods_num($s['shippingFee'] ?? 0),
+        'freeShippingAbove' => ($s['shippingMode'] ?? '') === 'shopify' ? 0 : cods_num($s['freeShippingAbove'] ?? 0),
         'blockedPincodes' => cods_str_list($s['blockedPincodes'] ?? []),
         'excludedProductTags' => cods_str_list($s['excludedProductTags'] ?? []),
         'excludedBehavior' => cods_enum($s['excludedBehavior'] ?? '', ['unavailable', 'hide'], 'unavailable'),
