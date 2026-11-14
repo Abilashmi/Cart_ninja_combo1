@@ -182,7 +182,7 @@ export function validateComboTiers(tiers, productId) {
     // Two packs with the same contents: checkout couldn't tell which one the shopper chose.
     const key = comboContentsKey(items);
     const twin = (Array.isArray(tiers) ? tiers : []).findIndex((other, i) => i < index && comboContentsKey(sanitizeComboItems(other?.items)) === key);
-    if (twin >= 0) errors.push({ index, field: 'items', message: items.length ? `This pack holds the same products as pack ${twin + 1}. Change its products.` : `Pack ${twin + 1} is already this product on its own. Add the products in this pack.` });
+    if (twin >= 0) errors.push({ index, field: 'items', message: items.length ? `This pack holds the same products as pack ${twin + 1}. Change its products.` : `Add products to this pack: pack ${twin + 1} is already this product on its own.` });
   });
   return { valid: errors.length === 0, errors };
 }

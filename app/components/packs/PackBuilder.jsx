@@ -752,34 +752,49 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 
   // Fixed Combo: pick products (and exact variants) for one pack. A product ticked whole adds its
   // first in-stock variant only; open it in the picker to choose particular ones.
+  // The picker's selection as pack items added to `existing` (this product itself is never one).
+  const pickedComboItems = (result, existing, mainProductId) => {
+    const items = [...existing];
+    let skippedMain = false;
+    for (const product of result) {
+      const productId = String(product.id).split('/').pop();
+      if (productId === mainProductId) { skippedMain = true; continue; }
+      const chosen = Array.isArray(product.variants) ? product.variants.filter((variant) => variant?.id) : [];
+      const total = Number(product.totalVariants);
+      const some = Number.isFinite(total) && total > 0 && chosen.length < total;
+      const picks = some ? chosen : [chosen.find((variant) => variant.availableForSale !== false) || chosen[0]].filter(Boolean);
+      for (const variant of picks) {
+        const variantId = String(variant.id).split('/').pop();
+        if (items.length >= COMBO_MAX_ITEMS || items.some((item) => item.variantId === variantId)) continue;
+        items.push(comboFormItem({ productId, variantId, quantity: 1, handle: product.handle, title: product.title, variantTitle: variant.title && variant.title !== 'Default Title' ? variant.title : '', image: variant.image?.originalSrc || product.images?.[0]?.originalSrc || '' }));
+      }
+    }
+    return { items, skippedMain };
+  };
+  const SKIPPED_MAIN = 'This product is already in every pack (shoppers pick its variant), so it was not added again.';
   async function addComboItems(index) {
     setError(null);
     try {
       const result = await shopify.resourcePicker({ type: 'product', multiple: true, action: 'select' });
       if (!result) return;
-      let skippedMain = false;
-      setForm((current) => ({
-        ...current,
-        tiers: current.tiers.map((tier, i) => {
-          if (i !== index) return tier;
-          const items = [...(tier.items || [])];
-          for (const product of result) {
-            const productId = String(product.id).split('/').pop();
-            if (productId === current.productId) { skippedMain = true; continue; }
-            const chosen = Array.isArray(product.variants) ? product.variants.filter((variant) => variant?.id) : [];
-            const total = Number(product.totalVariants);
-            const some = Number.isFinite(total) && total > 0 && chosen.length < total;
-            const picks = some ? chosen : [chosen.find((variant) => variant.availableForSale !== false) || chosen[0]].filter(Boolean);
-            for (const variant of picks) {
-              const variantId = String(variant.id).split('/').pop();
-              if (items.length >= COMBO_MAX_ITEMS || items.some((item) => item.variantId === variantId)) continue;
-              items.push(comboFormItem({ productId, variantId, quantity: 1, handle: product.handle, title: product.title, variantTitle: variant.title && variant.title !== 'Default Title' ? variant.title : '', image: variant.image?.originalSrc || product.images?.[0]?.originalSrc || '' }));
-            }
-          }
-          return { ...tier, items };
-        }),
-      }));
-      if (skippedMain) setNotice('This product is already in every pack (shoppers pick its variant), so it was not added again.');
+      const picked = pickedComboItems(result, form.tiers[index]?.items || [], form.productId);
+      setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i !== index ? tier : { ...tier, items: picked.items })) }));
+      if (picked.skippedMain) setNotice(SKIPPED_MAIN);
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  // "Add pack" on a Fixed Combo: choose the new pack's products first; the pack is added with them
+  // (cancelled, or only this product picked = no new pack).
+  async function addComboPack() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: true, action: 'select' });
+      if (!result) return;
+      const picked = pickedComboItems(result, [], form.productId);
+      if (picked.skippedMain) setNotice(SKIPPED_MAIN);
+      if (!picked.items.length) return;
+      setForm((current) => (current.tiers.length >= MAX_TIERS ? current : { ...current, tiers: [...current.tiers, { ...comboTier(), items: picked.items }] }));
     } catch {
       setError({ message: 'Could not open the Shopify product picker. Please try again.' });
     }
@@ -794,7 +809,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     updateComboItem(index, item.variantId, { variantId: String(live.id), variantTitle: live.title && live.title !== 'Default Title' ? live.title : '', image: live.image || item.image });
   };
 
-  const addTier = () => { if (isCombo) { setForm((current) => ({ ...current, tiers: [...current.tiers, comboTier()] })); return; } const last = Math.max(0, ...form.tiers.map((tier) => Number(tier.quantity) || 0)); setForm((current) => ({ ...current, tiers: [...current.tiers, blankTier(last + 1)] })); };
+  const addTier = () => { if (isCombo) { addComboPack(); return; } const last = Math.max(0, ...form.tiers.map((tier) => Number(tier.quantity) || 0)); setForm((current) => ({ ...current, tiers: [...current.tiers, blankTier(last + 1)] })); };
   const discountOptions = [['none', 'None'], ['percentage', '% off'], ['fixed', 'Amount off']];
   const savingsPercent = (calc) => (calc && calc.subtotal > 0 ? Math.round((calc.savings / calc.subtotal) * 100) : 0);
 
@@ -909,7 +924,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                       {calc.savings > 0 ? <span className="pc-pill pc-pill--save">Save {calc.formatted.savings}{pct > 0 ? ` (${pct}%)` : ''}</span> : <span className="pc-pill pc-pill--muted">Full price</span>}
                     </InlineStack>
                   </div>
-                ) : <Text as="p" tone="subdued" variant="bodySm">{basePrice === null ? 'Choose variant coverage above to preview prices.' : valid && isCombo ? 'Loading prices from Shopify…' : 'Fix the highlighted fields to preview this tier’s price.'}</Text>}
+                ) : <Text as="p" tone="subdued" variant="bodySm">{basePrice === null ? 'Choose variant coverage above to preview prices.' : valid && isCombo ? 'Loading prices from Shopify…' : isCombo ? 'Fix the highlighted fields above to see this pack’s price.' : 'Fix the highlighted fields to preview this tier’s price.'}</Text>}
               </div>
             </div>
           );

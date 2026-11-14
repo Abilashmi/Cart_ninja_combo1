@@ -133,6 +133,26 @@ await check('a whole product ticked adds one variant; picked variants are added 
   await context.close();
 });
 
+await check('Add pack opens the picker and adds a pack holding the chosen products (no empty pack, no error)', async () => {
+  const picker = [{ id: 'gid://shopify/Product/102', title: 'Candle', handle: 'candle', images: [], totalVariants: 1, variants: [{ id: 'gid://shopify/ProductVariant/1021', title: 'Default Title' }] }];
+  const { page, context } = await open({ pack: comboPack(), picker });
+  await page.getByText('₹117.00').first().waitFor();
+  await page.getByRole('button', { name: 'Add pack' }).click();
+  await page.getByText('Pack 3 · 2 items').waitFor();
+  assert.match(await page.locator('.pc-tier').nth(2).innerText(), /Candle/);
+  assert.doesNotMatch(await text(page), /already this product on its own|same products as pack/);
+  await context.close();
+});
+
+await check('Add pack with nothing picked (or only this product) adds no pack', async () => {
+  const { page, context } = await open({ pack: comboPack(), picker: [{ id: 'gid://shopify/Product/100', title: 'Kurta', images: [], totalVariants: 2, variants: [{ id: 'gid://shopify/ProductVariant/200', title: 'M' }] }] });
+  await page.getByText('₹117.00').first().waitFor();
+  await page.getByRole('button', { name: 'Add pack' }).click();
+  await page.getByText(/already in every pack/).waitFor();
+  assert.equal(await page.locator('.pc-tier').count(), 2);
+  await context.close();
+});
+
 await check('two packs with the same products, or no products anywhere, block Continue', async () => {
   const { page, context } = await open({ pack: comboPack({ tiers: [{ name: '', quantity: 2, discountType: 'none', discountValue: 0, badge: '', items: [RED] }, { name: '', quantity: 2, discountType: 'percentage', discountValue: 5, badge: '', items: [RED] }] }) });
   await page.getByText(/same products as pack 1/).first().waitFor();
