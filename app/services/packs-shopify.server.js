@@ -6,7 +6,7 @@
  *   - verifying that the checkout discount is really installed and active
  */
 import { PackError, saveStorefrontDiscountState } from './packs.server';
-import { calculateTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage } from '../utils/packs.shared.js';
+import { calculateTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage, validateExtraProducts, sanitizeExtraProducts, normalizeVariantIds } from '../utils/packs.shared.js';
 
 export const PACKS_FUNCTION_HANDLE = 'brix-packs-discount';
 export const PACKS_DISCOUNT_TITLE = 'BRIX Packs';
@@ -60,7 +60,7 @@ export async function fetchProduct(admin, productId) {
   const data = await gql(admin, `#graphql
     query PackProduct($id: ID!) {
       product(id: $id) {
-        id title handle status featuredImage { url }
+        id title handle status onlineStoreUrl featuredImage { url }
         variants(first: 100) { nodes { id title price availableForSale inventoryQuantity inventoryPolicy image { url } selectedOptions { name value } } }
       }
     }`, { id: gid });
@@ -71,6 +71,8 @@ export async function fetchProduct(admin, productId) {
     title: product.title,
     handle: product.handle,
     status: product.status,
+    // A product with an Online Store page: the storefront widget reads /products/<handle>.js.
+    published: Boolean(product.onlineStoreUrl),
     image: product.featuredImage?.url || '',
     options: optionNamesOf(product.variants.nodes),
     variants: product.variants.nodes.map(shapeVariant),
@@ -137,6 +139,40 @@ export async function verifyPackCoverage(admin, productId, { packType, variantSc
 }
 
 /**
+ * Verify the extra products of a Mix & Match Pack against Shopify (never the browser's own data):
+ * each must exist, be ACTIVE and on the Online Store (the widget loads /products/<handle>.js),
+ * and have the variants the merchant picked. Returns the clean list to store, with live
+ * titles / handles / images, plus every eligible variant's price (for the tier-price floor).
+ */
+export async function verifyExtraProducts(admin, { packType, productId, extraProducts }, { requireAvailable = false } = {}) {
+  const wanted = sanitizeExtraProducts(extraProducts);
+  const rules = validateExtraProducts({ packType, productId, extraProducts: wanted });
+  if (!rules.valid) throw new PackError('invalid_extra_products', rules.errors[0].message, { status: 422, details: { errors: rules.errors } });
+  const verified = [];
+  const prices = [];
+  for (const item of wanted) {
+    const product = await fetchProduct(admin, item.productId);
+    if (product.status !== 'ACTIVE') throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
+    if (!product.published) throw new PackError('product_unpublished', `${product.title} is not available on your Online Store, so shoppers can't pick it. Publish it first.`, { status: 409 });
+    const check = validateVariantCoverage({ packType, variantScope: item.variantScope, allowedVariantIds: item.allowedVariantIds }, product.variants.map((variant) => variant.id));
+    if (!check.valid) throw new PackError('invalid_extra_products', `${product.title}: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
+    const applicable = item.variantScope === 'all' ? product.variants : product.variants.filter((variant) => check.allowedVariantIds.includes(variant.id));
+    if (applicable.some((variant) => variant.price === null || variant.price < 0)) {
+      throw new PackError('price_unverified', `Could not verify the current price of one of ${product.title}'s variants.`, { status: 502 });
+    }
+    if (requireAvailable && !applicable.some((variant) => variant.availableForSale)) {
+      throw new PackError('variant_unavailable', `None of ${product.title}'s chosen variants are in stock.`, { status: 409 });
+    }
+    prices.push(...applicable.map((variant) => variant.price));
+    verified.push({
+      productId: product.id, handle: product.handle, title: product.title, image: product.image,
+      variantScope: item.variantScope, allowedVariantIds: item.variantScope === 'all' ? [] : check.allowedVariantIds,
+    });
+  }
+  return { extraProducts: verified, prices };
+}
+
+/**
  * Attach live data + freshly calculated tier prices to stored Packs.
  * `pack.tiers[*].price/savings/...` are always derived here, never stored.
  * A Pack whose variant is gone / unpriced is flagged (`issue`) rather than
@@ -158,13 +194,15 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
   // distinct product, only when the caller actually needs it.
   const variantsByProduct = new Map();
   const optionsByProduct = new Map();
+  const extraByProduct = new Map();
   if (includeVariants) {
-    const productIds = [...new Set(packs.map((pack) => pack.productId))];
+    const productIds = [...new Set(packs.flatMap((pack) => [pack.productId, ...(pack.extraProducts || []).map((item) => item.productId)]))];
     await Promise.all(productIds.map(async (productId) => {
       try {
         const product = await fetchProduct(admin, productId);
         variantsByProduct.set(productId, product.variants);
         optionsByProduct.set(productId, product.options);
+        extraByProduct.set(productId, product);
       } catch {
         // Leave unset — the pack simply won't get an expanded variant list;
         // its own issue/priceVerified flag (from the anchor lookup) still applies.
@@ -203,6 +241,27 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
       productHandle: variant?.productHandle || '',
       variants,
       productOptions: optionsByProduct.get(pack.productId),
+      // Extra products with their live variants / options (only when the caller asked for variants).
+      extraProducts: includeVariants
+        ? (pack.extraProducts || []).map((item) => {
+          const product = extraByProduct.get(item.productId);
+          const all = product?.variants || [];
+          const applicable = item.variantScope === 'all' ? all : all.filter((variant) => (item.allowedVariantIds || []).includes(variant.id));
+          let issue = null;
+          if (!product) issue = 'This product could not be loaded from Shopify.';
+          else if (product.status !== 'ACTIVE') issue = 'This product is no longer active.';
+          else if (!product.published) issue = 'This product is no longer on your Online Store.';
+          return {
+            ...item,
+            title: product?.title || item.title,
+            handle: product?.handle || item.handle,
+            image: product?.image || item.image,
+            variants: applicable.filter((variant) => variant.price !== null),
+            productOptions: product?.options,
+            issue,
+          };
+        })
+        : pack.extraProducts,
       displayStatus: issue && pack.status === 'active' ? 'configuration_error' : pack.status,
       currency: currency ? { code: currency.code, locale: currency.locale } : null,
     };
@@ -233,9 +292,44 @@ export function buildFunctionConfig(activePacks, currencyCode = null) {
       variantScope: pack.variantScope,
       allowedVariantIds: pack.variantScope === 'all' ? [] : (Array.isArray(pack.allowedVariantIds) && pack.allowedVariantIds.length ? pack.allowedVariantIds : [pack.variantId]),
       tiers: normalizeTiers(pack.tiers).map((tier) => ({ quantity: tier.quantity, discountType: tier.discountType, discountValue: tier.discountValue })),
+      // Other products a Mix & Match pack draws from, keyed by product id. Written only when set,
+      // so a pack that doesn't use the feature stays byte-for-byte what it was.
+      ...(Array.isArray(pack.extraProducts) && pack.extraProducts.length ? {
+        extraProducts: Object.fromEntries(sanitizeExtraProducts(pack.extraProducts).map((item) => [item.productId, {
+          scope: item.variantScope,
+          allowedVariantIds: item.variantScope === 'all' ? [] : normalizeVariantIds(item.allowedVariantIds),
+        }])),
+      } : {}),
     };
   }
   return { version: 1, currency: currencyCode, packs };
+}
+
+// Shopify drops a metafield value over 10 KB, so a config with extra products is kept under this.
+export const PACKS_CONFIG_BYTE_LIMIT = 9000;
+const byteLength = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
+
+/**
+ * Keep the config under the metafield limit without changing any pack that doesn't use extra
+ * products (those are always kept, exactly as before). Packs with extra products are added in id
+ * order while they fit; one that doesn't is left out, and since the storefront only offers a pack
+ * the config really holds at its current version, it is simply not offered (never mispriced).
+ * Returns { config, skipped: [pack ids] }.
+ */
+export function fitPacksConfig(config, limit = PACKS_CONFIG_BYTE_LIMIT) {
+  if (byteLength(config) <= limit) return { config, skipped: [] };
+  const entries = Object.entries(config.packs);
+  const fixed = entries.filter(([, pack]) => !pack.extraProducts);
+  const variable = entries.filter(([, pack]) => pack.extraProducts).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const kept = Object.fromEntries(fixed);
+  const skipped = [];
+  for (const [id, pack] of variable) {
+    const trial = { ...config, packs: { ...kept, [id]: pack } };
+    if (byteLength(trial) <= limit) kept[id] = pack; else skipped.push(id);
+  }
+  // Keep the original (id) order of the packs that stay.
+  const ordered = Object.fromEntries(entries.filter(([id]) => id in kept));
+  return { config: { ...config, packs: ordered }, skipped };
 }
 
 async function getShopGid(admin) {
@@ -245,7 +339,7 @@ async function getShopGid(admin) {
 
 /** Write the shop-level app-owned metafield the discount function reads. */
 export async function writeFunctionConfig(admin, activePacks, currencyCode) {
-  const config = buildFunctionConfig(activePacks, currencyCode);
+  const { config, skipped } = fitPacksConfig(buildFunctionConfig(activePacks, currencyCode));
   const ownerId = await getShopGid(admin);
   const data = await gql(admin, `#graphql
     mutation PackConfig($metafields: [MetafieldsSetInput!]!) {
@@ -256,6 +350,7 @@ export async function writeFunctionConfig(admin, activePacks, currencyCode) {
     console.error('[packs-shopify] metafieldsSet userErrors:', JSON.stringify(errors).slice(0, 300));
     throw new PackError('config_sync_failed', 'Could not sync Pack configuration to Shopify.', { status: 502 });
   }
+  Object.defineProperty(config, 'skipped', { value: skipped, enumerable: false });
   return config;
 }
 
@@ -353,8 +448,11 @@ async function readCheckoutDiscountStatus(admin, activePacks) {
  */
 export async function syncCheckoutDiscount(admin, activePacks, { install = true, currencyCode = null } = {}) {
   try {
-    await writeFunctionConfig(admin, activePacks, currencyCode);
+    const written = await writeFunctionConfig(admin, activePacks, currencyCode);
     if (install && activePacks.length) await ensurePacksDiscount(admin);
+    if (written.skipped?.length) {
+      return { ok: false, warning: { code: 'config_too_large', message: 'Too many Packs with extra products to sync to checkout at once, so some are not live. Remove extra products from a Pack or turn one off.' } };
+    }
     return { ok: true, warning: null };
   } catch (error) {
     const warning = error instanceof PackError ? { code: error.code, message: error.message } : { code: 'sync_failed', message: 'Could not sync the checkout discount.' };

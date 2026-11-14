@@ -1434,3 +1434,22 @@ test('pack: two packs of a tier both get it; an edited quantity, another product
 test('pack: COD is refused rather than charging a different Pack price', async () => {
   await assert.rejects(packQuote(fakeAdmin({ lineDiscountPer: 'none' }), [packLine('11', 2, 2)]), (e) => e.code === 'combo_price_mismatch');
 });
+
+test('pack with extra products: one item of each product is paid on delivery at the Pack price; an unlisted product breaks it', async () => {
+  const variants = {
+    'gid://shopify/ProductVariant/11': { price: 899, title: 'Kit', tags: [], product: 'gid://shopify/Product/1' },
+    'gid://shopify/ProductVariant/12': { price: 899, title: 'Tumbler', tags: [], product: 'gid://shopify/Product/2' },
+  };
+  const withExtras = (extraProducts) => ({ ...PACKS_CONFIG, packs: { 3: { ...PACKS_CONFIG.packs[3], extraProducts } } });
+  const mixed = [packLine('11', 1, 2), packLine('12', 1, 2)];
+
+  const ok = await packQuote(fakeAdmin({ variants, packsConfig: withExtras({ 2: { scope: 'all', allowedVariantIds: [] } }) }), mixed);
+  assert.equal(ok.quote.packDiscount, 179.8, 'Buy 2 = 10% off across both products');
+  assert.equal(ok.quote.total, 1798 - 179.8 + 49);
+
+  const unlisted = await packQuote(fakeAdmin({ variants, packsConfig: PACKS_CONFIG }), mixed);
+  assert.equal(unlisted.quote.packDiscount, 0, 'a pack that does not list product 2 gives it nothing, as in checkout');
+
+  const wrongVariant = await packQuote(fakeAdmin({ variants, packsConfig: withExtras({ 2: { scope: 'selected', allowedVariantIds: ['99'] } }) }), mixed);
+  assert.equal(wrongVariant.quote.packDiscount, 0, 'a variant the merchant did not pick for product 2');
+});

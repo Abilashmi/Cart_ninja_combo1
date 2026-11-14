@@ -31,24 +31,27 @@ globalThis.fetch = async (url, init) => {
 
   if (q.startsWith('SELECT * FROM brix_packs WHERE shop_domain = ? ORDER BY')) return respond({ success: true, rows: live((r) => r.shop_domain === params[0]) });
   if (q.startsWith('SELECT * FROM brix_packs WHERE id = ? AND shop_domain = ?')) return respond({ success: true, rows: live((r) => r.id === params[0] && r.shop_domain === params[1]) });
+  if (q.includes("AND show_on_ids LIKE ?")) return respond({ success: true, rows: live((r) => r.shop_domain === params[0] && r.status === 'active' && r.enabled === 1 && String(r.show_on_ids || '').includes(params[1].slice(1, -1))) });
   if (q.includes("status = 'active' AND enabled = 1 AND product_id IN (?, ?)")) return respond({ success: true, rows: live((r) => r.shop_domain === params[0] && r.status === 'active' && r.enabled === 1 && [params[1], params[2]].includes(r.product_id)) });
   if (q.includes("status = 'active' AND enabled = 1") && q.startsWith('SELECT * FROM brix_packs WHERE shop_domain = ?')) return respond({ success: true, rows: live((r) => r.shop_domain === params[0] && r.status === 'active' && r.enabled === 1) });
   if (q.startsWith('SELECT id FROM brix_packs WHERE shop_domain = ? AND product_id IN')) return respond({ success: true, rows: live((r) => r.shop_domain === params[0] && [params[1], params[2]].includes(r.product_id) && [params[3], params[4]].includes(r.variant_id)) });
   if (q.startsWith('INSERT INTO brix_packs')) {
     const row = { id: nextId, version: 1, created_at: 'now', updated_at: 'now' };
     COLS.forEach((col, index) => { row[col] = params[index]; });
+    if (params.length > COLS.length) [row.extra_products_json, row.show_on_json, row.show_on_ids] = params.slice(COLS.length);
     if (dupe(row, null)) return respond({ success: false, error: "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'shop-1-2' for key 'brix_packs_shop_variant'" }, 500);
     rows.push(row);
     nextId += 1;
     return respond({ success: true, insertId: row.id, affectedRows: 1 });
   }
   if (q.startsWith('UPDATE brix_packs SET product_id=?')) {
-    const target = rows.find((r) => r.id === params[14] && r.shop_domain === params[15]);
+    const target = rows.find((r) => r.id === params[params.length - 2] && r.shop_domain === params[params.length - 1]);
     if (!target) return respond({ success: true, affectedRows: 0 });
     const next = { ...target, product_id: params[0], variant_id: params[1] };
     if (dupe(next, target.id)) return respond({ success: false, error: 'Duplicate entry for key brix_packs_shop_variant' }, 500);
     ['product_id', 'variant_id', 'product_title', 'variant_title', 'product_image', 'base_price', 'status', 'enabled', 'template', 'pack_type', 'variant_scope', 'allowed_variant_ids_json'].forEach((col, i) => { target[col] = params[i]; });
     target.tiers_json = params[12]; target.customization_json = params[13]; target.version += 1;
+    if (params.length > 16) [target.extra_products_json, target.show_on_json, target.show_on_ids] = params.slice(14, 17);
     return respond({ success: true, affectedRows: 1 });
   }
   if (q.startsWith('UPDATE brix_packs SET status=?')) {
@@ -245,4 +248,83 @@ test('ensurePacksDiscount reports an undeployed function instead of pretending i
   }), [{ id: 1, version: 1, productId: '1', variantId: '2', template: 'same_variant', tiers: [] }], { currencyCode: 'INR' });
   assert.equal(sync.ok, false);
   assert.equal(sync.warning.code, 'function_not_deployed');
+});
+
+// ── Extra products (a Mix & Match Pack that includes other products) ───────────
+const mixBase = (over = {}) => base({ template: 'choose_each_item', packType: 'mix_match', variantScope: 'all', allowedVariantIds: [], ...over });
+const extra = (id, over = {}) => ({ productId: String(id), handle: `p-${id}`, title: `Product ${id}`, image: 'https://x/y.png', variantScope: 'selected', allowedVariantIds: ['301'], ...over });
+
+test('extra products: saved with the Pack, read back clean, and only a Pack that uses them writes the new columns', async () => {
+  const plain = await savePack('a.myshopify.com', base({ variantId: '1' }));
+  assert.equal(rows[0].extra_products_json, undefined, 'a Pack without extras never touches the new columns (works before the migration is run)');
+  assert.deepEqual([plain.extraProducts, plain.showOn], [[], []]);
+
+  const mixed = await savePack('a.myshopify.com', mixBase({ variantId: '2', extraProducts: [extra(101), extra(101), { productId: 'bad' }], showOn: ['gid://shopify/Product/102', '102', '100'] }));
+  assert.equal(mixed.extraProducts.length, 1, 'duplicates and junk are dropped');
+  assert.equal(mixed.extraProducts[0].productId, '101');
+  assert.deepEqual(mixed.showOn, ['102'], 'the main product is never in showOn');
+  assert.equal(rows.find((r) => r.id === mixed.id).show_on_ids, ',102,');
+
+  // editing it back to nothing clears the columns (it had extras, so they are written)
+  const cleared = await savePack('a.myshopify.com', mixBase({ id: mixed.id, variantId: '2', extraProducts: [], showOn: [] }));
+  assert.deepEqual([cleared.extraProducts, cleared.showOn], [[], []]);
+  assert.equal(rows.find((r) => r.id === mixed.id).show_on_ids, null);
+});
+
+test('extra products only apply to Mix & Match: a same-variant Pack ignores them', async () => {
+  const saved = await savePack('a.myshopify.com', base({ variantId: '3', extraProducts: [extra(101)], showOn: ['102'] }));
+  assert.deepEqual([saved.extraProducts, saved.showOn], [[], []]);
+});
+
+test('show-on: a Pack is also found on the extra pages the merchant chose, once, and not on others', async () => {
+  const main = await savePack('a.myshopify.com', mixBase({ productId: '100', variantId: '4', status: 'active', showOn: ['102'] }));
+  await savePack('a.myshopify.com', mixBase({ productId: '500', variantId: '5', status: 'active' }));
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '100')).map((p) => p.id), [main.id], 'its own page');
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '102')).map((p) => p.id), [main.id], 'a chosen extra page');
+  assert.equal((await listActivePacksForProduct('a.myshopify.com', '10')).length, 0, '10 never matches 102');
+  assert.equal((await listActivePacksForProduct('a.myshopify.com', '999')).length, 0);
+});
+
+function shopProduct(id, over = {}) {
+  return {
+    id: `gid://shopify/Product/${id}`, title: `Product ${id}`, handle: `p-${id}`, status: 'ACTIVE', onlineStoreUrl: `https://shop/p-${id}`, featuredImage: { url: 'https://x/y.png' },
+    variants: { nodes: [{ id: `gid://shopify/ProductVariant/${id}1`, title: 'A', price: '50.00', availableForSale: true, inventoryQuantity: 5, inventoryPolicy: 'DENY', image: null, selectedOptions: [{ name: 'Size', value: 'S' }] },
+      { id: `gid://shopify/ProductVariant/${id}2`, title: 'B', price: '70.00', availableForSale: false, inventoryQuantity: 0, inventoryPolicy: 'DENY', image: null, selectedOptions: [{ name: 'Size', value: 'M' }] }] },
+    ...over,
+  };
+}
+const productAdmin = (products) => fakeAdmin((query, vars) => ({ data: { product: products[String(vars.id).split('/').pop()] || null } }));
+
+test('verifyExtraProducts: trusts only Shopify; blocks inactive, unpublished, unknown variants and Pack types without choice', async () => {
+  const ok = await shopify.verifyExtraProducts(productAdmin({ 101: shopProduct(101) }), { packType: 'mix_match', productId: '100', extraProducts: [{ productId: '101', variantScope: 'all' }] });
+  assert.deepEqual(ok.extraProducts[0], { productId: '101', handle: 'p-101', title: 'Product 101', image: 'https://x/y.png', variantScope: 'all', allowedVariantIds: [] });
+  assert.deepEqual(ok.prices, [50, 70], 'every eligible variant price feeds the discount floor');
+
+  const picked = await shopify.verifyExtraProducts(productAdmin({ 101: shopProduct(101) }), { packType: 'mix_match', productId: '100', extraProducts: [{ productId: '101', variantScope: 'selected', allowedVariantIds: ['1011'] }] });
+  assert.deepEqual(picked.extraProducts[0].allowedVariantIds, ['1011']);
+  assert.deepEqual(picked.prices, [50]);
+
+  const call = (products, extraProducts, opts) => shopify.verifyExtraProducts(productAdmin(products), { packType: 'mix_match', productId: '100', extraProducts }, opts);
+  await assert.rejects(() => call({ 101: shopProduct(101, { status: 'DRAFT' }) }, [{ productId: '101', variantScope: 'all' }]), (e) => e.code === 'product_inactive');
+  await assert.rejects(() => call({ 101: shopProduct(101, { onlineStoreUrl: null }) }, [{ productId: '101', variantScope: 'all' }]), (e) => e.code === 'product_unpublished');
+  await assert.rejects(() => call({ 101: shopProduct(101) }, [{ productId: '101', variantScope: 'selected', allowedVariantIds: ['9999'] }]), (e) => e.code === 'invalid_extra_products');
+  await assert.rejects(() => call({}, [{ productId: '101', variantScope: 'all' }]), (e) => e.code === 'product_not_found');
+  await assert.rejects(() => call({ 101: shopProduct(101) }, [{ productId: '101', variantScope: 'selected', allowedVariantIds: ['1012'] }], { requireAvailable: true }), (e) => e.code === 'variant_unavailable');
+  await assert.rejects(() => shopify.verifyExtraProducts(productAdmin({ 101: shopProduct(101) }), { packType: 'same_variant', productId: '100', extraProducts: [{ productId: '101', variantScope: 'all' }] }), (e) => e.code === 'invalid_extra_products');
+  await assert.rejects(() => call({ 100: shopProduct(100) }, [{ productId: '100', variantScope: 'all' }]), (e) => e.code === 'invalid_extra_products');
+  assert.deepEqual((await call({}, [])).extraProducts, [], 'no extras = nothing to check, no Shopify call needed');
+});
+
+test('hydratePacks (with variants) adds live variants and any problem for each extra product', async () => {
+  const pack = { id: 1, productId: '100', variantId: '1001', variantScope: 'all', allowedVariantIds: [], tiers: [], status: 'active', basePrice: 10, extraProducts: [extra(101, { allowedVariantIds: ['1011'] }), extra(102, { variantScope: 'all', allowedVariantIds: [] })] };
+  const admin = fakeAdmin((query, vars) => {
+    if (query.includes('PackVariants')) return { data: { nodes: [{ id: 'gid://shopify/ProductVariant/1001', title: 'A', price: '10.00', availableForSale: true, inventoryQuantity: 1, inventoryPolicy: 'DENY', image: null, selectedOptions: [], product: { id: 'gid://shopify/Product/100', title: 'Main', handle: 'main', status: 'ACTIVE', featuredImage: null } }] } };
+    const id = String(vars.id).split('/').pop();
+    return { data: { product: id === '102' ? shopProduct(102, { onlineStoreUrl: null }) : shopProduct(id) } };
+  });
+  const [out] = await shopify.hydratePacks(admin, [pack], { code: 'INR' }, { includeVariants: true });
+  assert.deepEqual(out.extraProducts[0].variants.map((v) => v.id), ['1011'], 'only the picked variant');
+  assert.equal(out.extraProducts[0].issue, null);
+  assert.equal(out.extraProducts[1].variants.length, 2, 'scope all = every variant');
+  assert.match(out.extraProducts[1].issue, /Online Store/);
 });

@@ -29,6 +29,23 @@ export function packNumericId(gid) {
   return match ? match[1] : null;
 }
 
+// Is this line part of the pack? The main product follows the pack's own variant scope; a pack may also list
+// extra products (config.packs[id].extraProducts = { "<productId>": { scope: 'all'|'selected', allowedVariantIds } }),
+// each with its own scope. Anything else is not the pack's, whatever its line properties say.
+export function packCoversLine(pack, line) {
+  const productId = String(line.productId);
+  const variantId = String(line.variantId);
+  if (productId === String(pack.productId)) {
+    if (pack.variantScope === 'all') return true;
+    const allowed = Array.isArray(pack.allowedVariantIds) ? pack.allowedVariantIds : [String(pack.variantId)];
+    return allowed.some((id) => String(id) === variantId);
+  }
+  const extra = pack.extraProducts && typeof pack.extraProducts === 'object' ? pack.extraProducts[productId] : null;
+  if (!extra) return false;
+  if (extra.scope === 'all') return true;
+  return Array.isArray(extra.allowedVariantIds) && extra.allowedVariantIds.some((id) => String(id) === variantId);
+}
+
 function positiveInt(value) {
   const n = Number.parseInt(String(value ?? ''), 10);
   return Number.isInteger(n) && n > 0 ? n : null;
@@ -46,13 +63,8 @@ export function packDiscountsFor(config, lines) {
     if (!packId || !packQuantity) continue;
     const pack = Object.values(packs).find((entry) => String(entry?.id) === String(packId));
     if (!pack || !Array.isArray(pack.tiers)) continue;
-    // The line must really be this pack's product, and (unless the pack
-    // covers every variant) one of its configured variants.
-    if (String(line.productId) !== String(pack.productId)) continue;
-    if (pack.variantScope !== 'all') {
-      const allowed = Array.isArray(pack.allowedVariantIds) ? pack.allowedVariantIds : [String(pack.variantId)];
-      if (!allowed.some((id) => String(id) === String(line.variantId))) continue;
-    }
+    // The line must really be one of this pack's products and variants (main product, or a listed extra product).
+    if (!packCoversLine(pack, line)) continue;
     const key = `${packId}:${packQuantity}:${line.packGroup || line.id}`;
     if (!groups.has(key)) groups.set(key, { pack, packQuantity, lines: [] });
     groups.get(key).lines.push(line);

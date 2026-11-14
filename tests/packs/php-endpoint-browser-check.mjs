@@ -34,6 +34,7 @@ const product = (over = {}) => ({
 
 const results = [];
 const check = async (name, fn) => {
+  if (process.env.ONLY && !name.includes(process.env.ONLY)) return; // ONLY=<text>: run just the checks whose name has it
   try { await fn(); results.push(true); console.log('  ✓', name); } catch (error) { results.push(false); console.log('  ✗', name, '\n     ', String(error.message).split('\n')[0]); }
 };
 
@@ -59,12 +60,13 @@ const dawnMain = (variantInput, slot) => `<section id="recs-top"><div class="pri
 // Storefront API cartCreate (the Pack's Buy Now): a cart of its own + its checkout.
 const cartCreateOk = { data: { cartCreate: { cart: { checkoutUrl: 'http://shop.test/checkouts/cn/pack-only' }, userErrors: [] } } };
 
-async function open({ body, pageProduct = product(), shopifyGlobals = '', variantInput = '200', dawn = false, slot = false, cartCreate = cartCreateOk }) {
+async function open({ body, pageProduct = product(), shopifyGlobals = '', variantInput = '200', dawn = false, slot = false, cartCreate = cartCreateOk, productsJs = {}, pageProductId = '100' }) {
   const context = await browser.newContext();
   const page = await context.newPage();
   const requests = [];
   const cartCalls = [];
   const storefrontCalls = [];
+  const productJsCalls = [];
   await page.route('http://shop.test/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === '/cart/add.js') {
@@ -81,15 +83,21 @@ async function open({ body, pageProduct = product(), shopifyGlobals = '', varian
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     }
     if (url.pathname === '/packs_widget.js') return route.fulfill({ contentType: 'application/javascript', body: script });
+    // /products/<handle>.js: the storefront's own product data, used for the other products of a multi-product Pack.
+    const productJs = /^\/products\/([\w-]+)\.js$/.exec(url.pathname);
+    if (productJs) {
+      productJsCalls.push(productJs[1]);
+      return productsJs[productJs[1]] ? route.fulfill({ contentType: 'application/json', body: JSON.stringify(productsJs[productJs[1]]) }) : route.fulfill({ status: 404, body: 'not found' });
+    }
     return route.fulfill({ contentType: 'text/html', body: `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Tee</title></head><body>
       ${dawn ? dawnMain(variantInput, slot) : `<main><form action="/cart/add" method="post"><input type="hidden" name="id" value="${variantInput}"><button>Add to cart</button></form></main>`}
-      <div data-brix-packs-root data-shop="demo.myshopify.com" data-product-id="100" data-api="/apps/cart-app" data-endpoint="/apps/cart-app/packs_storefront.php"></div>
+      <div data-brix-packs-root data-shop="demo.myshopify.com" data-product-id="${pageProductId}" data-api="/apps/cart-app" data-endpoint="/apps/cart-app/packs_storefront.php"></div>
       ${pageProduct ? `<script type="application/json" data-brix-packs-product>${JSON.stringify(pageProduct)}</script>` : ''}
       <script>${shopifyGlobals}</script>
       <script src="/packs_widget.js" defer></script></body></html>` });
   });
   await page.goto('http://shop.test/products/tee');
-  return { page, context, requests, cartCalls, storefrontCalls };
+  return { page, context, requests, cartCalls, storefrontCalls, productJsCalls };
 }
 
 console.log('\nBRIX Packs widget — PHP endpoint (client pricing) checks');
@@ -754,6 +762,117 @@ await check('custom Buy Now label; saved "premium"/"tabs" Packs show as Horizont
   await page.waitForSelector('.brix-packs-widget[data-layout="slots"] .brix-packs-buy');
   assert.equal(await page.locator('.brix-packs-buy').innerText(), 'Buy it now');
   assert.match(await widgetText(page), /Add to Cart/);
+  await context.close();
+});
+
+// ── Packs that draw from other products ─────────────────────────────────────
+const SOAP_B = { title: 'Soap B', featured_image: 'https://cdn.test/b.png', options: [{ name: 'Scent' }], variants: [
+  { id: 1011, title: 'Rose', price: 5000, available: true, inventory_management: null, inventory_policy: 'continue', options: ['Rose'], featured_image: null },
+  { id: 1012, title: 'Mint', price: 6000, available: true, inventory_management: null, inventory_policy: 'continue', options: ['Mint'], featured_image: null },
+] };
+const MAIN_PRODUCT_JS = { title: 'Tee', featured_image: '', options: ['Size'], variants: [
+  { id: 200, title: 'M', price: 8000, available: true, inventory_management: null, inventory_policy: 'continue', options: ['M'] },
+  { id: 201, title: 'L', price: 10000, available: true, inventory_management: null, inventory_policy: 'continue', options: ['L'] },
+] };
+const mixPack = (over = {}) => pack({
+  id: 9, productId: '100', productHandle: 'tee', template: 'choose_each_item', packType: 'mix_match', variantScope: 'all', allowedVariantIds: [],
+  extraProducts: [{ productId: '101', handle: 'soap-b', title: 'Soap B', variantScope: 'selected', allowedVariantIds: ['1011'] }],
+  tiers: [{ quantity: 2, name: '', badge: '', discountType: 'percentage', discountValue: 10 }], ...over,
+});
+
+// Liquid's data for the page of product 101 (Soap B), used when the Pack is shown on that page too.
+const SOAP_B_LIQUID = () => ({ title: 'Soap B', image: '', currency: 'INR', shopCurrency: 'INR', options: ['Scent'], variants: [
+  { id: 1011, title: 'Rose', price: 5000, available: true, inventoryQuantity: 0, inventoryPolicy: 'continue', inventoryManagement: null, options: ['Rose'] },
+  { id: 1012, title: 'Mint', price: 6000, available: true, inventoryQuantity: 0, inventoryPolicy: 'continue', inventoryManagement: null, options: ['Mint'] },
+] });
+const slotSelects = (page, index) => page.locator('.brix-packs-slot').nth(index).locator('select');
+async function pickItem(page, index, productName, variantName) {
+  await slotSelects(page, index).nth(0).selectOption({ label: productName });
+  await slotSelects(page, index).nth(1).selectOption({ label: variantName });
+}
+
+await check('multi-product: a Product picker, then only the variants the merchant picked for that product', async () => {
+  const { page, context, productJsCalls } = await open({ body: phpBody([mixPack()]), productsJs: { 'soap-b': SOAP_B }, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  assert.deepEqual(productJsCalls, ['soap-b'], 'the page product comes from Liquid; only the other product is fetched');
+  const products = await slotSelects(page, 0).nth(0).locator('option').allInnerTexts();
+  assert.deepEqual(products.filter((text) => !/^select/i.test(text)), ['Tee', 'Soap B']);
+  await slotSelects(page, 0).nth(0).selectOption({ label: 'Soap B' });
+  // Values that cannot go with the chosen product are listed but disabled; only the picked variant is selectable.
+  const variants = (await slotSelects(page, 0).nth(1).locator('option:not([disabled])').allInnerTexts()).filter((text) => !/^select/i.test(text));
+  assert.deepEqual(variants, ['Rose'], 'Mint was not picked for Soap B, so it is never offered');
+  assert.doesNotMatch(await page.locator('.brix-packs-widget').innerText(), /Mint/);
+  await context.close();
+});
+
+await check('multi-product: items from different products are priced together and added with the SAME pack markers', async () => {
+  const { page, context, cartCalls } = await open({ body: phpBody([mixPack()]), productsJs: { 'soap-b': SOAP_B }, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  await pickItem(page, 0, 'Soap B', 'Rose'); // 50.00
+  await pickItem(page, 1, 'Tee', 'M'); // 80.00
+  const text = await page.locator('.brix-packs-widget').innerText();
+  assert.match(text, /₹130\.00/, 'subtotal of the two products');
+  assert.match(text, /₹117\.00/, '10% off the whole pack');
+  await page.getByRole('button', { name: /Add Pack to Cart/i }).first().click();
+  await page.waitForFunction(() => true);
+  await page.waitForTimeout(300);
+  assert.equal(cartCalls.length, 1);
+  const items = cartCalls[0].items;
+  assert.deepEqual(items.map((item) => item.id).sort((x, y) => x - y), [200, 1011]);
+  assert.ok(items.every((item) => item.quantity === 1));
+  const [first, second] = items;
+  for (const key of ['_brix_pack_id', '_brix_pack_quantity', '_brix_pack_version', '_brix_pack_group']) {
+    assert.ok(first.properties[key], key);
+    assert.equal(first.properties[key], second.properties[key], key + ' is shared by every line of the pack');
+  }
+  assert.equal(first.properties._brix_pack_id, '9');
+  assert.equal(first.properties._brix_pack_quantity, '2');
+  await context.close();
+});
+
+await check('multi-product: on the Pack\'s own page the theme controls are replaced as before', async () => {
+  const { page, context } = await open({ body: phpBody([mixPack()]), productsJs: { 'soap-b': SOAP_B }, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  await page.waitForTimeout(900);
+  assert.equal(await page.locator('#theme-add').isVisible(), false);
+  await context.close();
+});
+
+await check('multi-product: on an extra page it is shown on, the Pack appears as an extra block and the theme buttons stay', async () => {
+  const { page, context, productJsCalls } = await open({
+    body: phpBody([mixPack({ showOn: ['101'] })]), pageProduct: SOAP_B_LIQUID(), pageProductId: '101', variantInput: '1011', productsJs: { tee: MAIN_PRODUCT_JS }, dawn: true,
+  });
+  await page.waitForSelector('.brix-packs-widget');
+  await page.waitForTimeout(900);
+  assert.deepEqual(productJsCalls, ['tee'], 'the main product is loaded; this page\'s own product comes from Liquid');
+  assert.equal(await page.locator('#theme-add').isVisible(), true, 'the theme\'s Add to cart is untouched on a page that is not the Pack\'s own');
+  assert.equal(await page.locator('#buy-now').isVisible(), true);
+  const products = (await slotSelects(page, 0).nth(0).locator('option').allInnerTexts()).filter((text) => !/^select/i.test(text));
+  assert.deepEqual(products, ['Tee', 'Soap B']);
+  await context.close();
+});
+
+await check('multi-product: an extra product that cannot be loaded is left out; the Pack still works with what is left', async () => {
+  const { page, context } = await open({ body: phpBody([mixPack()]), productsJs: {}, dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  const text = await page.locator('.brix-packs-widget').innerText();
+  assert.doesNotMatch(text, /Soap B/);
+  assert.match(text, /M/);
+  await context.close();
+});
+
+await check('multi-product: an extra page where the main product cannot be loaded shows nothing (never priced from a cache)', async () => {
+  const { page, context } = await open({ body: phpBody([mixPack({ showOn: ['101'] })]), pageProduct: SOAP_B_LIQUID(), pageProductId: '101', variantInput: '1011', productsJs: {}, dawn: true });
+  await page.waitForTimeout(1200);
+  assert.equal(await page.locator('.brix-packs-widget').count(), 0);
+  await context.close();
+});
+
+await check('multi-product: a Pack without extra products is exactly as before (no Product picker, no product requests)', async () => {
+  const { page, context, productJsCalls } = await open({ body: phpBody([pack({ variantScope: 'all', allowedVariantIds: [] })]), dawn: true });
+  await page.waitForSelector('.brix-packs-widget');
+  assert.deepEqual(productJsCalls, []);
+  assert.doesNotMatch(await page.locator('.brix-packs-widget').innerText(), /Product\n/);
   await context.close();
 });
 

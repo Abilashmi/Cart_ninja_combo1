@@ -8,7 +8,7 @@ import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
 import {
-  CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, applyDesign, calculateTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage,
+  CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, MAX_EXTRA_PRODUCTS, validateExtraProducts, applyDesign, calculateTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage,
 } from '../../utils/packs.shared.js';
 
 const PREVIEW_ZOOM = 0.8;
@@ -40,6 +40,8 @@ const DEFAULT_TIERS = [blankTier(1), blankTier(2, 'percentage', 5), blankTier(3,
 function emptyForm() {
   return {
     productId: '', productTitle: '', productImage: '', template: 'same_variant', packType: 'same_variant', variantScope: 'all', allowedVariantIds: [],
+    // Other products a Mix & Match Pack draws from, and the extra product pages it is shown on.
+    extraProducts: [], showOn: [], showOnTitles: {},
     tiers: DEFAULT_TIERS.map((tier) => ({ ...tier })), customization: defaultCustomization(),
   };
 }
@@ -50,6 +52,9 @@ function packToForm(pack) {
     packType: pack.packType || (pack.template === 'choose_each_item' ? 'mix_match' : 'same_variant'),
     variantScope: pack.variantScope || 'selected',
     allowedVariantIds: pack.variantScope === 'all' ? [] : pack.allowedVariantIds || [pack.variantId],
+    extraProducts: (pack.extraProducts || []).map((item) => ({ productId: item.productId, handle: item.handle || '', title: item.title || '', image: item.image || '', variantScope: item.variantScope === 'all' ? 'all' : 'selected', allowedVariantIds: item.variantScope === 'all' ? [] : item.allowedVariantIds || [] })),
+    showOn: pack.showOn || [],
+    showOnTitles: {},
     tiers: pack.tiers.map((tier) => ({ name: tier.name || '', quantity: String(tier.quantity), discountType: tier.discountType || 'none', discountValue: tier.discountType === 'none' ? '' : String(tier.discountValue ?? ''), badge: tier.badge || '' })),
     customization: mergeCustomization(pack.customization),
   };
@@ -171,6 +176,36 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     return () => { cancelled = true; };
   }, [form.productId, reloadKey]);
 
+  // ── extra products (Mix & Match): live variants for each, fetched fresh like the main product ──
+  const [extraData, setExtraData] = useState({}); // productId -> { status, product, error }
+  const extraKey = form.extraProducts.map((item) => item.productId).join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const ids = extraKey ? extraKey.split(',') : [];
+    ids.forEach((id) => {
+      setExtraData((current) => (current[id]?.status === 'ready' || current[id]?.status === 'loading' ? current : { ...current, [id]: { status: 'loading', product: null, error: '' } }));
+      api(`/api/packs?product=${encodeURIComponent(id)}`)
+        .then((data) => { if (!cancelled) setExtraData((current) => ({ ...current, [id]: { status: 'ready', product: data.product, error: '' } })); })
+        .catch((loadError) => { if (!cancelled) setExtraData((current) => ({ ...current, [id]: { status: 'error', product: null, error: loadError.message } })); });
+    });
+    return () => { cancelled = true; };
+  }, [extraKey, reloadKey]);
+
+  // Titles of the pages the Pack is shown on, for a Pack loaded from the server (a fresh pick brings its own).
+  const showOnKey = form.showOn.filter((id) => !form.showOnTitles[id]).join(',');
+  useEffect(() => {
+    if (!showOnKey) return undefined;
+    let cancelled = false;
+    fetch(`/api/product-search?ids=${encodeURIComponent(showOnKey.split(',').map((id) => `gid://shopify/Product/${id}`).join(','))}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.products)) return;
+        setForm((current) => ({ ...current, showOnTitles: { ...current.showOnTitles, ...Object.fromEntries(data.products.map((item) => [String(item.id).split('/').pop(), item.title])) } }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showOnKey]);
+
   const variants = productData.product?.variants || [];
   // The variants this Pack actually applies to: every variant ('all'), or the
   // merchant-curated subset ('selected'). Base pricing previews off the first
@@ -188,7 +223,18 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [productData.status, form.packType, form.variantScope, form.allowedVariantIds, variants.length]
   );
-  const tierCheck = useMemo(() => validateTiers(form.tiers, { basePrice, currencyCode: currency.code }), [form.tiers, basePrice, currency.code]);
+  // Extra products the Pack really draws from (Mix & Match only), with the variants picked for each.
+  const extraEnabled = form.packType === 'mix_match' && form.extraProducts.length > 0;
+  const extraEntries = form.packType === 'mix_match' ? form.extraProducts.map((item) => {
+    const data = extraData[item.productId];
+    const all = data?.product?.variants || [];
+    const applicable = item.variantScope === 'all' ? all : all.filter((variant) => item.allowedVariantIds.includes(variant.id));
+    return { ...item, status: data?.status || 'loading', error: data?.error || '', allVariants: all, applicable, options: data?.product?.options, handle: data?.product?.handle || item.handle };
+  }) : [];
+  // A fixed discount is checked against the cheapest variant of ANY product the Pack can be filled with.
+  const priceFloor = extraEnabled ? Math.min(...[...applicableVariants, ...extraEntries.flatMap((item) => item.applicable)].map((variant) => variant.price).filter((price) => price !== null && price !== undefined), basePrice ?? Infinity) : basePrice;
+  const tierCheck = useMemo(() => validateTiers(form.tiers, { basePrice: Number.isFinite(priceFloor) ? priceFloor : null, currencyCode: currency.code }), [form.tiers, priceFloor, currency.code]);
+  const extraCheck = useMemo(() => validateExtraProducts({ packType: form.packType, productId: form.productId, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [] }), [form.packType, form.productId, form.extraProducts]);
   const customCheck = useMemo(() => sanitizeCustomization(form.customization), [form.customization]);
   const tierErrors = (index, field) => tierCheck.errors.find((item) => item.index === index && item.field === field)?.message;
 
@@ -207,6 +253,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const blocker = (target) => {
     if (target > 0 && !form.productId) return 'Choose a Shopify product first.';
     if (target > 2 && !coverageCheck.valid) return `Fix variant coverage first: ${coverageCheck.errors[0]?.message}`;
+    if (target > 2 && !extraCheck.valid) return `Fix the other products first: ${extraCheck.errors[0]?.message}`;
     if (target > 2 && !tierCheck.valid) return `Fix the Pack tiers first: ${tierCheck.errors[0]?.message}`;
     if (target > 4 && customCheck.errors.length > 0) return `Fix the customization first: ${customCheck.errors[0]}`;
     return null;
@@ -248,12 +295,52 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     }
   }
 
+  // Other products for a Mix & Match Pack. The picker returns the whole selection, so what was already
+  // chosen keeps its variant settings and anything un-ticked is removed.
+  async function addExtraProducts() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: MAX_EXTRA_PRODUCTS + 1, action: 'select', filter: { variants: false }, selectionIds: [form.productId, ...form.extraProducts.map((item) => item.productId)].filter(Boolean).map((id) => ({ id: `gid://shopify/Product/${id}` })) });
+      if (!result) return;
+      setForm((current) => {
+        const kept = new Map(current.extraProducts.map((item) => [item.productId, item]));
+        const next = [];
+        for (const picked of result) {
+          const id = String(picked.id).split('/').pop();
+          if (id === current.productId || next.some((item) => item.productId === id)) continue;
+          next.push(kept.get(id) || { productId: id, handle: picked.handle || '', title: picked.title || '', image: picked.images?.[0]?.originalSrc || '', variantScope: 'all', allowedVariantIds: [] });
+        }
+        return { ...current, extraProducts: next.slice(0, MAX_EXTRA_PRODUCTS) };
+      });
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  const updateExtra = (productId, patch) => setForm((current) => ({ ...current, extraProducts: current.extraProducts.map((item) => (item.productId === productId ? { ...item, ...patch } : item)) }));
+  const removeExtra = (productId) => setForm((current) => ({ ...current, extraProducts: current.extraProducts.filter((item) => item.productId !== productId) }));
+  const toggleExtraVariant = (productId, variantId) => setForm((current) => ({ ...current, extraProducts: current.extraProducts.map((item) => (item.productId !== productId ? item : { ...item, allowedVariantIds: item.allowedVariantIds.includes(variantId) ? item.allowedVariantIds.filter((id) => id !== variantId) : [...item.allowedVariantIds, variantId] })) }));
+  async function pickShowOn() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: true, action: 'select', filter: { variants: false }, selectionIds: form.showOn.map((id) => ({ id: `gid://shopify/Product/${id}` })) });
+      if (!result) return;
+      setForm((current) => {
+        const ids = result.map((picked) => String(picked.id).split('/').pop()).filter((id) => id !== current.productId);
+        const titles = { ...current.showOnTitles, ...Object.fromEntries(result.map((picked) => [String(picked.id).split('/').pop(), picked.title || ''])) };
+        return { ...current, showOn: [...new Set(ids)], showOnTitles: titles };
+      });
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  const removeShowOn = (productId) => setForm((current) => ({ ...current, showOn: current.showOn.filter((id) => id !== productId) }));
+
   async function save(status) {
     setError(null);
     setNotice('');
     setSaving(status);
     try {
-      const data = await api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', id: packId, productId: form.productId, packType: form.packType, variantScope: form.variantScope, allowedVariantIds: form.allowedVariantIds, template: form.template, tiers: form.tiers, customization: form.customization, status }) });
+      const data = await api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', id: packId, productId: form.productId, packType: form.packType, variantScope: form.variantScope, allowedVariantIds: form.allowedVariantIds, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [], showOn: form.packType === 'mix_match' ? form.showOn : [], template: form.template, tiers: form.tiers, customization: form.customization, status }) });
       draft.clearKey(draftKey(shop, 'new'));
       draft.markSaved(form);
       setPackId(data.pack.id);
@@ -512,6 +599,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 .pd-card--on .pd-stage{background:#efefef}
 .pd-tags{display:flex;flex-wrap:wrap;gap:4px}
 .pd-tag{padding:2px 8px;border-radius:999px;background:#f1f2f4;color:#4a4f55;font-size:11px;font-weight:600}
+.pc-extra{border:1px solid #e1e3e5;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:12px}
 .pd-meta{display:flex;gap:12px;align-items:flex-start;padding:14px 16px}
 .pd-radio{width:20px;height:20px;border-radius:50%;border:2px solid #c9cccf;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center}
 .pd-radio--on{border-color:#111111;background:#111111}
@@ -701,11 +789,102 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     </Card>
   );
 
+  // ── Mix & Match only: more products in the Pack, and the pages it shows on ──
+  const extraProductsCard = form.packType === 'mix_match' && form.productId ? (
+    <Card>
+      <BlockStack gap="400">
+        <BlockStack gap="100">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Products in this Pack</Text>
+            <Badge>{`${1 + form.extraProducts.length} product${form.extraProducts.length ? 's' : ''}`}</Badge>
+          </InlineStack>
+          <Text as="p" tone="subdued">Optional. Let customers fill the Pack from other products as well, for example &ldquo;any 3 from these soaps&rdquo;. The discount applies to every item.</Text>
+        </BlockStack>
+        <InlineStack gap="300" blockAlign="center" wrap={false}>
+          <Thumbnail size="small" alt="" source={form.productImage || ImageIcon} />
+          <BlockStack gap="050">
+            <Text as="span" fontWeight="semibold">{form.productTitle || 'Main product'}</Text>
+            <Text as="span" variant="bodySm" tone="subdued">Main product · {form.variantScope === 'all' ? 'all variants' : `${form.allowedVariantIds.length} variants`}</Text>
+          </BlockStack>
+        </InlineStack>
+        {extraEntries.map((item) => (
+          <div key={item.productId} className="pc-extra">
+            <InlineStack align="space-between" blockAlign="center" wrap={false}>
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <Thumbnail size="small" alt="" source={item.image || ImageIcon} />
+                <BlockStack gap="050">
+                  <Text as="span" fontWeight="semibold">{item.title || `Product ${item.productId}`}</Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {item.status === 'loading' ? 'Loading variants…' : item.status === 'error' ? item.error : `${item.variantScope === 'all' ? 'All' : item.allowedVariantIds.length} of ${item.allVariants.length} variants`}
+                  </Text>
+                </BlockStack>
+              </InlineStack>
+              <Button variant="tertiary" tone="critical" icon={DeleteIcon} accessibilityLabel={`Remove ${item.title || 'product'}`} onClick={() => removeExtra(item.productId)} />
+            </InlineStack>
+            {item.status === 'ready' && (
+              <BlockStack gap="200">
+                <InlineStack gap="200">
+                  <Button pressed={item.variantScope === 'all'} onClick={() => updateExtra(item.productId, { variantScope: 'all', allowedVariantIds: [] })}>All variants</Button>
+                  <Button pressed={item.variantScope === 'selected'} onClick={() => updateExtra(item.productId, { variantScope: 'selected', allowedVariantIds: item.allowedVariantIds.length ? item.allowedVariantIds : item.allVariants.map((variant) => variant.id) })}>Selected variants</Button>
+                </InlineStack>
+                {item.variantScope === 'selected' && (
+                  <div className="pc-variants">
+                    {item.allVariants.map((variant) => {
+                      const on = item.allowedVariantIds.includes(variant.id);
+                      return (
+                        <button key={variant.id} type="button" role="checkbox" aria-checked={on} className={`pc-variant${on ? ' pc-variant--on' : ''}`} onClick={() => toggleExtraVariant(item.productId, variant.id)}>
+                          <span className="pc-check" aria-hidden="true">{on && checkSvg(10)}</span>
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#303030', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{variant.title}</span>
+                            <span style={{ display: 'block', fontSize: 12, color: variant.availableForSale ? '#6d7175' : '#a11919' }}>{fmt(variant.price)}{variant.availableForSale ? '' : ' · out of stock'}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </BlockStack>
+            )}
+          </div>
+        ))}
+        {!extraCheck.valid && <Banner tone="critical"><p>{extraCheck.errors[0].message}</p></Banner>}
+        <InlineStack gap="200">
+          <Button icon={PlusIcon} onClick={addExtraProducts} disabled={form.extraProducts.length >= MAX_EXTRA_PRODUCTS}>{form.extraProducts.length ? 'Change products' : 'Add products'}</Button>
+          <Text as="span" variant="bodySm" tone="subdued">Up to {MAX_EXTRA_PRODUCTS} other products. They must be active and on your Online Store.</Text>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  ) : null;
+
+  const showOnCard = form.packType === 'mix_match' && form.productId ? (
+    <Card>
+      <BlockStack gap="300">
+        <BlockStack gap="100">
+          <Text as="h2" variant="headingMd">Show this Pack on</Text>
+          <Text as="p" tone="subdued">It always shows on {form.productTitle || 'the main product'}&apos;s page. Optionally show it on other product pages too, such as the products you added.</Text>
+        </BlockStack>
+        {form.showOn.length > 0 && (
+          <BlockStack gap="150">
+            {form.showOn.map((id) => (
+              <InlineStack key={id} align="space-between" blockAlign="center">
+                <Text as="span">{form.showOnTitles[id] || `Product ${id}`}</Text>
+                <Button variant="tertiary" tone="critical" icon={DeleteIcon} accessibilityLabel={`Stop showing on ${form.showOnTitles[id] || id}`} onClick={() => removeShowOn(id)} />
+              </InlineStack>
+            ))}
+          </BlockStack>
+        )}
+        <InlineStack gap="200"><Button icon={PlusIcon} onClick={pickShowOn}>{form.showOn.length ? 'Change pages' : 'Choose pages'}</Button></InlineStack>
+      </BlockStack>
+    </Card>
+  ) : null;
+
   const configureStep = (
     <Layout>
       <Layout.Section>
         <BlockStack gap="400">
           {coverageStep}
+          {extraProductsCard}
+          {showOnCard}
           {tiersCard}
         </BlockStack>
       </Layout.Section>
@@ -842,7 +1021,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                 </div>
                 <Text as="p" tone="subdued" variant="bodySm">A short product description goes here, giving shoppers context about this item before they see the Pack offer below.</Text>
                 <div style={{ margin: '16px 0' }}>
-                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} productOptions={productData.product?.options} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} currency={currency} />
+                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} productOptions={productData.product?.options} extraProducts={extraEnabled ? extraEntries.filter((item) => item.status === 'ready' && item.applicable.length).map((item) => ({ productId: item.productId, title: item.title, image: item.image, variants: item.applicable })) : undefined} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} currency={currency} />
                 </div>
               </div>
             </div>

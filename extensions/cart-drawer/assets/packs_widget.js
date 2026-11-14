@@ -155,21 +155,46 @@
     try { return JSON.parse(node.textContent); } catch (e) { return null; }
   }
 
-  // Price stored Packs (pricing:'client') from the page's live variants,
-  // mirroring hydratePacks in app/services/packs-shopify.server.js. A Pack whose
-  // anchor variant isn't on this page is dropped — never priced from a cache.
-  function priceOnPage(data, product) {
-    var shopCode = product.shopCurrency;
-    var code = product.currency || shopCode;
-    var rate = 1;
-    if (code !== shopCode) {
-      // Fixed tier discounts are stored in the shop currency.
-      var parsed = parseFloat(window.Shopify && window.Shopify.currency && window.Shopify.currency.rate);
-      if (isFinite(parsed) && parsed > 0) rate = parsed; else code = shopCode; // makeMoney then hides amounts
-    }
-    var decimals = 2;
-    try { decimals = new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; } catch (e) { /* keep default */ }
+  // One flat variant list for a Pack that draws from several products: two synthetic options, Product and
+  // Variant, so the slot pickers work unchanged. Mirrors flattenPackProducts in app/utils/packs.shared.js.
+  //   products: [{ productId, title, image, variants: [...] }], main product first.
+  function flattenPackProducts(products) {
+    var used = {};
+    var rows = [];
+    (products || []).forEach(function (product) {
+      var base = String(product.title || 'Product');
+      used[base] = (used[base] || 0) + 1;
+      var label = used[base] > 1 ? base + ' (' + used[base] + ')' : base;
+      (product.variants || []).forEach(function (variant) {
+        var title = variant.title && variant.title !== DEFAULT_OPTION_VALUE ? String(variant.title) : 'Standard';
+        rows.push(shallow(variant, { id: String(variant.id), productId: product.productId, productTitle: product.title, image: variant.image || product.image || '', options: [label, title] }));
+      });
+    });
+    return { productOptions: ['Product', 'Variant'], variants: rows };
+  }
 
+  // A product from /products/<handle>.js (prices in minor units) in the shape Packs.liquid renders,
+  // so the page product and the other products of a Pack go through the same code.
+  function fromProductJs(json) {
+    if (!json || !Array.isArray(json.variants)) return null;
+    var image = json.featured_image && typeof json.featured_image === 'object' ? json.featured_image.src : json.featured_image;
+    return {
+      title: json.title,
+      image: image || '',
+      options: (json.options || []).map(function (option) { return option && typeof option === 'object' ? option.name : option; }),
+      variants: json.variants.map(function (variant) {
+        var own = variant.featured_image && typeof variant.featured_image === 'object' ? variant.featured_image.src : '';
+        return {
+          id: variant.id, title: variant.title, price: variant.price, available: variant.available,
+          inventoryManagement: variant.inventory_management, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity,
+          image: own || '', options: Array.isArray(variant.options) ? variant.options : [variant.option1, variant.option2, variant.option3].filter(Boolean),
+        };
+      }),
+    };
+  }
+
+  // A product's variants as the widget uses them: price in major units, stock cap, option values.
+  function shapeCatalog(product) {
     var byId = {};
     var order = [];
     (product.variants || []).forEach(function (variant) {
@@ -189,20 +214,70 @@
         options: Array.isArray(variant.options) ? variant.options.map(String) : [],
       };
     });
+    return { title: product.title, image: product.image || '', options: Array.isArray(product.options) ? product.options : null, byId: byId, order: order };
+  }
+
+  // The variants of a catalog a Pack covers (scope 'all', or the allowed ids), in the product's own order.
+  function coveredVariants(catalog, scope, allowedIds) {
+    var allowed = (allowedIds || []).map(numericId);
+    return catalog.order.map(function (id) { return catalog.byId[id]; }).filter(function (variant) {
+      return variant.price !== null && (scope === 'all' || allowed.indexOf(variant.id) >= 0);
+    });
+  }
+
+  // Price stored Packs (pricing:'client') from live variants, mirroring hydratePacks in
+  // app/services/packs-shopify.server.js. The page's own product comes from Packs.liquid; the Pack's
+  // other products (its main product on an extra page it is shown on, and its extra products) come
+  // from `fetched` ({ productId: /products/<handle>.js data }). A Pack whose anchor variant can't be
+  // found is dropped, never priced from a cache; an extra product that couldn't be loaded is left out.
+  function priceOnPage(data, product, pageProductId, fetched) {
+    fetched = fetched || {};
+    var shopCode = product.shopCurrency;
+    var code = product.currency || shopCode;
+    var rate = 1;
+    if (code !== shopCode) {
+      // Fixed tier discounts are stored in the shop currency.
+      var parsed = parseFloat(window.Shopify && window.Shopify.currency && window.Shopify.currency.rate);
+      if (isFinite(parsed) && parsed > 0) rate = parsed; else code = shopCode; // makeMoney then hides amounts
+    }
+    var decimals = 2;
+    try { decimals = new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; } catch (e) { /* keep default */ }
+
+    var pageCatalog = shapeCatalog(product);
+    function catalogFor(id) {
+      if (String(id) === String(pageProductId)) return pageCatalog;
+      return fetched[String(id)] ? shapeCatalog(fetched[String(id)]) : null;
+    }
 
     var packs = [];
     (data.packs || []).forEach(function (pack) {
-      var saved = byId[numericId(pack.variantId)];
+      // Packs from an older cached response have no productId: they belong to this page's product.
+      var mainId = pack.productId ? String(pack.productId) : String(pageProductId);
+      var main = catalogFor(mainId);
+      if (!main) return;
+      var saved = main.byId[numericId(pack.variantId)];
       if (!saved || saved.price === null) return;
       // Every variant the Pack covers, in the product's own order.
-      var allowed = (pack.allowedVariantIds || []).map(numericId);
-      var variants = order.map(function (id) { return byId[id]; }).filter(function (variant) {
-        return variant.price !== null && (pack.variantScope === 'all' || allowed.indexOf(variant.id) >= 0);
-      });
+      var variants = coveredVariants(main, pack.variantScope, pack.allowedVariantIds);
       if (!variants.length) variants = [saved];
       // Price from an in-stock variant when the saved one has sold out
       // (a Pack saved before its first variant ran out).
       var anchor = forSale(saved) ? saved : (variants.filter(forSale)[0] || saved);
+      var productOptions = main.options;
+      if (pack.packType === 'mix_match' && pack.extraProducts && pack.extraProducts.length) {
+        var products = [{ productId: mainId, title: main.title || pack.productTitle, image: main.image, variants: variants }];
+        pack.extraProducts.forEach(function (item) {
+          var catalog = catalogFor(item.productId);
+          if (!catalog) return;
+          var list = coveredVariants(catalog, item.variantScope, item.allowedVariantIds);
+          if (list.length) products.push({ productId: String(item.productId), title: catalog.title || item.title, image: catalog.image, variants: list });
+        });
+        if (products.length > 1) {
+          var flat = flattenPackProducts(products);
+          variants = flat.variants;
+          productOptions = flat.productOptions;
+        }
+      }
       var tiers = (pack.tiers || []).map(function (tier) {
         var t = shallow(tier);
         if (t.discountType === 'fixed') t.discountValue = Number(t.discountValue) * rate;
@@ -220,12 +295,12 @@
       copy.basePrice = anchor.price;
       copy.tiers = tiers;
       copy.variants = variants;
-      copy.productOptions = Array.isArray(product.options) ? product.options : null;
+      copy.productOptions = productOptions;
       copy.available = variants.some(forSale);
       copy.maxQuantity = anchor.maxQuantity;
-      copy.productTitle = product.title || pack.productTitle;
+      copy.productTitle = main.title || pack.productTitle;
       copy.variantTitle = anchor.title;
-      copy.productImage = product.image || pack.productImage;
+      copy.productImage = main.image || pack.productImage;
       packs.push(copy);
     });
 
@@ -2353,11 +2428,49 @@
 
   function showFor(variantId) {
     var next = packForVariant(widget.packs(), variantId);
-    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next) && !hideVariantsOn(next), keepThemeFor(next));
-    if (next && underThemeOn(next)) keepCodUnderShiprocket();
+    // On a page the Pack is only also shown on (an extra product's), the theme's controls stay;
+    // on its own page, which theme buttons stay (keepThemeFor) and COD under Shiprocket as before.
+    var ownPage = isMainPage(next);
+    setThemeControlsHidden(Boolean(next) && ownPage, buyNowOn(next), ownPage && coversAllVariants(next) && !hideVariantsOn(next), keepThemeFor(next));
+    if (next && ownPage && underThemeOn(next)) keepCodUnderShiprocket();
     if (next) place(next);
     current = next;
     widget.show(next, variantId);
+  }
+
+  // Is this the Pack's own product page? On an extra page it is shown on, the theme's buttons stay and the
+  // Pack is an extra block (there the page's product is just one of the products the Pack can be filled from).
+  function isMainPage(pack) {
+    return !pack || !pack.productId || String(pack.productId) === String(productId);
+  }
+
+  // The Pack's products other than this page's (its main product on an extra page, and its extra products),
+  // from the storefront's own /products/<handle>.js. { productId: data }; one that fails is simply missing.
+  var productCache = {};
+  function loadProduct(handle) {
+    if (!productCache[handle]) {
+      productCache[handle] = fetch('/products/' + encodeURIComponent(handle) + '.js', { headers: { Accept: 'application/json' } })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(fromProductJs)
+        .catch(function () { return null; });
+    }
+    return productCache[handle];
+  }
+  function loadOtherProducts(packs) {
+    var wanted = {};
+    (packs || []).forEach(function (pack) {
+      if (pack.productId && String(pack.productId) !== String(productId) && pack.productHandle) wanted[String(pack.productId)] = pack.productHandle;
+      if (pack.packType !== 'mix_match') return;
+      (pack.extraProducts || []).forEach(function (item) {
+        if (item.handle && String(item.productId) !== String(productId)) wanted[String(item.productId)] = item.handle;
+      });
+    });
+    var ids = Object.keys(wanted);
+    return Promise.all(ids.map(function (id) { return loadProduct(wanted[id]); })).then(function (results) {
+      var out = {};
+      ids.forEach(function (id, index) { if (results[index]) out[id] = results[index]; });
+      return out;
+    });
   }
 
   function fail(message) {
@@ -2381,9 +2494,16 @@
         var product = readPageProduct();
         if (!product) { fail('the product data from Packs.liquid is missing.'); return; }
         pageVariantIds = (product.variants || []).map(function (variant) { return String(variant.id); });
-        data = priceOnPage(data, product);
-        if (!data.packs.length) data.reason = 'price_unverified';
+        return loadOtherProducts(data.packs).then(function (fetched) {
+          data = priceOnPage(data, product, productId, fetched);
+          if (!data.packs.length) data.reason = 'price_unverified';
+          return data;
+        });
       }
+      return data;
+    })
+    .then(function (data) {
+      if (!data) return;
       if (!data.packs || !data.packs.length) {
         if (preview) fail('no widget to show (' + (data.reason || 'no active Pack') + ').');
         return;
@@ -2405,7 +2525,7 @@
         return Boolean(idInput && idInput.value && numericId(idInput.value) === currentVariantId());
       }
       function themeAdd(event) {
-        if (!current || !themeAddsPackOn(current)) return false;
+        if (!current || !isMainPage(current) || !themeAddsPackOn(current)) return false;
         var form = productForm();
         if (!form) return false;
         if (event.type === 'submit') {
@@ -2428,8 +2548,9 @@
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
-          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), keepThemeFor(current)); // a theme re-render can bring them back
-          if (current && underThemeOn(current)) {
+          var onOwnPage = Boolean(current) && isMainPage(current);
+          setThemeControlsHidden(onOwnPage, buyNowOn(current), onOwnPage && coversAllVariants(current) && !hideVariantsOn(current), keepThemeFor(current)); // a theme re-render can bring them back
+          if (onOwnPage && underThemeOn(current)) {
             keepCodUnderShiprocket();
             // Another app placed itself between the Pack and the buttons (Silverline: the coupon slider).
             var buttonsBlock = themeButtonsAnchor();

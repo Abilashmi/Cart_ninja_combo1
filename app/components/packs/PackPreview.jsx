@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { mergeCustomization } from '../../utils/packs.shared.js';
+import { mergeCustomization, flattenPackProducts } from '../../utils/packs.shared.js';
 
 // The storefront widget registers window.BrixPacksWidget when it runs. It is
 // loaded on the client only (it touches the DOM), once per page: first from
@@ -48,13 +48,15 @@ function loadWidget() {
  *  - variants: live variants this Pack covers — [{ id, title, price,
  *    availableForSale, maxQuantity?, image?, options?: ['M','Black'] }]
  *  - productOptions: Shopify option names in order (['Size','Color'])
+ *  - extraProducts: other products a Mix & Match Pack draws from - [{ productId, title, image, variants }] (the
+ *    covered variants of each); the preview then offers a Product and a Variant picker, as the storefront does
  *  - customization: partial or full customization object (merged over defaults)
  *  - tiers: [{ name, quantity, badge, discountType, discountValue, subtotal, savings, price }]
  *  - productImage, productTitle
  *  - currency: { code, locale } — the shop currency
  *  - demo: preselect a pack size and one item (design thumbnails)
  */
-export default function PackPreview({ template, packType, variants, productOptions, customization, tiers, productImage, productTitle, currency, demo = false }) {
+export default function PackPreview({ template, packType, variants, productOptions, extraProducts, customization, tiers, productImage, productTitle, currency, demo = false }) {
   const node = useRef(null);
   const handle = useRef(null);
   const [engine, setEngine] = useState(null);
@@ -67,7 +69,14 @@ export default function PackPreview({ template, packType, variants, productOptio
   }, []);
 
   const config = useMemo(() => {
-    const list = Array.isArray(variants) ? variants : [];
+    let list = Array.isArray(variants) ? variants : [];
+    let options = productOptions || null;
+    const extras = (Array.isArray(extraProducts) ? extraProducts : []).filter((item) => Array.isArray(item.variants) && item.variants.length);
+    if (extras.length && (packType === 'mix_match' || template === 'choose_each_item')) {
+      const flat = flattenPackProducts([{ productId: 'main', title: productTitle || 'Product', image: productImage || '', variants: list }, ...extras]);
+      list = flat.variants;
+      options = flat.productOptions;
+    }
     const firstTier = (tiers || [])[0];
     const basePrice = list[0]?.price ?? (firstTier && firstTier.quantity ? firstTier.subtotal / firstTier.quantity : 0);
     return {
@@ -79,11 +88,11 @@ export default function PackPreview({ template, packType, variants, productOptio
         variantScope: 'all', allowedVariantIds: [], variantId: list[0]?.id || 'preview', variantTitle: list[0]?.title || '',
         productTitle: productTitle || 'Product', productImage: productImage || '', basePrice: Number(basePrice) || 0,
         available: list.length ? list.some((variant) => variant.availableForSale !== false) : true, maxQuantity: list[0]?.maxQuantity ?? null,
-        variants: list.map((variant) => ({ ...variant, id: String(variant.id) })), productOptions: productOptions || null,
+        variants: list.map((variant) => ({ ...variant, id: String(variant.id) })), productOptions: options,
         tiers: (tiers || []).map((tier) => ({ ...tier })), customization: mergeCustomization(customization),
       },
     };
-  }, [template, packType, variants, productOptions, customization, tiers, productImage, productTitle, currency?.code, currency?.locale, demo]);
+  }, [template, packType, variants, productOptions, extraProducts, customization, tiers, productImage, productTitle, currency?.code, currency?.locale, demo]);
 
   // Mount once, then update in place so the merchant's clicks in the preview
   // survive edits to colors, text, etc.
