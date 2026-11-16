@@ -23,7 +23,7 @@ export const test = base.extend<{ phpApi: APIRequestContext }>({
     const context = await playwrightRequest.newContext({
       baseURL: PHP_BASE_URL,
       extraHTTPHeaders: {
-        "X-Forge-Secret": process.env.FORGE_SECRET || "",
+        "X-Brix-Internal-Secret": process.env.BRIX_INTERNAL_SECRET || process.env.FORGE_SECRET || "",
         "Content-Type": "application/json",
       },
     });

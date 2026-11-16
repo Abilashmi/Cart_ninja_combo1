@@ -30,6 +30,7 @@ import { packDiscountsFor } from '../utils/packs-discount.shared.js';
 import {
   sanitizeShipping, quoteShipping, deliveryForShopper, deliverySummary, referencedCollections, dateLabel, slotLabel,
 } from '../utils/shipping.shared.js';
+import { internalAuthHeaders, isInternalRequest } from "../utils/internal-auth";
 
 export class CodError extends Error {
   constructor(code, message, { status = 400, details } = {}) {
@@ -66,7 +67,7 @@ async function php(file, body) {
   try {
     res = await fetch(`${BASE_PHP_URL}/${file}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...internalAuthHeaders() },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(PHP_TIMEOUT_MS),
     });
@@ -397,8 +398,7 @@ export function clientIp(request) {
   // Relayed by php_backend/cod_checkout.php: the connection comes from the
   // PHP server, so use the shopper IP it forwards (trusted only with the secret).
   const relayed = request.headers.get('x-brix-client-ip');
-  const secret = process.env.SHOPIFY_API_KEY;
-  if (relayed && secret && request.headers.get('x-forge-secret') === secret) return relayed.trim().slice(0, 64);
+  if (relayed && isInternalRequest(request)) return relayed.trim().slice(0, 64);
   return (request.headers.get('fly-client-ip')
     || request.headers.get('cf-connecting-ip')
     || (request.headers.get('x-forwarded-for') || '').split(',')[0].trim()
@@ -407,9 +407,8 @@ export function clientIp(request) {
 
 /** The shopper's User-Agent, forwarded by the PHP relay (trusted only with the secret, like clientIp). */
 export function clientUa(request) {
-  const secret = process.env.SHOPIFY_API_KEY;
   const relayed = request.headers.get('x-brix-client-ua');
-  if (relayed && secret && request.headers.get('x-forge-secret') === secret) return relayed.slice(0, 400);
+  if (relayed && isInternalRequest(request)) return relayed.slice(0, 400);
   return (request.headers.get('user-agent') || '').slice(0, 400);
 }
 

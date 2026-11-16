@@ -1,6 +1,7 @@
 import { getDb } from '../services/db.server';
 import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
 import { PLANS } from '../config/plans';
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 const CORS = {
   'Content-Type': 'application/json',
@@ -14,7 +15,7 @@ async function fetchFromPhpBackend(shopDomain) {
   try {
     const res = await fetch(
       `${PHP_BASE}/save_cart_drawer.php?shopdomain=${encodeURIComponent(shopDomain)}`,
-      { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }
+      { headers: { ...internalAuthHeaders() } }
     );
     if (!res.ok) return null;
     const json = await res.json();

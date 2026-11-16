@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { internalAuthHeaders } from "./internal-auth";
 
 /* =========================
    IST DATE FORMATTER
@@ -111,7 +112,7 @@ export async function sendToPhp(payload, endpoint) {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
+        ...internalAuthHeaders(),
       },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),

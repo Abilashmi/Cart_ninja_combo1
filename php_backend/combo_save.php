@@ -92,9 +92,9 @@ try {
     // prisma.$queryRawUnsafe into combo_templates instead), but this writes
     // by client-supplied shop_domain with no other check — gate it so it
     // can't be hit anonymously if anything ever calls it again.
-    $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
-    $expected = getenv('SHOPIFY_API_KEY') ?: '';
-    if (!$expected || !hash_equals($expected, $secret)) {
+    // Internal secret, not the public client id (internal_auth.php).
+    require_once __DIR__ . '/internal_auth.php';
+    if (!brix_internal_request_ok()) {
       http_response_code(403);
       echo json_encode(["status" => "error", "message" => "Forbidden"]);
       exit;
@@ -313,9 +313,9 @@ try {
 
   // ===== DELETE =====
   if ($method === 'DELETE') {
-    $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
-    $expected = getenv('SHOPIFY_API_KEY') ?: '';
-    if (!$expected || !hash_equals($expected, $secret)) {
+    // Internal secret, not the public client id (internal_auth.php).
+    require_once __DIR__ . '/internal_auth.php';
+    if (!brix_internal_request_ok()) {
       http_response_code(403);
       echo json_encode(["status" => "error", "message" => "Forbidden"]);
       exit;

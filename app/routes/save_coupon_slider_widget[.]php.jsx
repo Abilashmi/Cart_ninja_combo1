@@ -7,6 +7,7 @@
  * coupon_slider.js expects — so we proxy to it (server-to-server, no CORS) instead
  * of re-implementing the read. PHP_BASE_URL points at the local php_backend in dev.
  */
+import { internalAuthHeaders } from "../utils/internal-auth";
 const PHP_BASE = process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend';
 
 export async function loader({ request }) {
@@ -25,7 +26,7 @@ export async function loader({ request }) {
   try {
     const res = await fetch(
       `${PHP_BASE}/save_coupon_slider_widget.php?shopdomain=${encodeURIComponent(shopDomain)}`,
-      { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }
+      { headers: { ...internalAuthHeaders() } }
     );
     let text = await res.text();
     // Strip a leading UTF-8 BOM if present, so the storefront JSON.parse works.

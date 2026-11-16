@@ -55,17 +55,19 @@ function notifyAgencyDashboardStoreUninstalled(string $shop): void
 }
 
 // Database Connection
+// Only the BRIX app may call this (internal_auth.php): it changes a shop's install state.
+require_once __DIR__ . '/internal_auth.php';
+if (!brix_internal_request_ok()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Forbidden']);
+    exit;
+}
+
 require_once __DIR__ . '/config.php';
 
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-
-try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
+// config.php opens the connection ($pdo). This file used to open a second one with
+// $user / $pass, which config.php never defines, so every uninstall failed here.
+if (!isset($pdo)) {
     http_response_code(500);
     echo json_encode(['error' => 'Database connection failed']);
     exit;

@@ -23,7 +23,7 @@ const results = { startedAt: new Date().toISOString(), burst: BURST, workers: en
 let rr = 0;
 async function call(file, body) {
   const base = env.baseUrls[rr++ % env.baseUrls.length];
-  const res = await fetch(`${base}/${file}`, { method: 'POST', headers: { 'X-Forge-Secret': env.secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ shop: SHOP, ...body }) });
+  const res = await fetch(`${base}/${file}`, { method: 'POST', headers: { 'X-Brix-Internal-Secret': env.secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ shop: SHOP, ...body }) });
   let json = null;
   try { json = await res.json(); } catch { /* not JSON */ }
   return { status: res.status, json };

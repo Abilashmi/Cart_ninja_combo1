@@ -186,7 +186,7 @@ export async function seed(db, { shops = 2000, bannerEvery = 10, bannerChars = 6
 /** COD tables are created by the PHP files themselves; settings for every 3rd shop. */
 export async function seedCod(baseUrl, secret, db, shops) {
   // One request creates the COD tables (cod_ensure_tables).
-  await fetch(`${baseUrl}/cod_settings.php`, { method: 'POST', headers: { 'X-Forge-Secret': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get', shop: shopName(0) }) });
+  await fetch(`${baseUrl}/cod_settings.php`, { method: 'POST', headers: { 'X-Brix-Internal-Secret': secret, 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get', shop: shopName(0) }) });
   const ids = repeat(shops, (i) => i).filter((i) => i % 3 === 0);
   for (let s = 0; s < ids.length; s += 200) {
     await db.query('INSERT INTO cod_settings (shop, settings_json) VALUES ? ON DUPLICATE KEY UPDATE settings_json = VALUES(settings_json)', [ids.slice(s, s + 200).map((i) => [shopName(i), codSettings(i)])]);

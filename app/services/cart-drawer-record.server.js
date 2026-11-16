@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 const LOCAL_CART_DATA_FILE = path.resolve("cartdrawer-config-data.json");
 const PHP_BASE = process.env.PHP_BASE_URL || 'http://localhost/cartdrawerv2_ui/php_backend';
@@ -36,7 +37,7 @@ export async function fetchCartDrawerRecord(shop) {
             `${PHP_BASE}/save_cart_drawer.php?shopdomain=${encodeURIComponent(shop)}`,
             {
                 method: 'GET',
-                headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' },
+                headers: { ...internalAuthHeaders() },
             }
         );
         const json = await res.json();
@@ -60,7 +61,7 @@ export async function persistCartDrawerRecord(shop, record) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
+                ...internalAuthHeaders(),
             },
             body: JSON.stringify(payload),
         });

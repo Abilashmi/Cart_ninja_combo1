@@ -27,6 +27,7 @@ import { couponIconHtml, couponSubtitleStyle } from "../utils/coupon-style.share
 import { offerLadder, isLadderId, newLadderId, NEW_LADDER_STYLE, LADDER_STYLE_KEYS } from "../utils/offer-ladder.shared.js";
 import { OfferLadderFields, OfferLadderPreview } from "../components/coupon-banner/OfferLadder";
 import AppSaveBar from "../components/shared/AppSaveBar";
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 /* ─── FAKE DEFAULTS ───────────────────────────────────────────────────────── */
 const FAKE_COUPON_CONFIG = {
@@ -93,7 +94,7 @@ export async function loader({ request }) {
     const [productsResponse, discountsResponse, couponRes, couponWidgetRes, fbtRes, embedStatus] = await Promise.all([
         admin.graphql(`query getProducts { products(first: 50, query: "status:active") { edges { node { id title handle featuredImage { url } variants(first: 1) { edges { node { id price } } } } } } }`),
         admin.graphql(`query DiscountList { discountNodes(first: 100, reverse: true) { edges { node { id discount { ... on DiscountCodeBasic { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeBxgy { title codes(first: 1) { edges { node { code } } } status } ... on DiscountCodeFreeShipping { title codes(first: 1) { edges { node { code } } } status } } } } } }`),
-        fetch(`${BASE_PHP_URL}/coupon_slider_settings.php?shop=${encodeURIComponent(shop)}`, { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }).catch(() => null),
+        fetch(`${BASE_PHP_URL}/coupon_slider_settings.php?shop=${encodeURIComponent(shop)}`, { headers: { ...internalAuthHeaders() } }).catch(() => null),
         fetch(`${BASE_PHP_URL}/save_coupon_slider_widget.php?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
         fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`).catch(() => null),
         getEmbedStatus(shop, session.accessToken),

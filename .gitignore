@@ -54,3 +54,6 @@ ai-data/
 .env.playwright
 # Local dev logs
 dev.log
+
+# Real secrets live only on the server (template: php_backend/.htaccess.example)
+php_backend/.htaccess

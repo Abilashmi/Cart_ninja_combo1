@@ -1,4 +1,5 @@
 import { authenticate } from '../shopify.server';
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
@@ -11,7 +12,7 @@ export async function loader({ request }) {
   try {
     const res = await fetch(
       `${phpBase}/save_cart_drawer.php?shopdomain=${encodeURIComponent(shop)}`,
-      { headers: { 'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '' } }
+      { headers: { ...internalAuthHeaders() } }
     );
     phpResult = await res.json();
   } catch (e) {
