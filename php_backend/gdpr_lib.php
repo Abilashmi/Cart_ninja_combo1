@@ -16,18 +16,25 @@
  *     orders get a random id instead of the Shopify order id, and no order
  *     number. Revenue and product analytics are unchanged.
  *   (customer_addresses is handled by Node, which holds its key.)
- * shop/redact (48 h after uninstall): every row for that shop, in every table
- *   with a shop column (found from the schema, so new tables are covered),
- *   plus child rows of the shop's AI and support chats. Kept: the billing
- *   records (order_overage_charges, ai_brix_overage_charges: accounting),
- *   addresses shoppers saved with BRIX themselves (customer_addresses scope
- *   'brix'), and gdpr_log.
+ * shop/redact (48 h after uninstall): the shop's order stats are kept but made
+ *   anonymous (gdpr_anonymise_shop_orders: random order and line ids, no order
+ *   numbers; COD / Partial COD rows lose name, PIN, phone, order refs), so
+ *   BRIX's own numbers survive without any shopper data. Everything else for
+ *   that shop is deleted: every table with a shop column (found from the
+ *   schema, so new tables are covered), plus child rows of the shop's AI and
+ *   support chats. Also kept: the billing records (order_overage_charges,
+ *   ai_brix_overage_charges: accounting), the daily totals
+ *   (analytics_daily_rollup: counts only), addresses shoppers saved with BRIX
+ *   themselves (customer_addresses scope 'brix'), and gdpr_log. The shop's
+ *   saved addresses (scope 'store') are deleted: an address can't be anonymous.
  * gdpr_log records that a request was done: topic, shop, how many orders and
  * rows. Never the customer's id, email or phone.
  */
 
 const GDPR_SHOP_COLUMNS = ['shop', 'shop_domain', 'shopDomain', 'domain'];
-const GDPR_KEEP_ON_SHOP_REDACT = ['gdpr_log', 'order_overage_charges', 'ai_brix_overage_charges', '_prisma_migrations'];
+const GDPR_KEEP_ON_SHOP_REDACT = ['gdpr_log', 'order_overage_charges', 'ai_brix_overage_charges', '_prisma_migrations', 'analytics_daily_rollup'];
+// Kept on shop/redact, after gdpr_anonymise_shop_orders has stripped them.
+const GDPR_ANONYMISE_ON_SHOP_REDACT = ['store_orders', 'store_order_line_items', 'store_order_events', 'cod_orders', 'partial_cod_orders'];
 
 function gdpr_valid_shop($shop) {
     return is_string($shop) && preg_match('/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/', $shop) === 1;
@@ -149,8 +156,56 @@ function gdpr_redact_customer(PDO $pdo, $shop, $phoneHash, array $orderIds) {
     return $changed;
 }
 
-/** @return array rows deleted per table */
+/**
+ * Make a shop's order rows anonymous in place. Idempotent (already-redacted ids are left alone).
+ * @return array rows changed per table
+ */
+function gdpr_anonymise_shop_orders(PDO $pdo, $shop) {
+    $changed = [];
+    // Analytics: one random id per order, the same in all three tables so lines stay with their order.
+    $orderTables = array_values(array_filter(['store_orders', 'store_order_line_items', 'store_order_events'], function ($t) use ($pdo) { return gdpr_table_exists($pdo, $t); }));
+    if ($orderTables) {
+        $pdo->exec('DROP TEMPORARY TABLE IF EXISTS gdpr_order_map');
+        // Same column type and collation as the order tables, so the joins below never meet
+        // "Illegal mix of collations" on a server whose default differs.
+        $pdo->exec("CREATE TEMPORARY TABLE gdpr_order_map SELECT order_id AS old_id, order_id AS new_id FROM `{$orderTables[0]}` WHERE 1 = 0");
+        $pdo->exec('ALTER TABLE gdpr_order_map ADD PRIMARY KEY (old_id)');
+        $union = implode(' UNION ', array_map(function ($t) { return "SELECT order_id FROM `$t` WHERE shop_domain = ?"; }, $orderTables));
+        $stmt = $pdo->prepare("INSERT INTO gdpr_order_map (old_id, new_id)
+            SELECT ids.order_id, CONCAT('redacted-', LEFT(SHA2(CONCAT(ids.order_id, ':', UUID(), ':', RAND()), 256), 24))
+            FROM ($union) ids WHERE ids.order_id NOT LIKE 'redacted-%'");
+        $stmt->execute(array_fill(0, count($orderTables), $shop));
+        foreach ($orderTables as $table) {
+            $set = 't.order_id = m.new_id';
+            if ($table === 'store_orders') $set .= ', t.order_number = NULL';
+            if ($table === 'store_order_line_items') $set .= ", t.line_item_id = CONCAT('r-', LEFT(SHA2(CONCAT(t.id, ':', UUID()), 256), 24))";
+            $up = $pdo->prepare("UPDATE `$table` t JOIN gdpr_order_map m ON t.order_id = m.old_id SET $set WHERE t.shop_domain = ?");
+            $up->execute([$shop]);
+            $changed[$table] = $up->rowCount();
+        }
+        $pdo->exec('DROP TEMPORARY TABLE IF EXISTS gdpr_order_map');
+    }
+    if (gdpr_table_exists($pdo, 'cod_orders')) {
+        $stmt = $pdo->prepare(
+            "UPDATE cod_orders SET customer_name = NULL, pincode = NULL, phone_masked = '',
+                phone_hash = SHA2(CONCAT('redacted:', id, ':', UUID()), 256),
+                order_id = NULL, order_name = NULL, draft_order_id = NULL
+             WHERE shop = ? AND (customer_name IS NOT NULL OR pincode IS NOT NULL OR phone_masked <> '' OR order_id IS NOT NULL OR draft_order_id IS NOT NULL)"
+        );
+        $stmt->execute([$shop]);
+        $changed['cod_orders'] = $stmt->rowCount();
+    }
+    if (gdpr_table_exists($pdo, 'partial_cod_orders')) {
+        $stmt = $pdo->prepare('UPDATE partial_cod_orders SET customer_name = NULL, pincode = NULL, order_id = NULL, order_name = NULL, error = NULL WHERE shop = ?');
+        $stmt->execute([$shop]);
+        $changed['partial_cod_orders'] = $stmt->rowCount();
+    }
+    return $changed;
+}
+
+/** @return array ['anonymised' => rows per table, 'deleted' => rows per table] */
 function gdpr_redact_shop(PDO $pdo, $shop) {
+    $anonymised = gdpr_anonymise_shop_orders($pdo, $shop);
     $deleted = [];
     // Child rows that only point at a parent row of this shop.
     $children = [
@@ -170,7 +225,7 @@ function gdpr_redact_shop(PDO $pdo, $shop) {
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
         $table = $row['TABLE_NAME'];
         $col = $row['COLUMN_NAME'];
-        if (in_array($table, GDPR_KEEP_ON_SHOP_REDACT, true)) continue;
+        if (in_array($table, GDPR_KEEP_ON_SHOP_REDACT, true) || in_array($table, GDPR_ANONYMISE_ON_SHOP_REDACT, true)) continue;
         if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $col)) continue;
         $extra = $table === 'customer_addresses' ? " AND scope = 'store'" : '';
         $del = $pdo->prepare("DELETE FROM `$table` WHERE `$col` = ?$extra");
@@ -178,8 +233,8 @@ function gdpr_redact_shop(PDO $pdo, $shop) {
         $deleted[$table] = ($deleted[$table] ?? 0) + $del->rowCount();
     }
     gdpr_clear_legacy_logs($pdo);
-    gdpr_log($pdo, 'shop/redact', $shop, 0, array_sum($deleted));
-    return $deleted;
+    gdpr_log($pdo, 'shop/redact', $shop, 0, array_sum($deleted) + array_sum($anonymised));
+    return ['anonymised' => $anonymised, 'deleted' => $deleted];
 }
 
 /** Shared request handling for the three endpoints: POST, internal secret, JSON body with a valid shop. */

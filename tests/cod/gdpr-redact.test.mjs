@@ -31,10 +31,10 @@ const OTHER_HASH = hex('ravi-phone');
 const DDL = [
   `CREATE TABLE cod_orders (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop VARCHAR(255) NOT NULL, idem_key VARCHAR(64) NOT NULL, phone_hash CHAR(64) NOT NULL, phone_masked VARCHAR(16) NOT NULL, customer_name VARCHAR(120) NULL, pincode VARCHAR(10) NULL, total DECIMAL(12,2) NULL, draft_order_id VARCHAR(64) NULL, order_id VARCHAR(64) NULL, order_name VARCHAR(32) NULL)`,
   `CREATE TABLE cod_otp (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop VARCHAR(255) NOT NULL, phone_hash CHAR(64) NOT NULL, code_hash CHAR(64) NOT NULL)`,
-  `CREATE TABLE partial_cod_orders (code VARCHAR(32) PRIMARY KEY, shop VARCHAR(255) NOT NULL, order_id VARCHAR(64) NULL, order_name VARCHAR(64) NULL, customer_name VARCHAR(120) NULL, pincode VARCHAR(10) NULL, advance DECIMAL(12,2) NOT NULL DEFAULT 0)`,
-  `CREATE TABLE store_orders (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, order_id VARCHAR(64) NOT NULL, order_number VARCHAR(64) NULL, total_price DECIMAL(12,2) NOT NULL, UNIQUE KEY u (shop_domain, order_id))`,
-  `CREATE TABLE store_order_line_items (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, order_id VARCHAR(64) NOT NULL, line_item_id VARCHAR(64) NOT NULL, product_title VARCHAR(500) NOT NULL DEFAULT '', UNIQUE KEY u (shop_domain, order_id, line_item_id))`,
-  `CREATE TABLE store_order_events (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, order_id VARCHAR(64) NOT NULL, revenue DECIMAL(12,2) NOT NULL)`,
+  `CREATE TABLE partial_cod_orders (code VARCHAR(32) PRIMARY KEY, shop VARCHAR(255) NOT NULL, order_id VARCHAR(64) NULL, order_name VARCHAR(64) NULL, customer_name VARCHAR(120) NULL, pincode VARCHAR(10) NULL, advance DECIMAL(12,2) NOT NULL DEFAULT 0, error VARCHAR(500) NULL)`,
+  `CREATE TABLE store_orders (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, order_id VARCHAR(64) NOT NULL, order_number VARCHAR(64) NULL, total_price DECIMAL(12,2) NOT NULL, UNIQUE KEY u (shop_domain, order_id)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE store_order_line_items (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, order_id VARCHAR(64) NOT NULL, line_item_id VARCHAR(64) NOT NULL, product_title VARCHAR(500) NOT NULL DEFAULT '', UNIQUE KEY u (shop_domain, order_id, line_item_id)) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE store_order_events (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, order_id VARCHAR(64) NOT NULL, revenue DECIMAL(12,2) NOT NULL) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE customer_addresses (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, scope VARCHAR(10) NOT NULL DEFAULT 'store', phone_hash CHAR(64) NOT NULL, address_hash CHAR(64) NOT NULL, email_hash CHAR(64) NULL, customer_hash CHAR(64) NULL, order_hash CHAR(64) NULL, payload_enc TEXT NOT NULL, source VARCHAR(20) NOT NULL DEFAULT 'order', orders_count INT UNSIGNED NOT NULL DEFAULT 1, first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, expires_at DATETIME NOT NULL, UNIQUE KEY u (shop_domain, scope, phone_hash, address_hash))`,
   `CREATE TABLE ai_conversations (id VARCHAR(40) PRIMARY KEY, shopDomain VARCHAR(255) NOT NULL)`,
   `CREATE TABLE ai_messages (id VARCHAR(40) PRIMARY KEY, conversationId VARCHAR(40) NOT NULL, message TEXT)`,
@@ -43,11 +43,15 @@ const DDL = [
   `CREATE TABLE coupon_slider_widget (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shopDomain VARCHAR(255) NOT NULL)`,
   `CREATE TABLE cart_click_events (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_id VARCHAR(64) NULL, domain VARCHAR(255) NULL)`,
   `CREATE TABLE order_overage_charges (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, charge_amount DECIMAL(12,2) NOT NULL)`,
+  `CREATE TABLE analytics_daily_rollup (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, date DATE NOT NULL, revenue DECIMAL(12,2) NOT NULL)`,
+  `CREATE TABLE store_order_line_item_collections (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, line_item_id VARCHAR(64) NOT NULL, collection_id VARCHAR(64) NOT NULL)`,
   `CREATE TABLE gdpr_redactions (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, shop_domain VARCHAR(255) NOT NULL, customer_id VARCHAR(64) NULL, customer_email VARCHAR(255) NULL)`,
 ];
-const TABLES = ['cod_orders', 'cod_otp', 'partial_cod_orders', 'store_orders', 'store_order_line_items', 'store_order_events', 'customer_addresses', 'ai_conversations', 'ai_messages', 'support_chat_conversations', 'support_chat_messages', 'coupon_slider_widget', 'cart_click_events', 'order_overage_charges', 'gdpr_redactions', 'gdpr_log'];
+const TABLES = ['cod_orders', 'cod_otp', 'partial_cod_orders', 'store_orders', 'store_order_line_items', 'store_order_events', 'customer_addresses', 'ai_conversations', 'ai_messages', 'support_chat_conversations', 'support_chat_messages', 'coupon_slider_widget', 'cart_click_events', 'order_overage_charges', 'analytics_daily_rollup', 'store_order_line_item_collections', 'gdpr_redactions', 'gdpr_log'];
 
 beforeEach(async () => {
+  // A database default unlike the tables' (as can happen on the live server).
+  await sql('ALTER DATABASE brix_cod_test CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci');
   for (const t of TABLES) await sql(`DROP TABLE IF EXISTS ${t}`);
   for (const d of DDL) await sql(d);
   await sql('DELETE FROM shops');
@@ -69,6 +73,8 @@ beforeEach(async () => {
     await sql('INSERT INTO coupon_slider_widget (shopDomain) VALUES (?)', [shop]);
     await sql('INSERT INTO cart_click_events (shop_id, domain) VALUES (?, ?)', ['1', shop]);
     await sql('INSERT INTO order_overage_charges (shop_domain, charge_amount) VALUES (?, 25)', [shop]);
+    await sql("INSERT INTO analytics_daily_rollup (shop_domain, date, revenue) VALUES (?, '2026-11-01', 1500)", [shop]);
+    await sql("INSERT INTO store_order_line_item_collections (shop_domain, line_item_id, collection_id) VALUES (?, '111-1', '9')", [shop]);
     await sql('INSERT INTO shops (shop_domain, plan_name) VALUES (?, ?)', [shop, 'pro']);
   }
   await sql("INSERT INTO gdpr_redactions (shop_domain, customer_id, customer_email) VALUES (?, '5', 'old@example.com')", [A]);
@@ -131,24 +137,53 @@ test('customers/redact: that shopper loses name, PIN, phone and order refs; othe
   assert.equal((await sql('SELECT customer_email FROM gdpr_redactions'))[0].customer_email, null);
 });
 
-test('shop/redact: every table with a shop column, chat children too; billing, BRIX-saved addresses and the other store stay', async () => {
+test('shop/redact: order stats kept but anonymous; everything else for the shop deleted; the other store untouched', async () => {
   const res = await post('shop-redact.php', { shop_domain: A });
   assert.equal(res.status, 200);
-  const counts = async (shop) => Object.fromEntries(await Promise.all([
-    ['cod_orders', 'shop'], ['cod_otp', 'shop'], ['partial_cod_orders', 'shop'], ['store_orders', 'shop_domain'], ['store_order_line_items', 'shop_domain'],
-    ['store_order_events', 'shop_domain'], ['ai_conversations', 'shopDomain'], ['support_chat_conversations', 'shop'], ['coupon_slider_widget', 'shopDomain'],
-    ['cart_click_events', 'domain'], ['shops', 'shop_domain'], ['order_overage_charges', 'shop_domain'],
-  ].map(async ([t, c]) => [t, (await sql(`SELECT COUNT(*) n FROM ${t} WHERE ${c} = ?`, [shop]))[0].n])));
-  const a = await counts(A);
-  assert.equal(a.order_overage_charges, 1, 'billing records are kept');
-  delete a.order_overage_charges;
-  assert.ok(Object.values(a).every((n) => n === 0), JSON.stringify(a));
-  assert.deepEqual((await sql('SELECT scope FROM customer_addresses WHERE shop_domain = ?', [A])).map((r) => r.scope), ['brix']);
+  const out = await res.json();
+  assert.equal(out.anonymised.store_orders, 3);
+
+  // Kept, anonymous: same totals and products, no Shopify ids, numbers, names, PINs or phones.
+  const orders = await sql('SELECT order_id, order_number, total_price FROM store_orders WHERE shop_domain = ?', [A]);
+  assert.equal(orders.length, 3);
+  assert.ok(orders.every((o) => /^redacted-[0-9a-f]{24}$/.test(o.order_id) && o.order_number === null && Number(o.total_price) === 500));
+  assert.equal(new Set(orders.map((o) => o.order_id)).size, 3);
+  for (const o of orders) {
+    const lines = await sql('SELECT line_item_id, product_title FROM store_order_line_items WHERE shop_domain = ? AND order_id = ?', [A, o.order_id]);
+    assert.deepEqual(lines.map((l) => l.product_title).sort(), ['Blouse', 'Saree'], 'lines stay with their order');
+    assert.ok(lines.every((l) => /^r-[0-9a-f]{24}$/.test(l.line_item_id)));
+    assert.equal((await sql('SELECT COUNT(*) n FROM store_order_events WHERE shop_domain = ? AND order_id = ?', [A, o.order_id]))[0].n, 1);
+  }
+  const cod = await sql('SELECT customer_name, pincode, phone_masked, phone_hash, order_id, order_name, draft_order_id, total FROM cod_orders WHERE shop = ?', [A]);
+  assert.equal(cod.length, 2);
+  assert.ok(cod.every((r) => r.customer_name === null && r.pincode === null && r.phone_masked === '' && r.order_id === null && r.order_name === null && r.draft_order_id === null));
+  assert.ok(cod.every((r) => r.phone_hash !== PHONE_HASH && r.phone_hash !== OTHER_HASH));
+  assert.deepEqual(cod.map((r) => Number(r.total)).sort((x, y) => x - y), [799, 1499]);
+  const partial = await sql('SELECT customer_name, pincode, order_id FROM partial_cod_orders WHERE shop = ?', [A]);
+  assert.ok(partial.length === 2 && partial.every((r) => r.customer_name === null && r.pincode === null && r.order_id === null));
+  assert.equal((await sql('SELECT COUNT(*) n FROM analytics_daily_rollup WHERE shop_domain = ?', [A]))[0].n, 1, 'daily totals kept');
+  assert.equal((await sql('SELECT COUNT(*) n FROM order_overage_charges WHERE shop_domain = ?', [A]))[0].n, 1, 'billing kept');
+  const dump = JSON.stringify(await sql('SELECT * FROM cod_orders WHERE shop = ?', [A])) + JSON.stringify(await sql('SELECT * FROM partial_cod_orders WHERE shop = ?', [A])) + JSON.stringify(await sql('SELECT * FROM store_orders WHERE shop_domain = ?', [A]));
+  for (const plain of ['Asha', 'Ravi', '600001', '560001', '#1001', '"111"', 'gid://shopify/Order']) assert.ok(!dump.includes(plain), `"${plain}" left behind`);
+
+  // Deleted.
+  const gone = [['cod_otp', 'shop'], ['ai_conversations', 'shopDomain'], ['support_chat_conversations', 'shop'], ['coupon_slider_widget', 'shopDomain'],
+    ['cart_click_events', 'domain'], ['shops', 'shop_domain'], ['store_order_line_item_collections', 'shop_domain']];
+  for (const [t, c] of gone) assert.equal((await sql(`SELECT COUNT(*) n FROM ${t} WHERE ${c} = ?`, [A]))[0].n, 0, t);
+  assert.deepEqual((await sql('SELECT scope FROM customer_addresses WHERE shop_domain = ?', [A])).map((r) => r.scope), ['brix'], 'store addresses deleted, BRIX-saved kept');
   assert.deepEqual((await sql('SELECT id FROM ai_messages')).map((r) => r.id), [`m-${B}`]);
   assert.equal((await sql('SELECT COUNT(*) n FROM support_chat_messages'))[0].n, 1);
-  const b = await counts(B);
-  assert.ok(Object.values(b).every((n) => n > 0), JSON.stringify(b));
-  assert.deepEqual((await sql('SELECT topic, shop_domain FROM gdpr_log')).map((r) => [r.topic, r.shop_domain]), [['shop/redact', A]]);
+
+  // Store B untouched.
+  assert.equal((await sql("SELECT customer_name FROM cod_orders WHERE shop = ? AND idem_key = 'k1'", [B]))[0].customer_name, 'Asha Rao');
+  assert.deepEqual((await sql('SELECT order_id FROM store_orders WHERE shop_domain = ? ORDER BY id', [B])).map((o) => o.order_id), ['111', '333', '222']);
+  for (const [t, c] of gone) assert.ok((await sql(`SELECT COUNT(*) n FROM ${t} WHERE ${c} = ?`, [B]))[0].n > 0, `${t} for B`);
+
+  // Running it again changes nothing more.
+  const again = await (await post('shop-redact.php', { shop_domain: A })).json();
+  assert.equal(again.anonymised.store_orders, 0);
+  assert.equal(again.anonymised.cod_orders, 0);
+  assert.deepEqual((await sql('SELECT topic, shop_domain FROM gdpr_log')).map((r) => [r.topic, r.shop_domain]), [['shop/redact', A], ['shop/redact', A]]);
 });
 
 test('customers/data_request: logged with the request id only', async () => {
@@ -181,7 +216,8 @@ test('Node: the webhook payload becomes the same COD phone hash, order ids, and 
   const shopOut = await redactShop(B, { fetchImpl: spy, sessions });
   assert.equal(deletedSessionsFor, B);
   assert.equal(shopOut.sessionsDeleted, 2);
-  assert.equal((await sql('SELECT COUNT(*) n FROM cod_orders WHERE shop = ?', [B]))[0].n, 0);
+  assert.equal((await sql('SELECT COUNT(*) n FROM cod_orders WHERE shop = ? AND customer_name IS NOT NULL', [B]))[0].n, 0);
+  assert.ok(shopOut.anonymised.store_orders > 0);
 });
 
 test('Node: a failing PHP call is retried, then reported', async () => {
@@ -192,4 +228,12 @@ test('Node: a failing PHP call is retried, then reported', async () => {
   assert.equal(calls, 3);
   const down = async () => new Response('down', { status: 503 });
   await assert.rejects(redactShop(A, { fetchImpl: down, retry: { attempts: 2, delayMs: 1 } }), /shop-redact\.php answered 503/);
+});
+
+test('uninstall_shop.php: with the secret, marks the shop inactive (it used to fail on its own DB connection)', async () => {
+  await sql('ALTER TABLE shops ADD COLUMN IF NOT EXISTS is_active TINYINT(1) NOT NULL DEFAULT 1, ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL');
+  const res = await post('uninstall_shop.php', { shop: A });
+  assert.equal(res.status, 200, await res.clone().text());
+  assert.equal((await sql('SELECT is_active FROM shops WHERE shop_domain = ?', [A]))[0].is_active, 0);
+  assert.equal((await sql('SELECT is_active FROM shops WHERE shop_domain = ?', [B]))[0].is_active, 1);
 });

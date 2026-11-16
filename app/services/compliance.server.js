@@ -3,8 +3,9 @@
 // The work runs after the 200 (webhook-queue.server.js) and is retried here,
 // since Shopify won't resend a webhook we already answered.
 //   - PHP (php_backend/gdpr_lib.php, internal secret) anonymises / deletes the
-//     MySQL rows: COD orders + OTPs, Partial COD, order analytics, and on
-//     shop/redact every table with a shop column.
+//     MySQL rows: COD orders + OTPs, Partial COD, order analytics; on
+//     shop/redact the order stats are kept anonymous and every other table
+//     with a shop column is deleted.
 //   - Node deletes the saved addresses (it holds their key) and, on
 //     shop/redact, the shop's sessions.
 // Nothing about the customer (id, email, phone) is logged.
@@ -73,9 +74,9 @@ export async function redactShop(shop, deps = {}) {
   if (sessions) {
     sessionsDeleted = (await sessions.session.deleteMany({ where: { shop } }))?.count || 0;
   }
-  const total = Object.values(php.deleted || {}).reduce((a, b) => a + b, 0);
-  console.log(`[compliance] shop/redact ${shop}: ${total} rows deleted, ${sessionsDeleted} sessions`);
-  return { deleted: php.deleted || {}, sessionsDeleted };
+  const sum = (o) => Object.values(o || {}).reduce((a, b) => a + b, 0);
+  console.log(`[compliance] shop/redact ${shop}: ${sum(php.deleted)} rows deleted, ${sum(php.anonymised)} order rows made anonymous, ${sessionsDeleted} sessions`);
+  return { deleted: php.deleted || {}, anonymised: php.anonymised || {}, sessionsDeleted };
 }
 
 /** customers/data_request: logged for the BRIX team to answer the merchant. */
