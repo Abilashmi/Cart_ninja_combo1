@@ -11,9 +11,12 @@ import http from 'node:http';
 import mysql from 'mysql2/promise';
 
 const XAMPP = process.env.XAMPP_DIR || 'C:/xampp';
-const MYSQLD = path.join(XAMPP, 'mysql/bin/mysqld.exe');
-const INSTALL_DB = path.join(XAMPP, 'mysql/bin/mysql_install_db.exe');
-const PHP = path.join(XAMPP, 'php/php.exe');
+const IS_WINDOWS = process.platform === 'win32';
+// macOS / Linux: MariaDB and PHP from the PATH (e.g. Homebrew's mariadb + php).
+const which = (cmd) => { try { return execFileSync('which', [cmd], { encoding: 'utf8' }).trim(); } catch { return ''; } };
+const MYSQLD = IS_WINDOWS ? path.join(XAMPP, 'mysql/bin/mysqld.exe') : (which('mariadbd') || which('mysqld'));
+const INSTALL_DB = IS_WINDOWS ? path.join(XAMPP, 'mysql/bin/mysql_install_db.exe') : (which('mariadb-install-db') || which('mysql_install_db'));
+const PHP = IS_WINDOWS ? path.join(XAMPP, 'php/php.exe') : which('php');
 // Base ports; a test file that may run next to another harness test (node
 // --test runs files in parallel) passes its own portOffset.
 const BASE_DB_PORT = 3399;
@@ -21,7 +24,7 @@ const BASE_PHP_PORT = 8399;
 const BASE_APP_PORT = 8398; // fake BRIX app server that cod_checkout.php relays to
 const SECRET = 'test-internal-secret-0123456789abcdef'; // BRIX_INTERNAL_SECRET needs 32+ characters
 
-export const harnessAvailable = () => [MYSQLD, INSTALL_DB, PHP].every((f) => fs.existsSync(f));
+export const harnessAvailable = () => [MYSQLD, INSTALL_DB, PHP].every((f) => f && fs.existsSync(f));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,8 +49,10 @@ export async function startHarness({ extraFiles = [], portOffset = 0 } = {}) {
   const webDir = path.join(root, 'web');
   fs.mkdirSync(webDir);
 
-  execFileSync(INSTALL_DB, [`--datadir=${dataDir}`, `--port=${DB_PORT}`], { stdio: 'ignore' });
-  const mysqld = spawn(MYSQLD, [`--datadir=${dataDir}`, `--port=${DB_PORT}`, '--bind-address=127.0.0.1', '--skip-grant-tables', '--console'], { stdio: 'ignore' });
+  // Unix: a socket of its own in the temp folder, so it never meets a MariaDB already running.
+  const unixArgs = IS_WINDOWS ? [] : [`--socket=${path.join(root, 'mysql.sock')}`];
+  execFileSync(INSTALL_DB, [`--datadir=${dataDir}`, ...(IS_WINDOWS ? [`--port=${DB_PORT}`] : ['--auth-root-authentication-method=normal', '--skip-test-db'])], { stdio: 'ignore' });
+  const mysqld = spawn(MYSQLD, ['--no-defaults', `--datadir=${dataDir}`, `--port=${DB_PORT}`, '--bind-address=127.0.0.1', '--skip-grant-tables', ...unixArgs, ...(IS_WINDOWS ? ['--console'] : [])], { stdio: 'ignore' });
 
   const admin = await waitFor(() => mysql.createConnection({ host: '127.0.0.1', port: DB_PORT, user: 'root' }), 'MariaDB');
   await admin.query('CREATE DATABASE IF NOT EXISTS brix_cod_test');
@@ -57,7 +62,7 @@ export async function startHarness({ extraFiles = [], portOffset = 0 } = {}) {
   await db.query('CREATE TABLE IF NOT EXISTS shops (shop_domain VARCHAR(255) PRIMARY KEY, plan_name VARCHAR(50) NULL)');
 
   const backend = path.resolve('php_backend');
-  for (const f of ['cod_helpers.php', 'cod_settings.php', 'cod_otp.php', 'cod_orders.php', 'cod_shipping.php', 'cod_storefront.php', 'cod_checkout.php', 'plan_helpers.php', 'plan_config.php', ...extraFiles]) fs.copyFileSync(path.join(backend, f), path.join(webDir, f));
+  for (const f of ['internal_auth.php', 'cod_helpers.php', 'cod_settings.php', 'cod_otp.php', 'cod_orders.php', 'cod_shipping.php', 'cod_storefront.php', 'cod_checkout.php', 'plan_helpers.php', 'plan_config.php', ...extraFiles]) fs.copyFileSync(path.join(backend, f), path.join(webDir, f));
   fs.writeFileSync(path.join(webDir, 'config.php'), `<?php
 $pdo = new PDO('mysql:host=127.0.0.1;port=${DB_PORT};dbname=brix_cod_test;charset=utf8mb4', 'root', '', [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 `);
@@ -77,7 +82,9 @@ $pdo = new PDO('mysql:host=127.0.0.1;port=${DB_PORT};dbname=brix_cod_test;charse
   });
   await new Promise((r) => appServer.listen(APP_PORT, '127.0.0.1', r));
 
-  const php = spawn(PHP, ['-S', `127.0.0.1:${PHP_PORT}`, '-t', webDir], { stdio: 'ignore', env: { ...process.env, BRIX_INTERNAL_SECRET: SECRET, BRIX_ACCEPT_LEGACY_SECRET: '', BRIX_APP_URL: `http://127.0.0.1:${APP_PORT}` } });
+  // display_errors off, as on the server (config.php): a newer local PHP's deprecation
+  // notices would otherwise land in the JSON.
+  const php = spawn(PHP, ['-d', 'display_errors=0', '-S', `127.0.0.1:${PHP_PORT}`, '-t', webDir], { stdio: 'ignore', env: { ...process.env, BRIX_INTERNAL_SECRET: SECRET, BRIX_ACCEPT_LEGACY_SECRET: '', BRIX_APP_URL: `http://127.0.0.1:${APP_PORT}` } });
   await waitFor(async () => (await fetch(`http://127.0.0.1:${PHP_PORT}/cod_settings.php`)).status === 403, 'PHP server');
 
   return {

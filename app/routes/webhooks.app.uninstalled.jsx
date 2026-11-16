@@ -1,6 +1,7 @@
 import { authenticate } from "../shopify.server";
 import sessionDb from "../session-db.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 export const action = async ({ request }) => {
   const { shop, session, topic } = await authenticate.webhook(request);
@@ -26,6 +27,7 @@ export const action = async ({ request }) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...internalAuthHeaders(),
       },
       body: JSON.stringify({ shop }),
     });

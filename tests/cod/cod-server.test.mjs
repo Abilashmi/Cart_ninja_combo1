@@ -1304,10 +1304,10 @@ test('shipping config: stored apart from the settings by cod_shipping.php, sanit
 
   const post = (body, headers = {}) => fetch(`${harness.baseUrl}/cod_shipping.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   assert.equal((await post({ action: 'get', shop: SHOP })).status, 403, 'Node only');
-  const big = await post({ action: 'save', shop: SHOP, shipping: { junk: 'x'.repeat(210000) } }, { 'X-Forge-Secret': harness.secret });
+  const big = await post({ action: 'save', shop: SHOP, shipping: { junk: 'x'.repeat(210000) } }, { 'X-Brix-Internal-Secret': harness.secret });
   assert.equal(big.status, 400);
   assert.equal((await big.json()).code, 'shipping_too_large');
-  const got = await (await post({ action: 'get', shop: 'other.myshopify.com' }, { 'X-Forge-Secret': harness.secret })).json();
+  const got = await (await post({ action: 'get', shop: 'other.myshopify.com' }, { 'X-Brix-Internal-Secret': harness.secret })).json();
   assert.equal(got.shipping, null, 'a store that never saved one');
 });
 

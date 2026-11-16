@@ -19,6 +19,7 @@ import { useT } from '../i18n/admin';
 import { resolveCodRange } from '../utils/cod-dates.shared';
 import DateRangePicker from '../components/shared/DateRangePicker';
 import ModuleArt, { MODULE_ART_CSS } from '../components/home/ModuleArt';
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 /* ─── Loader: keep real Shopify auth + today's analytics ─── */
 
@@ -87,7 +88,7 @@ export const loader = async ({ request }) => {
   try {
     fetch(`${BASE_PHP_URL}/install_shop.php`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...internalAuthHeaders() },
       body: JSON.stringify({ shop }),
     }).catch(console.error);
   } catch { /* best effort: Home loads without it */ }

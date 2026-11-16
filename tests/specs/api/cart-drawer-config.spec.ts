@@ -74,7 +74,7 @@ test.describe("cart_drawer_config.php", () => {
     // secret would correctly get a 403 — this test only reflects the local dev reality.
     const badContext = await request.newContext({
       baseURL: PHP_BASE_URL,
-      extraHTTPHeaders: { "X-Forge-Secret": "definitely-wrong-secret" },
+      extraHTTPHeaders: { "X-Brix-Internal-Secret": "definitely-wrong-secret" },
     });
     const res = await badContext.get("cart_drawer_config.php", { params: { shop: SHOP } });
     expect(res.status()).toBe(200);

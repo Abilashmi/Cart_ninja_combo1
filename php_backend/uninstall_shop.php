@@ -55,6 +55,14 @@ function notifyAgencyDashboardStoreUninstalled(string $shop): void
 }
 
 // Database Connection
+// Only the BRIX app may call this (internal_auth.php): it changes a shop's install state.
+require_once __DIR__ . '/internal_auth.php';
+if (!brix_internal_request_ok()) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Forbidden']);
+    exit;
+}
+
 require_once __DIR__ . '/config.php';
 
 $options = [
