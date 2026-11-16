@@ -10,8 +10,15 @@
 // line claims; what it gets comes only from the config (see the Function).
 //
 // `lines`: [{ id, quantity, packId, packQuantity, packGroup, productId,
-// variantId, subtotalAmount, currencyCode }] (ids numeric strings, amount a
-// decimal string or number in the line's currency).
+// variantId, subtotalAmount, currencyCode, collectionIds? }] (ids numeric
+// strings, amount a decimal string or number in the line's currency;
+// collectionIds = the collections of a Pack's `applies.c` the line's product
+// is in, from the Function's inCollections / COD's inCollection).
+//
+// A Pack used on many products carries `applies: { p: [productIds], c:
+// [collectionIds], x: [left-out productIds] }`: any variant of such a product
+// counts as the pack's own product. One pack group still holds one product
+// (two different kurtas never make one "Buy 2").
 // Returns [{ id, message, percent }] or [{ id, message, amount, decimals }]
 // (amount = minor units, for the whole line).
 
@@ -32,7 +39,9 @@ export function packNumericId(gid) {
 // Is this line part of the pack? The main product follows the pack's own variant scope; a pack may also list
 // extra products (config.packs[id].extraProducts = { "<productId>": { scope: 'all'|'selected', allowedVariantIds } }),
 // each with its own scope. Anything else is not the pack's, whatever its line properties say.
-export function packCoversLine(pack, line) {
+// The pack's own product: its main product (with the pack's variant scope), or, for a Pack used on
+// many products, any variant of a listed product or of a product in a listed collection (not left out).
+export function packCoversMain(pack, line) {
   const productId = String(line.productId);
   const variantId = String(line.variantId);
   if (productId === String(pack.productId)) {
@@ -40,10 +49,25 @@ export function packCoversLine(pack, line) {
     const allowed = Array.isArray(pack.allowedVariantIds) ? pack.allowedVariantIds : [String(pack.variantId)];
     return allowed.some((id) => String(id) === variantId);
   }
-  // Fixed Combo: one of the exact variants a tier holds (tiers[].items = [{ p, v, q }]).
-  if (pack.packType === 'combo') {
-    return (pack.tiers || []).some((tier) => (tier.items || []).some((item) => String(item.v) === variantId && String(item.p) === productId));
-  }
+  const applies = pack.applies && typeof pack.applies === 'object' ? pack.applies : null;
+  if (!applies) return false;
+  if (Array.isArray(applies.x) && applies.x.some((id) => String(id) === productId)) return false;
+  if (Array.isArray(applies.p) && applies.p.some((id) => String(id) === productId)) return true;
+  const lineCollections = Array.isArray(line.collectionIds) ? line.collectionIds.map(String) : [];
+  return Array.isArray(applies.c) && applies.c.some((id) => lineCollections.includes(String(id)));
+}
+
+// A Fixed Combo item's exact variant (tiers[].items = [{ p, v, q }]).
+function isComboItem(pack, line) {
+  return (pack.tiers || []).some((tier) => (tier.items || []).some((item) => String(item.v) === String(line.variantId) && String(item.p) === String(line.productId)));
+}
+
+export function packCoversLine(pack, line) {
+  const productId = String(line.productId);
+  const variantId = String(line.variantId);
+  if (pack.packType === 'combo' && isComboItem(pack, line)) return true;
+  if (packCoversMain(pack, line)) return true;
+  if (pack.packType === 'combo') return false;
   const extra = pack.extraProducts && typeof pack.extraProducts === 'object' ? pack.extraProducts[productId] : null;
   if (!extra) return false;
   if (extra.scope === 'all') return true;
@@ -54,12 +78,16 @@ export function packCoversLine(pack, line) {
 // product (any covered variant) and N x each item's quantity of each item's variant, nothing
 // else. Several tiers can hold the same number of items, so the contents decide; no match =
 // no discount (the cart doesn't hold a pack the merchant made).
+function isMainLine(pack, line) {
+  return !(pack.packType === 'combo' && isComboItem(pack, line)) && packCoversMain(pack, line);
+}
+
 function comboTierFor(pack, packQuantity, groupLines) {
-  const mainUnits = groupLines.filter((line) => String(line.productId) === String(pack.productId)).reduce((sum, line) => sum + line.quantity, 0);
+  const mainUnits = groupLines.filter((line) => isMainLine(pack, line)).reduce((sum, line) => sum + line.quantity, 0);
   if (mainUnits <= 0) return null;
   const byVariant = new Map();
   for (const line of groupLines) {
-    if (String(line.productId) === String(pack.productId)) continue;
+    if (isMainLine(pack, line)) continue;
     byVariant.set(String(line.variantId), (byVariant.get(String(line.variantId)) || 0) + line.quantity);
   }
   return (pack.tiers || []).find((tier) => {
@@ -97,6 +125,8 @@ export function packDiscountsFor(config, lines) {
   // 2. One discount per group whose quantity is a whole multiple of a tier.
   const out = [];
   for (const { pack, packQuantity, lines: groupLines } of groups.values()) {
+    // A Pack used on many products: one group = one of its products (never two different ones).
+    if (pack.applies && new Set(groupLines.filter((line) => isMainLine(pack, line)).map((line) => String(line.productId))).size > 1) continue;
     const tier = pack.packType === 'combo'
       ? comboTierFor(pack, packQuantity, groupLines)
       : pack.tiers.find((item) => Number(item.quantity) === packQuantity);
@@ -111,8 +141,8 @@ export function packDiscountsFor(config, lines) {
     if (tier.discountType === 'percentage') {
       if (value > 100) continue;
       for (const line of groupLines) out.push({ id: line.id, message, percent: value });
-    } else if (tier.discountType === 'fixed') {
-      // Fixed amounts are in the shop currency: only for a cart in that currency.
+    } else if (tier.discountType === 'fixed' || tier.discountType === 'set') {
+      // Fixed amounts and set prices are in the shop currency: only for a cart in that currency.
       const currency = groupLines[0].currencyCode;
       if (!config.currency || currency !== config.currency) continue;
       const decimals = packDecimalsFor(currency);
@@ -120,7 +150,10 @@ export function packDiscountsFor(config, lines) {
       const subtotals = groupLines.map((line) => Math.round(Number(line.subtotalAmount) * factor));
       const groupSubtotal = subtotals.reduce((sum, amount) => sum + amount, 0);
       if (!(groupSubtotal > 0)) continue;
-      const totalDiscount = Math.min(Math.round(value * factor) * packCount, groupSubtotal);
+      // Set price: whatever brings each pack down to that price; a pack that already costs less gets nothing.
+      const wanted = tier.discountType === 'set' ? groupSubtotal - Math.round(value * factor) * packCount : Math.round(value * factor) * packCount;
+      if (!(wanted > 0)) continue;
+      const totalDiscount = Math.min(wanted, groupSubtotal);
       let remaining = totalDiscount;
       groupLines.forEach((line, index) => {
         const isLast = index === groupLines.length - 1;

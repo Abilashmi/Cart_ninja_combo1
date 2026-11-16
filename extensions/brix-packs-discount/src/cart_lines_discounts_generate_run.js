@@ -60,6 +60,8 @@ export function cartLinesDiscountsGenerateRun(input) {
       packQuantity: line.packQuantity?.value,
       packGroup: line.packGroup?.value,
       productId: packNumericId(line.merchandise.product?.id),
+      // Collections (of the Packs used on many products) this line's product is in.
+      collectionIds: (line.merchandise.product?.inCollections || []).filter((entry) => entry?.isMember).map((entry) => packNumericId(entry.collectionId)),
       variantId: packNumericId(line.merchandise.id),
       subtotalAmount: line.cost?.subtotalAmount?.amount,
       currencyCode: line.cost?.subtotalAmount?.currencyCode,

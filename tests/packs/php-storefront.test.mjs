@@ -89,3 +89,32 @@ test('a same-variant pack never exposes extra products', async () => {
   await verify({ 1: 1, 2: 1, 3: 1 });
   assert.deepEqual((await get('400')).packs[0].extraProducts, []);
 });
+
+test('before the applies columns exist: the endpoint keeps working', async () => {
+  assert.deepEqual((await get('100', '&collections=900')).packs.map((p) => p.id), [1]);
+});
+
+test('a Pack used on more products / collections: found by product or by the page\'s collections; a product with its own Pack keeps it', async () => {
+  await run('migrations/alter_brix_packs_applies_to.sql');
+  await run('migrations/alter_brix_packs_applies_to.sql'); // safe to run twice
+  const setTiers = JSON.stringify([{ quantity: 2, discountType: 'set', discountValue: 999, name: '', badge: '' }]);
+  await addPack(5, '500', '5001', {
+    template: 'same_variant', pack_type: 'same_variant', tiers_json: setTiers,
+    applies_json: JSON.stringify({ products: [{ productId: '501' }], collections: [{ collectionId: '900', sync: true }], excluded: ['502'] }),
+    applies_ids: ',501,', applies_collection_ids: ',900,',
+  });
+  await verify({ 1: 1, 2: 1, 3: 1, 5: 1 });
+  const onListed = (await get('501')).packs;
+  assert.deepEqual(onListed.map((p) => [p.id, p.shared]), [[5, true]]);
+  assert.deepEqual(onListed[0].tiers.map((t) => [t.discountType, t.discountValue]), [['set', 999]], 'a set price passes through');
+  assert.deepEqual((await get('503', '&collections=12,900')).packs.map((p) => p.id), [5], 'a collection member');
+  assert.deepEqual((await get('503', '&collections=90')).packs, [], '90 never matches ,900,');
+  assert.deepEqual((await get('502', '&collections=900')).packs, [], 'left out');
+  const own = (await get('500')).packs;
+  assert.deepEqual(own.map((p) => [p.id, Boolean(p.shared)]), [[5, false]], 'its own product');
+  // 400 has its own Pack (3): it keeps it, even inside the collection.
+  assert.deepEqual((await get('400', '&collections=900')).packs.map((p) => p.id), [3]);
+  // Unverified = not shown here either.
+  await verify({ 1: 1, 2: 1, 3: 1 });
+  assert.deepEqual((await get('501')).packs, []);
+});

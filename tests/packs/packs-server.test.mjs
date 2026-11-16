@@ -29,6 +29,14 @@ globalThis.fetch = async (url, init) => {
   const live = (predicate) => rows.filter(predicate);
   const dupe = (candidate, ignoreId) => rows.some((row) => row.id !== ignoreId && row.shop_domain === candidate.shop_domain && row.product_id === candidate.product_id && row.variant_id === candidate.variant_id);
 
+  // Packs used on more products / collections (applies_* columns, added by ensureAppliesColumns).
+  if (q.includes('INFORMATION_SCHEMA.COLUMNS')) return respond({ success: true, rows: [{ name: 'applies_json' }, { name: 'applies_ids' }, { name: 'applies_collection_ids' }] });
+  if (q.includes('applies_ids LIKE ?')) {
+    const [shop, productLike, ...collectionLikes] = params;
+    return respond({ success: true, rows: live((r) => r.shop_domain === shop && r.status === 'active' && r.enabled === 1
+      && (String(r.applies_ids || '').includes(productLike.slice(1, -1)) || collectionLikes.some((like) => String(r.applies_collection_ids || '').includes(like.slice(1, -1))))) });
+  }
+  if (q.startsWith('SELECT id, product_id FROM brix_packs')) return respond({ success: true, rows: live((r) => r.shop_domain === params[0]).map((r) => ({ id: r.id, product_id: r.product_id })) });
   if (q.startsWith('SELECT * FROM brix_packs WHERE shop_domain = ? ORDER BY')) return respond({ success: true, rows: live((r) => r.shop_domain === params[0]) });
   if (q.startsWith('SELECT * FROM brix_packs WHERE id = ? AND shop_domain = ?')) return respond({ success: true, rows: live((r) => r.id === params[0] && r.shop_domain === params[1]) });
   if (q.includes("AND show_on_ids LIKE ?")) return respond({ success: true, rows: live((r) => r.shop_domain === params[0] && r.status === 'active' && r.enabled === 1 && String(r.show_on_ids || '').includes(params[1].slice(1, -1))) });
@@ -38,7 +46,9 @@ globalThis.fetch = async (url, init) => {
   if (q.startsWith('INSERT INTO brix_packs')) {
     const row = { id: nextId, version: 1, created_at: 'now', updated_at: 'now' };
     COLS.forEach((col, index) => { row[col] = params[index]; });
-    if (params.length > COLS.length) [row.extra_products_json, row.show_on_json, row.show_on_ids] = params.slice(COLS.length);
+    const appliesAt = q.includes('applies_json') ? params.length - 3 : params.length;
+    if (appliesAt < params.length) [row.applies_json, row.applies_ids, row.applies_collection_ids] = params.slice(appliesAt);
+    if (appliesAt > COLS.length) [row.extra_products_json, row.show_on_json, row.show_on_ids] = params.slice(COLS.length, appliesAt);
     if (dupe(row, null)) return respond({ success: false, error: "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'shop-1-2' for key 'brix_packs_shop_variant'" }, 500);
     rows.push(row);
     nextId += 1;
@@ -51,7 +61,9 @@ globalThis.fetch = async (url, init) => {
     if (dupe(next, target.id)) return respond({ success: false, error: 'Duplicate entry for key brix_packs_shop_variant' }, 500);
     ['product_id', 'variant_id', 'product_title', 'variant_title', 'product_image', 'base_price', 'status', 'enabled', 'template', 'pack_type', 'variant_scope', 'allowed_variant_ids_json'].forEach((col, i) => { target[col] = params[i]; });
     target.tiers_json = params[12]; target.customization_json = params[13]; target.version += 1;
-    if (params.length > 16) [target.extra_products_json, target.show_on_json, target.show_on_ids] = params.slice(14, 17);
+    const appliesEnd = q.includes('applies_json=?') ? params.length - 2 : null;
+    if (appliesEnd) [target.applies_json, target.applies_ids, target.applies_collection_ids] = params.slice(appliesEnd - 3, appliesEnd);
+    if ((appliesEnd ? appliesEnd - 3 : params.length - 2) > 14) [target.extra_products_json, target.show_on_json, target.show_on_ids] = params.slice(14, 17);
     return respond({ success: true, affectedRows: 1 });
   }
   if (q.startsWith('UPDATE brix_packs SET status=?')) {
@@ -67,7 +79,7 @@ globalThis.fetch = async (url, init) => {
   return respond({ success: false, error: `unhandled SQL in test: ${q}` }, 500);
 };
 
-const { PackError, savePack, getPack, listPacks, listActivePacksForProduct, deletePack, setPackStatus, findDuplicatePack, packErrorResponse } = await import('../../app/services/packs.server.js');
+const { PackError, savePack, getPack, listPacks, listActivePacksForProduct, deletePack, setPackStatus, findDuplicatePack, packErrorResponse, productsWithOwnPack } = await import('../../app/services/packs.server.js');
 const shopify = await import('../../app/services/packs-shopify.server.js');
 
 const base = (over = {}) => ({ productId: '100', variantId: '200', productTitle: 'Tee', variantTitle: 'M', productImage: '', basePrice: 80, status: 'draft', template: 'same_variant', tiers: [{ name: '', quantity: 1, discountType: 'none', discountValue: 0, badge: '' }, { name: '', quantity: 3, discountType: 'percentage', discountValue: 10, badge: 'Best' }], customization: {}, ...over });
@@ -327,4 +339,31 @@ test('hydratePacks (with variants) adds live variants and any problem for each e
   assert.equal(out.extraProducts[0].issue, null);
   assert.equal(out.extraProducts[1].variants.length, 2, 'scope all = every variant');
   assert.match(out.extraProducts[1].issue, /Online Store/);
+});
+
+test('a Pack used on more products / collections: found there, never on a left-out product, and a product with its own Pack keeps it', async () => {
+  const shared = await savePack('a.myshopify.com', base({
+    productId: '700', variantId: '7001', status: 'active',
+    appliesTo: { products: [{ productId: '701', title: 'Polo' }], collections: [{ collectionId: '900', title: 'Kurtas' }, { collectionId: '901', title: 'Old', sync: false, frozenIds: ['710'] }], excluded: ['702'] },
+  }));
+  assert.deepEqual(shared.appliesTo.products.map((item) => item.productId), ['701']);
+  const row = rows.find((r) => r.id === shared.id);
+  assert.equal(row.applies_ids, ',701,710,');
+  assert.equal(row.applies_collection_ids, ',900,');
+  // A listed product, a frozen collection product, and a synced-collection member (the page sends its collections).
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '701')).map((pack) => [pack.id, pack.shared]), [[shared.id, true]]);
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '710')).map((pack) => pack.id), [shared.id]);
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '720', ['900'])).map((pack) => pack.id), [shared.id]);
+  assert.equal((await listActivePacksForProduct('a.myshopify.com', '720', [])).length, 0);
+  assert.equal((await listActivePacksForProduct('a.myshopify.com', '702', ['900'])).length, 0, 'left out');
+  // Its own page: the Pack itself, not marked shared.
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '700')).map((pack) => [pack.id, Boolean(pack.shared)]), [[shared.id, false]]);
+  // A product with its own Pack keeps it.
+  const own = await savePack('a.myshopify.com', base({ productId: '701', variantId: '7011', status: 'active' }));
+  assert.deepEqual((await listActivePacksForProduct('a.myshopify.com', '701')).map((pack) => pack.id), [own.id]);
+  assert.deepEqual(await productsWithOwnPack('a.myshopify.com', shared.id), ['701']);
+  // Removing every product and collection clears the columns.
+  await savePack('a.myshopify.com', base({ id: shared.id, productId: '700', variantId: '7001', status: 'active', appliesTo: { products: [], collections: [] } }));
+  const cleared = rows.find((r) => r.id === shared.id);
+  assert.deepEqual([cleared.applies_json, cleared.applies_ids, cleared.applies_collection_ids], [null, null, null]);
 });

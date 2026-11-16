@@ -5,7 +5,8 @@ require_once __DIR__ . '/plan_helpers.php';
 /**
  * BRIX Packs storefront data, read straight from this server's MySQL.
  *
- * GET /apps/cart-app/packs_storefront.php?shop=<shop>.myshopify.com&productId=<id>[&preview=1]
+ * GET /apps/cart-app/packs_storefront.php?shop=<shop>.myshopify.com&productId=<id>[&collections=1,2][&preview=1]
+ * (collections = the page product's collection ids, for Packs used on whole collections)
  * (Shopify's App Proxy forwards it here and appends its own `shop` param.)
  *
  * This server has no Shopify access, so it returns the STORED Packs only
@@ -80,7 +81,7 @@ function packs_normalize_tiers($raw) {
     $tiers = [];
     foreach ($raw as $tier) {
         if (!is_array($tier)) continue;
-        $type = in_array($tier['discountType'] ?? null, ['none', 'percentage', 'fixed'], true) ? $tier['discountType'] : 'none';
+        $type = in_array($tier['discountType'] ?? null, ['none', 'percentage', 'fixed', 'set'], true) ? $tier['discountType'] : 'none';
         $out = [
             'quantity' => (int)($tier['quantity'] ?? 0),
             'name' => is_string($tier['name'] ?? null) ? trim($tier['name']) : '',
@@ -168,6 +169,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') packs_fail(405, 'method_not_allowed', 
 
 $shop = strtolower(trim((string)($_GET['shop'] ?? '')));
 $productId = packs_numeric_id($_GET['productId'] ?? '');
+// The page product's collections (Packs used on whole collections), numeric ids, at most 50.
+$collectionIds = array_slice(array_values(array_unique(array_filter(array_map('packs_numeric_id', explode(',', (string)($_GET['collections'] ?? '')))))), 0, 50);
 $preview = ($_GET['preview'] ?? '') === '1';
 if (!preg_match('/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/', $shop)) packs_fail(400, 'invalid_shop', 'A valid shop is required.');
 if (!$productId) packs_fail(400, 'invalid_product', 'A valid productId is required.');
@@ -194,6 +197,33 @@ try {
         $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId]);
     }
     $packs = array_map('packs_public', $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+    // Packs used on more products / collections (applies_ids / applies_collection_ids, added by the app the
+    // first time such a Pack is saved). A product with its own Pack keeps it: shared Packs only fill in.
+    $own = array_filter($packs, function ($pack) use ($productId) { return (string)$pack['productId'] === (string)$productId; });
+    if (!$own) {
+        try {
+            $where = ['applies_ids LIKE ?'];
+            $params = [$shop, '%,' . $productId . ',%'];
+            foreach ($collectionIds as $collectionId) { $where[] = 'applies_collection_ids LIKE ?'; $params[] = '%,' . $collectionId . ',%'; }
+            $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND (" . implode(' OR ', $where) . ') ORDER BY updated_at DESC');
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $applies = packs_json($row['applies_json'] ?? '', []);
+                $excluded = array_map('strval', (array)($applies['excluded'] ?? []));
+                if (in_array((string)$productId, $excluded, true)) continue;
+                $already = false;
+                foreach ($packs as $pack) if ($pack['id'] === (int)$row['id']) $already = true;
+                if ($already) continue;
+                $pack = packs_public($row);
+                // On this page the Pack sells this page's product (every variant).
+                $pack['shared'] = true;
+                $packs[] = $pack;
+            }
+        } catch (PDOException $e) {
+            if (stripos($e->getMessage(), 'applies_') === false) throw $e;
+        }
+    }
     if (!$packs) packs_ok(array_merge($empty, ['reason' => 'no_active_pack']));
 } catch (PDOException $e) {
     error_log('[packs_storefront] ' . $e->getMessage());

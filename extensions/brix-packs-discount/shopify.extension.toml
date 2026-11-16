@@ -12,6 +12,12 @@ description = "Applies BRIX Pack quantity-tier discounts to marked cart lines at
   input_query = "src/cart_lines_discounts_generate_run.graphql"
   export = "cart-lines-discounts-generate-run"
 
+  # $collectionIds for the input query: every collection a Pack used on many
+  # products covers, written to the discount by app/services/packs-shopify.server.js.
+  [extensions.input.variables]
+  namespace = "$app"
+  key = "packs_vars"
+
   [extensions.build]
   command = ""
   path = "dist/function.wasm"

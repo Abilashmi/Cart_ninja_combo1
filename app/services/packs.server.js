@@ -9,7 +9,7 @@
  * first prototype stored full GIDs, so every lookup accepts both spellings.
  */
 import { getDb } from './db.server';
-import { defaultCustomization, mergeCustomization, sanitizeCustomization, toNumericId, toGid, VALID_STATUSES, VALID_PACK_TYPES, VALID_VARIANT_SCOPES, normalizeVariantIds, sanitizeExtraProducts, sanitizeShowOn } from '../utils/packs.shared.js';
+import { defaultCustomization, mergeCustomization, sanitizeCustomization, toNumericId, toGid, VALID_STATUSES, VALID_PACK_TYPES, VALID_VARIANT_SCOPES, normalizeVariantIds, sanitizeExtraProducts, sanitizeShowOn, sanitizeAppliesTo, appliesProductIds, appliesCollectionIds, isSharedPack } from '../utils/packs.shared.js';
 
 /** Error with a stable machine-readable `code` and a merchant-safe message. */
 export class PackError extends Error {
@@ -61,6 +61,27 @@ function mapDbError(error) {
   return new PackError('database_error', 'Could not reach Packs storage. Please try again in a moment.', { status: 503 });
 }
 
+// A Pack used on more products / collections (appliesTo) is stored in three columns, added here the
+// first time one is saved (migrations/alter_brix_packs_applies_to.sql has the same statements):
+// applies_json (the merchant's list), applies_ids (",101,102," = listed products + products of
+// collections that don't sync) and applies_collection_ids (",501," = collections that sync), so the
+// storefront finds a product's Packs with a LIKE, as show_on_ids does.
+const APPLIES_COLUMNS = [
+  ['applies_json', 'ADD COLUMN applies_json LONGTEXT NULL'],
+  ['applies_ids', 'ADD COLUMN applies_ids TEXT NULL'],
+  ['applies_collection_ids', 'ADD COLUMN applies_collection_ids VARCHAR(2000) NULL'],
+];
+let appliesColumnsReady = false;
+async function ensureAppliesColumns(db) {
+  if (appliesColumnsReady) return;
+  const [rows] = await db.execute(
+    `SELECT COLUMN_NAME AS name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'brix_packs' AND COLUMN_NAME IN ('applies_json', 'applies_ids', 'applies_collection_ids')`
+  );
+  const have = new Set((rows || []).map((row) => row.name || row.COLUMN_NAME));
+  for (const [name, ddl] of APPLIES_COLUMNS) if (!have.has(name)) await db.execute(`ALTER TABLE brix_packs ${ddl}`);
+  appliesColumnsReady = true;
+}
+
 async function run(fn) {
   try { return await fn(getDb()); } catch (error) { throw mapDbError(error); }
 }
@@ -101,6 +122,8 @@ export function rowToPack(row) {
     // Columns from migrations/alter_brix_packs_extra_products.sql: absent / empty on a Pack that doesn't use them.
     extraProducts: sanitizeExtraProducts(parseJson(row.extra_products_json, [])),
     showOn: sanitizeShowOn(parseJson(row.show_on_json, [])),
+    // More products / collections this Pack is used on (empty lists on a Pack that isn't shared).
+    appliesTo: sanitizeAppliesTo(parseJson(row.applies_json, {}), row.product_id),
     productHandle: row.product_handle || '',
     version: Number(row.version || 1),
     tiers: parseJson(row.tiers_json, []),
@@ -126,7 +149,7 @@ export async function getPack(shop, id) {
 }
 
 /** Active Packs for one product (exact id match — 123 never matches 1123). */
-export async function listActivePacksForProduct(shop, productId) {
+export async function listActivePacksForProduct(shop, productId, collectionIds = []) {
   const numeric = toNumericId(productId);
   if (!numeric) throw new PackError('invalid_product', 'Invalid product id.');
   return run(async (db) => {
@@ -146,7 +169,32 @@ export async function listActivePacksForProduct(shop, productId) {
       // Never lets the extra "also shown on this page" lookup break the main one (e.g. before the migration was run).
       if (!/unknown column 'show_on_ids'/i.test(String(error?.message || ''))) console.error('[packs.server] show-on lookup failed:', String(error?.message || '').slice(0, 200));
     }
+    // A product with its own Pack keeps it; only a product without one gets a shared Pack.
+    if (packs.some((pack) => pack.productId === numeric)) return packs;
+    try {
+      const collections = (Array.isArray(collectionIds) ? collectionIds : []).map((id) => toNumericId(id)).filter(Boolean).slice(0, 50);
+      const where = ['applies_ids LIKE ?', ...collections.map(() => 'applies_collection_ids LIKE ?')].join(' OR ');
+      const [shared] = await db.execute(
+        `SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND (${where}) ORDER BY updated_at DESC`,
+        [shop, `%,${numeric},%`, ...collections.map((id) => `%,${id},%`)]
+      );
+      for (const row of shared || []) {
+        const pack = rowToPack(row);
+        if (pack.appliesTo.excluded.includes(numeric) || packs.some((item) => item.id === pack.id)) continue;
+        packs.push({ ...pack, shared: true });
+      }
+    } catch (error) {
+      if (!/unknown column 'applies_/i.test(String(error?.message || ''))) console.error('[packs.server] shared Pack lookup failed:', String(error?.message || '').slice(0, 200));
+    }
     return packs;
+  });
+}
+
+/** Product ids (numeric strings) that have a Pack of their own, other than `excludeId`. */
+export async function productsWithOwnPack(shop, excludeId = null) {
+  return run(async (db) => {
+    const [rows] = await db.execute('SELECT id, product_id FROM brix_packs WHERE shop_domain = ?', [shop]);
+    return [...new Set((rows || []).filter((row) => excludeId === null || Number(row.id) !== Number(excludeId)).map((row) => toNumericId(row.product_id)).filter(Boolean))];
   });
 }
 
@@ -242,18 +290,27 @@ export async function savePack(shop, input) {
   const writeExtras = usesExtras || hadExtras;
   const extraSet = writeExtras ? ', extra_products_json=?, show_on_json=?, show_on_ids=?, product_handle=?' : '';
   const extraValues = writeExtras ? [JSON.stringify(extraProducts), JSON.stringify(showOn), showOn.length ? `,${showOn.join(',')},` : null, String(input.productHandle || '').slice(0, 255) || null] : [];
+  // More products / collections: written only by a Pack that uses (or used) them.
+  const appliesTo = sanitizeAppliesTo(input.appliesTo, productId);
+  const shared = isSharedPack({ appliesTo });
+  const writeApplies = shared || Boolean(existing && isSharedPack(existing));
+  const appliesIds = appliesProductIds(appliesTo);
+  const appliesCollections = appliesCollectionIds(appliesTo);
+  const appliesSet = writeApplies ? ', applies_json=?, applies_ids=?, applies_collection_ids=?' : '';
+  const appliesValues = writeApplies ? [shared ? JSON.stringify(appliesTo) : null, appliesIds.length ? `,${appliesIds.join(',')},` : null, appliesCollections.length ? `,${appliesCollections.join(',')},` : null] : [];
 
   return run(async (db) => {
+    if (writeApplies) await ensureAppliesColumns(db);
     if (packId) {
       await db.execute(
-        'UPDATE brix_packs SET product_id=?, variant_id=?, product_title=?, variant_title=?, product_image=?, base_price=?, status=?, enabled=?, template=?, pack_type=?, variant_scope=?, allowed_variant_ids_json=?, version=version+1, tiers_json=?, customization_json=?' + extraSet + ', updated_at=CURRENT_TIMESTAMP WHERE id=? AND shop_domain=?',
-        [productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, ...extraValues, packId, shop]
+        'UPDATE brix_packs SET product_id=?, variant_id=?, product_title=?, variant_title=?, product_image=?, base_price=?, status=?, enabled=?, template=?, pack_type=?, variant_scope=?, allowed_variant_ids_json=?, version=version+1, tiers_json=?, customization_json=?' + extraSet + appliesSet + ', updated_at=CURRENT_TIMESTAMP WHERE id=? AND shop_domain=?',
+        [productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, ...extraValues, ...appliesValues, packId, shop]
       );
       return getPack(shop, packId);
     }
     const [result] = await db.execute(
-      'INSERT INTO brix_packs (shop_domain, product_id, variant_id, product_title, variant_title, product_image, base_price, status, enabled, template, pack_type, variant_scope, allowed_variant_ids_json, tiers_json, customization_json' + (writeExtras ? ', extra_products_json, show_on_json, show_on_ids, product_handle' : '') + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?' + (writeExtras ? ', ?, ?, ?, ?' : '') + ')',
-      [shop, productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, ...extraValues]
+      'INSERT INTO brix_packs (shop_domain, product_id, variant_id, product_title, variant_title, product_image, base_price, status, enabled, template, pack_type, variant_scope, allowed_variant_ids_json, tiers_json, customization_json' + (writeExtras ? ', extra_products_json, show_on_json, show_on_ids, product_handle' : '') + (writeApplies ? ', applies_json, applies_ids, applies_collection_ids' : '') + ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?' + (writeExtras ? ', ?, ?, ?, ?' : '') + (writeApplies ? ', ?, ?, ?' : '') + ')',
+      [shop, productId, variantId, input.productTitle, input.variantTitle, input.productImage || '', input.basePrice, status, enabled, input.template, packType, variantScope, allowedVariantIdsJson, tiersJson, customizationJson, ...extraValues, ...appliesValues]
     );
     return getPack(shop, result.insertId);
   });

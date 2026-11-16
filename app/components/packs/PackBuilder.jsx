@@ -8,7 +8,7 @@ import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
 import {
-  CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, MAX_EXTRA_PRODUCTS, COMBO_MAX_ITEMS, COMBO_MAX_ITEM_QUANTITY, validateExtraProducts, validateComboTiers, comboTierQuantity, applyDesign, calculateTier, calculateComboTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage,
+  CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, MAX_EXTRA_PRODUCTS, COMBO_MAX_ITEMS, COMBO_MAX_ITEM_QUANTITY, validateExtraProducts, validateComboTiers, comboTierQuantity, applyDesign, calculateTier, calculateComboTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage, isSharedPack, sanitizeAppliesTo, MAX_APPLIES_PRODUCTS, MAX_APPLIES_COLLECTIONS,
 } from '../../utils/packs.shared.js';
 
 const PREVIEW_ZOOM = 0.8;
@@ -45,6 +45,8 @@ function emptyForm() {
     productId: '', productTitle: '', productImage: '', template: 'same_variant', packType: 'same_variant', variantScope: 'all', allowedVariantIds: [],
     // Other products a Mix & Match Pack draws from, and the extra product pages it is shown on.
     extraProducts: [], showOn: [], showOnTitles: {},
+    // More products / collections this Pack is used on (each page sells its own product).
+    appliesTo: { products: [], collections: [], excluded: [] },
     tiers: DEFAULT_TIERS.map((tier) => ({ ...tier })), customization: defaultCustomization(),
   };
 }
@@ -58,6 +60,7 @@ function packToForm(pack) {
     extraProducts: (pack.extraProducts || []).map((item) => ({ productId: item.productId, handle: item.handle || '', title: item.title || '', image: item.image || '', variantScope: item.variantScope === 'all' ? 'all' : 'selected', allowedVariantIds: item.variantScope === 'all' ? [] : item.allowedVariantIds || [] })),
     showOn: pack.showOn || [],
     showOnTitles: {},
+    appliesTo: sanitizeAppliesTo(pack.appliesTo, pack.productId),
     tiers: pack.tiers.map((tier) => ({
       name: tier.name || '', quantity: String(tier.quantity), discountType: tier.discountType || 'none', discountValue: tier.discountType === 'none' ? '' : String(tier.discountValue ?? ''), badge: tier.badge || '',
       ...(pack.packType === 'combo' ? { items: (tier.items || []).map(comboFormItem) } : {}),
@@ -187,6 +190,8 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   // Fixed Combo: every product in any pack is loaded the same way (live prices, variants, stock).
   const extraKey = [...new Set([
     ...form.extraProducts.map((item) => item.productId),
+    // Products this Pack is also used on: loaded for their live prices (the per-product price table).
+    ...(form.appliesTo?.products || []).map((item) => item.productId),
     ...(form.packType === 'combo' ? form.tiers.flatMap((tier) => (tier.items || []).map((item) => item.productId)) : []),
   ])].join(',');
   useEffect(() => {
@@ -215,6 +220,40 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       .catch(() => {});
     return () => { cancelled = true; };
   }, [showOnKey]);
+
+  // ── One Pack on more products / collections ──
+  // Products that already have a Pack of their own (they keep it; this Pack doesn't show there).
+  const [ownPackIds, setOwnPackIds] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    api(`/api/packs?ownPacks=1${packId ? `&exclude=${encodeURIComponent(packId)}` : ''}`)
+      .then((data) => { if (!cancelled) setOwnPackIds(new Set(data.productIds || [])); })
+      .catch(() => { if (!cancelled) setOwnPackIds(new Set()); });
+    return () => { cancelled = true; };
+  }, [packId]);
+  // Each collection's first products with their prices (collectionId -> { status, collection, error }).
+  const [collectionData, setCollectionData] = useState({});
+  const collectionKey = (form.appliesTo?.collections || []).map((item) => item.collectionId).join(',');
+  useEffect(() => {
+    let cancelled = false;
+    (collectionKey ? collectionKey.split(',') : []).forEach((id) => {
+      setCollectionData((current) => (current[id]?.status === 'ready' || current[id]?.status === 'loading' ? current : { ...current, [id]: { status: 'loading', collection: null, error: '' } }));
+      api(`/api/packs?collection=${encodeURIComponent(id)}${packId ? `&exclude=${encodeURIComponent(packId)}` : ''}`)
+        .then((data) => {
+          if (cancelled) return;
+          setCollectionData((current) => ({ ...current, [id]: { status: 'ready', collection: data.collection, error: '' } }));
+          // Started from a collection: its first product without a Pack of its own becomes the Pack's product.
+          setForm((current) => {
+            if (current.productId) return current;
+            const first = (data.collection.products || []).find((item) => !item.hasPack && ['ACTIVE', 'UNLISTED'].includes(item.status));
+            return first ? { ...current, productId: first.productId, productTitle: first.title, productImage: first.image || '', variantScope: 'all', allowedVariantIds: [] } : current;
+          });
+        })
+        .catch((loadError) => { if (!cancelled) setCollectionData((current) => ({ ...current, [id]: { status: 'error', collection: null, error: loadError.message } })); });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionKey, reloadKey]);
 
   const variants = productData.product?.variants || [];
   // The variants this Pack actually applies to: every variant ('all'), or the
@@ -253,7 +292,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const comboMainFloor = applicableVariants.map((variant) => variant.price).filter((price) => Number.isFinite(price));
   const comboMainPrice = comboMainFloor.length ? Math.min(...comboMainFloor) : null;
   const tierCheck = useMemo(() => {
-    if (!isCombo) return validateTiers(form.tiers, { basePrice: Number.isFinite(priceFloor) ? priceFloor : null, currencyCode: currency.code });
+    if (!isCombo) return validateTiers(form.tiers, { basePrice: Number.isFinite(priceFloor) ? priceFloor : null, currencyCode: currency.code, sharedPrices: isSharedPack(form) });
     const prices = JSON.parse(comboPricesKey);
     const subtotals = form.tiers.map((tier) => {
       if (comboMainPrice === null) return null;
@@ -265,7 +304,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       }
       return sum;
     });
-    const base = validateTiers(form.tiers.map((tier) => ({ ...tier, quantity: String(comboTierQuantity(tier)) })), { currencyCode: currency.code, packType: 'combo', tierSubtotals: subtotals });
+    const base = validateTiers(form.tiers.map((tier) => ({ ...tier, quantity: String(comboTierQuantity(tier)) })), { currencyCode: currency.code, packType: 'combo', tierSubtotals: subtotals, sharedPrices: isSharedPack(form) });
     const errors = [...base.errors, ...validateComboTiers(form.tiers, form.productId).errors];
     // An item whose product loaded but whose variant is gone (deleted in Shopify since it was picked).
     form.tiers.forEach((tier, index) => (tier.items || []).forEach((item) => {
@@ -277,7 +316,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     if (form.tiers.every((tier) => !(tier.items || []).length)) errors.push({ index: null, field: 'tiers', message: 'Add the other products to at least one pack.' });
     return { valid: errors.length === 0, errors };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCombo, form.tiers, form.productId, priceFloor, currency.code, comboPricesKey, comboMainPrice, extraData]);
+  }, [isCombo, form.tiers, form.productId, form.appliesTo, priceFloor, currency.code, comboPricesKey, comboMainPrice, extraData]);
   const extraCheck = useMemo(() => validateExtraProducts({ packType: form.packType, productId: form.productId, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [] }), [form.packType, form.productId, form.extraProducts]);
   const customCheck = useMemo(() => sanitizeCustomization(form.customization), [form.customization]);
   const tierErrors = (index, field) => tierCheck.errors.find((item) => item.index === index && item.field === field)?.message;
@@ -400,12 +439,58 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   }
   const removeShowOn = (productId) => setForm((current) => ({ ...current, showOn: current.showOn.filter((id) => id !== productId) }));
 
+  // More products / collections. The picker returns the whole selection: un-ticked ones are removed.
+  const updateApplies = (patch) => setForm((current) => ({ ...current, appliesTo: { ...current.appliesTo, ...patch(current.appliesTo, current) } }));
+  async function addAppliesProducts() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: MAX_APPLIES_PRODUCTS, action: 'select', filter: { variants: false }, selectionIds: (form.appliesTo.products || []).map((item) => ({ id: `gid://shopify/Product/${item.productId}` })) });
+      if (!result) return;
+      updateApplies((applies, current) => ({
+        products: result.map((picked) => ({ productId: String(picked.id).split('/').pop(), handle: picked.handle || '', title: picked.title || '', image: picked.images?.[0]?.originalSrc || '' }))
+          .filter((item, index, list) => item.productId !== current.productId && list.findIndex((other) => other.productId === item.productId) === index)
+          .slice(0, MAX_APPLIES_PRODUCTS),
+      }));
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  async function addAppliesCollection() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'collection', multiple: MAX_APPLIES_COLLECTIONS, action: 'select', selectionIds: (form.appliesTo.collections || []).map((item) => ({ id: `gid://shopify/Collection/${item.collectionId}` })) });
+      if (!result) return;
+      updateApplies((applies) => {
+        const kept = new Map((applies.collections || []).map((item) => [item.collectionId, item]));
+        return {
+          collections: result.map((picked) => {
+            const collectionId = String(picked.id).split('/').pop();
+            return kept.get(collectionId) || { collectionId, handle: picked.handle || '', title: picked.title || '', productsCount: Number(picked.productsCount) || null, sync: true };
+          }).slice(0, MAX_APPLIES_COLLECTIONS),
+        };
+      });
+    } catch {
+      setError({ message: 'Could not open the Shopify collection picker. Please try again.' });
+    }
+  }
+  const removeAppliesProduct = (productId) => updateApplies((applies) => ({ products: applies.products.filter((item) => item.productId !== productId) }));
+  const removeAppliesCollection = (collectionId) => updateApplies((applies) => ({ collections: applies.collections.filter((item) => item.collectionId !== collectionId) }));
+  const setCollectionSync = (collectionId, sync) => updateApplies((applies) => ({ collections: applies.collections.map((item) => (item.collectionId === collectionId ? { ...item, sync } : item)) }));
+  const toggleExcluded = (productId) => updateApplies((applies) => ({ excluded: applies.excluded.includes(productId) ? applies.excluded.filter((id) => id !== productId) : [...applies.excluded, productId] }));
+
+  // "Create Packs for a collection" on the Packs list opens the builder with ?start=collection.
+  useEffect(() => {
+    if (isEdit || typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('start') === 'collection') addAppliesCollection();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function save(status) {
     setError(null);
     setNotice('');
     setSaving(status);
     try {
-      const data = await api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', id: packId, productId: form.productId, packType: form.packType, variantScope: form.variantScope, allowedVariantIds: form.allowedVariantIds, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [], showOn: form.packType === 'mix_match' ? form.showOn : [], template: form.template, tiers: form.tiers, customization: form.customization, status }) });
+      const data = await api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', id: packId, productId: form.productId, packType: form.packType, variantScope: form.variantScope, allowedVariantIds: form.allowedVariantIds, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [], showOn: form.packType === 'mix_match' ? form.showOn : [], appliesTo: form.appliesTo, template: form.template, tiers: form.tiers, customization: form.customization, status }) });
       draft.clearKey(draftKey(shop, 'new'));
       draft.markSaved(form);
       setPackId(data.pack.id);
@@ -436,6 +521,118 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       <path d="M3 8.5L6.5 12L13 4.5" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+  // Every product the Pack sells on (its own product first), with the lowest price Shopify has for it:
+  // the per-pack table shows what each one pays. Products with their own Pack are left out (they keep it).
+  const shared = isSharedPack(form);
+  const appliesRows = useMemo(() => {
+    if (!shared) return [];
+    const own = ownPackIds || new Set();
+    const excluded = new Set(form.appliesTo.excluded || []);
+    const seen = new Set();
+    const rows = [];
+    const add = (row) => { if (!row.productId || seen.has(row.productId)) return; seen.add(row.productId); rows.push(row); };
+    if (form.productId) add({ productId: form.productId, title: form.productTitle || 'This product', price: comboMainPrice ?? basePrice, main: true });
+    for (const item of form.appliesTo.products || []) {
+      if (own.has(item.productId)) continue;
+      const prices = (extraData[item.productId]?.product?.variants || []).map((variant) => variant.price).filter((price) => Number.isFinite(price));
+      add({ productId: item.productId, title: extraData[item.productId]?.product?.title || item.title, price: prices.length ? Math.min(...prices) : null });
+    }
+    for (const item of form.appliesTo.collections || []) {
+      for (const product of collectionData[item.collectionId]?.collection?.products || []) {
+        if (excluded.has(product.productId) || product.hasPack || own.has(product.productId)) continue;
+        add({ productId: product.productId, title: product.title, price: Number.isFinite(product.minPrice) ? product.minPrice : null, collection: item.title });
+      }
+    }
+    return rows;
+  }, [shared, ownPackIds, form.appliesTo, form.productId, form.productTitle, comboMainPrice, basePrice, extraData, collectionData]);
+  // What one product pays for a pack (lowest variant price). Null = price not known yet.
+  const packPriceFor = (tier, price) => {
+    if (!Number.isFinite(price)) return null;
+    let full = price * (isCombo ? 1 : Number(tier.quantity) || 0);
+    if (isCombo) for (const item of tier.items || []) { const itemPrice = comboItemPrices[String(item.variantId)]; if (!Number.isFinite(itemPrice)) return null; full += itemPrice * (Number(item.quantity) || 1); }
+    const value = Number(tier.discountValue);
+    let now = full;
+    if (tier.discountType === 'percentage' && Number.isFinite(value)) now = full * (1 - value / 100);
+    else if (tier.discountType === 'fixed' && Number.isFinite(value)) now = Math.max(0, full - value);
+    else if (tier.discountType === 'set' && Number.isFinite(value)) now = value;
+    return { full, now, save: full - now };
+  };
+  const ownPackNote = (productId) => (ownPackIds && ownPackIds.has(productId) ? <Badge tone="info">Has its own Pack</Badge> : null);
+  const appliesCount = appliesRows.filter((row) => !row.main).length;
+
+  const appliesCard = form.productId ? (
+    <Card>
+      <BlockStack gap="400">
+        <BlockStack gap="100">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Use this Pack on more products</Text>
+            {shared && <Badge>{`${appliesCount}${(form.appliesTo.collections || []).some((item) => item.sync !== false) ? '+' : ''} more product${appliesCount === 1 ? '' : 's'}`}</Badge>}
+          </InlineStack>
+          <Text as="p" tone="subdued">Optional. Each product here shows the same packs and design, and sells its own product in them. A product that already has its own Pack keeps it.</Text>
+        </BlockStack>
+        <InlineStack gap="200">
+          <Button icon={PlusIcon} onClick={addAppliesProducts}>Add products</Button>
+          <Button icon={PlusIcon} onClick={addAppliesCollection}>Add a collection</Button>
+        </InlineStack>
+        {(form.appliesTo.collections || []).map((item) => {
+          const data = collectionData[item.collectionId];
+          const products = data?.collection?.products || [];
+          const total = data?.collection?.productsCount ?? item.productsCount;
+          return (
+            <div key={item.collectionId} className="pa-coll">
+              <div className="pa-coll-head">
+                <BlockStack gap="050">
+                  <Text as="span" fontWeight="semibold">{data?.collection?.title || item.title || 'Collection'}</Text>
+                  <Text as="span" variant="bodySm" tone="subdued">{`Collection${Number.isFinite(total) ? ` · ${total} product${total === 1 ? '' : 's'}` : ''}${(form.appliesTo.excluded || []).length ? ` · ${products.filter((product) => form.appliesTo.excluded.includes(product.productId)).length} left out` : ''}`}</Text>
+                </BlockStack>
+                <Button variant="plain" tone="critical" onClick={() => removeAppliesCollection(item.collectionId)}>Remove</Button>
+              </div>
+              <div className="pa-coll-body">
+                <Toggle label="Add new products from this collection automatically" helpText="A product added to the collection later gets this Pack too. Off: only the products in it now." checked={item.sync !== false} onChange={(value) => setCollectionSync(item.collectionId, value)} />
+                {data?.status === 'loading' && <InlineStack gap="200" blockAlign="center"><Spinner size="small" /><Text as="span" tone="subdued">Loading the collection…</Text></InlineStack>}
+                {data?.status === 'error' && <Banner tone="critical"><p>{data.error}</p></Banner>}
+                {products.length > 0 && (
+                  <div className="pa-list">
+                    {products.map((product) => {
+                      const left = (form.appliesTo.excluded || []).includes(product.productId);
+                      const own = product.hasPack || (ownPackIds && ownPackIds.has(product.productId));
+                      return (
+                        <div key={product.productId} className={`pa-row${left || own ? ' pa-row--off' : ''}`}>
+                          <Thumbnail size="extraSmall" alt="" source={product.image || ImageIcon} />
+                          <span className="pa-name"><strong>{product.title}</strong>{Number.isFinite(product.minPrice) ? <span>{fmt(product.minPrice)}{product.maxPrice > product.minPrice ? ` – ${fmt(product.maxPrice)}` : ''}</span> : null}</span>
+                          {own ? <Badge tone="info">Has its own Pack</Badge> : product.productId === form.productId ? <Badge>This Pack&apos;s product</Badge>
+                            : <Button variant="plain" onClick={() => toggleExcluded(product.productId)}>{left ? 'Include' : 'Leave out'}</Button>}
+                        </div>
+                      );
+                    })}
+                    {Number.isFinite(total) && total > products.length && <Text as="p" variant="bodySm" tone="subdued">{`Showing the first ${products.length} of ${total}. The rest get the Pack too.`}</Text>}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {(form.appliesTo.products || []).length > 0 && (
+          <div className="pa-list">
+            {form.appliesTo.products.map((item) => {
+              const live = extraData[item.productId]?.product;
+              const prices = (live?.variants || []).map((variant) => variant.price).filter((price) => Number.isFinite(price));
+              return (
+                <div key={item.productId} className={`pa-row${ownPackIds && ownPackIds.has(item.productId) ? ' pa-row--off' : ''}`}>
+                  <Thumbnail size="extraSmall" alt="" source={live?.image || item.image || ImageIcon} />
+                  <span className="pa-name"><strong>{live?.title || item.title}</strong>{prices.length ? <span>{fmt(Math.min(...prices))}{Math.max(...prices) > Math.min(...prices) ? ` – ${fmt(Math.max(...prices))}` : ''}</span> : null}</span>
+                  {ownPackNote(item.productId)}
+                  <Button variant="plain" tone="critical" onClick={() => removeAppliesProduct(item.productId)}>Remove</Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {shared && <Text as="p" variant="bodySm" tone="subdued">Every variant of these products can be bought in the Pack. Variant choices on the next steps apply to this Pack&apos;s own product.</Text>}
+      </BlockStack>
+    </Card>
+  ) : null;
+
   const productStep = (
     <Layout>
       <Layout.Section>
@@ -447,6 +644,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
             </BlockStack>
             <InlineStack gap="300" blockAlign="center">
               <Button onClick={chooseProduct}>{form.productId ? 'Change product' : 'Choose product'}</Button>
+              {!form.productId && <Button onClick={addAppliesCollection}>Start from a collection</Button>}
               {isEdit && form.productId && <Text as="span" tone="subdued" variant="bodySm">Changing the product changes which storefront page shows this Pack.</Text>}
             </InlineStack>
             {productData.status === 'loading' && <BlockStack gap="200"><InlineStack gap="200" blockAlign="center"><Spinner size="small" /><Text as="span" tone="subdued">Loading product from Shopify…</Text></InlineStack><SkeletonBodyText lines={2} /></BlockStack>}
@@ -475,6 +673,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
             )}
           </BlockStack>
         </Card>
+        {appliesCard && <div style={{ marginTop: 16 }}>{appliesCard}</div>}
       </Layout.Section>
       <Layout.Section variant="oneThird">
         <Card>
@@ -635,6 +834,22 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 .pc-add:hover:not(:disabled){background:#f3f3f3;border-color:#111111}
 .pc-add:disabled{color:#a3a7ad;border-color:#e3e5e8;cursor:not-allowed}
 .pc-ladder{display:flex;flex-direction:column;gap:8px}
+.pa-coll{border:1px solid #e3e5e8;border-radius:12px;overflow:hidden}
+.pa-coll-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#fafafb;border-bottom:1px solid #eef0f2}
+.pa-coll-body{padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+.pa-list{display:flex;flex-direction:column;max-height:340px;overflow:auto}
+.pa-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid #f1f2f4}
+.pa-row:first-child{border-top:0}
+.pa-row--off .pa-name{opacity:.55}
+.pa-name{display:flex;flex-direction:column;min-width:0}
+.pa-name strong{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pa-name span{font-size:12px;color:#6d7175}
+.pa-table-wrap{display:flex;flex-direction:column;gap:8px;overflow-x:auto}
+.pa-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;min-width:420px}
+.pa-table th{text-align:left;font-weight:600;color:#6d7175;font-size:12px;padding:6px 8px;border-bottom:1px solid #e3e5e8}
+.pa-table td{padding:6px 8px;border-bottom:1px solid #f1f2f4}
+.pa-table .r{text-align:right}
+.pa-table tr.bad td{background:#fde8e4;color:#8e1f0b}
 .pc-ladder-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:#fafafb;border:1px solid #eef0f2}
 .pz-nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .pz-nav-item{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;font:inherit;font-size:12px;font-weight:600;color:#4a4f55;background:#fafafb;border:1.5px solid #eceef0;border-radius:12px;padding:12px 6px;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease}
@@ -784,6 +999,23 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       setError({ message: 'Could not open the Shopify product picker. Please try again.' });
     }
   }
+  // One product (e.g. a dupatta) added to every pack at once.
+  async function addComboItemToAll() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: false, action: 'select' });
+      if (!result) return;
+      let skippedMain = false;
+      setForm((current) => ({ ...current, tiers: current.tiers.map((tier) => {
+        const picked = pickedComboItems(result, tier.items || [], current.productId);
+        if (picked.skippedMain) skippedMain = true;
+        return { ...tier, items: picked.items };
+      }) }));
+      if (skippedMain) setNotice(SKIPPED_MAIN);
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
   // "Add pack" on a Fixed Combo: choose the new pack's products first; the pack is added with them
   // (cancelled, or only this product picked = no new pack).
   async function addComboPack() {
@@ -810,7 +1042,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   };
 
   const addTier = () => { if (isCombo) { addComboPack(); return; } const last = Math.max(0, ...form.tiers.map((tier) => Number(tier.quantity) || 0)); setForm((current) => ({ ...current, tiers: [...current.tiers, blankTier(last + 1)] })); };
-  const discountOptions = [['none', 'None'], ['percentage', '% off'], ['fixed', 'Amount off']];
+  const discountOptions = [['none', 'None'], ['percentage', '% off'], ['fixed', 'Amount off'], ['set', 'Set price']];
   const savingsPercent = (calc) => (calc && calc.subtotal > 0 ? Math.round((calc.savings / calc.subtotal) * 100) : 0);
 
   const tiersCard = (
@@ -830,6 +1062,12 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           </Text>
         </BlockStack>
         {tierCheck.errors.filter((item) => item.index === null).map((item) => <Banner key={item.message} tone="critical"><p>{item.message}</p></Banner>)}
+        {isCombo && (
+          <InlineStack gap="200" blockAlign="center">
+            <Button icon={PlusIcon} onClick={addComboItemToAll}>Add a product to every pack</Button>
+            <Text as="span" variant="bodySm" tone="subdued">For example the same dupatta with every kurta.</Text>
+          </InlineStack>
+        )}
         {form.tiers.map((tier, index) => {
           const valid = !tierCheck.errors.some((item) => item.index === index);
           const tierMoney = { currencyCode: currency.code, locale: currency.locale };
@@ -904,12 +1142,43 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                       ))}
                     </div>
                   </div>
-                  <TextField label="Value" type="number" min={0} disabled={tier.discountType === 'none'} value={tier.discountValue} onChange={(value) => updateTier(index, { discountValue: value })} suffix={tier.discountType === 'percentage' ? '%' : tier.discountType === 'fixed' ? currency.code : undefined} placeholder={tier.discountType === 'none' ? '—' : '0'} autoComplete="off" error={tierErrors(index, 'discountValue')} />
+                  <TextField label={tier.discountType === 'set' ? 'Pack price' : 'Value'} type="number" min={0} disabled={tier.discountType === 'none'} value={tier.discountValue} onChange={(value) => updateTier(index, { discountValue: value })} suffix={tier.discountType === 'percentage' ? '%' : tier.discountType === 'fixed' || tier.discountType === 'set' ? currency.code : undefined} placeholder={tier.discountType === 'none' ? '—' : '0'} autoComplete="off" error={tierErrors(index, 'discountValue')} />
                 </div>
                 <div className="pc-row2">
                   <TextField label="Display name" value={tier.name} maxLength={60} onChange={(value) => updateTier(index, { name: value })} placeholder={isCombo ? 'e.g. Kurta + Dupatta' : `Buy ${Number(tier.quantity) || ''}`.trim()} helpText="Optional" autoComplete="off" error={tierErrors(index, 'name')} />
                   <TextField label="Badge" value={tier.badge} maxLength={24} onChange={(value) => updateTier(index, { badge: value })} placeholder="e.g. Best value" helpText="Optional" autoComplete="off" error={tierErrors(index, 'badge')} />
                 </div>
+                {shared && tier.discountType !== 'none' && appliesRows.length > 0 && (() => {
+                  const priced = appliesRows.map((row) => ({ row, result: packPriceFor(tier, row.price) }));
+                  const noSaving = priced.filter((item) => item.result && !(item.result.save > 0.004));
+                  return (
+                    <div className="pa-table-wrap">
+                      <table className="pa-table">
+                        <thead><tr><th>Product</th><th className="r">Full price</th><th className="r">Shopper pays</th><th className="r">Result</th></tr></thead>
+                        <tbody>
+                          {priced.slice(0, 12).map(({ row, result }) => {
+                            const bad = result && !(result.save > 0.004);
+                            return (
+                              <tr key={row.productId} className={bad ? 'bad' : ''}>
+                                <td>{row.title}{row.main ? ' (this Pack’s product)' : ''}</td>
+                                <td className="r">{result ? fmt(result.full) : '…'}</td>
+                                <td className="r">{result ? (bad ? '—' : fmt(result.now)) : '…'}</td>
+                                <td className="r">{!result ? 'Loading…' : bad ? 'No saving: not shown' : `Save ${fmt(result.save)}`}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {priced.length > 12 && <Text as="p" variant="bodySm" tone="subdued">{`And ${priced.length - 12} more products.`}</Text>}
+                      {noSaving.length > 0 && (
+                        <Banner tone="warning">
+                          <p>{`${noSaving.length === 1 ? noSaving[0].row.title : `${noSaving.length} products`}: no saving at this price, so this pack won’t show on ${noSaving.length === 1 ? 'that page' : 'those pages'}. Lower the price, or use Amount off so every product saves the same.`}</p>
+                        </Banner>
+                      )}
+                      <Text as="p" variant="bodySm" tone="subdued">Prices are each product&apos;s lowest variant price. Shoppers pay by the variant they pick.</Text>
+                    </div>
+                  );
+                })()}
                 {calc ? (
                   <div className="pc-price">
                     <BlockStack gap="050">

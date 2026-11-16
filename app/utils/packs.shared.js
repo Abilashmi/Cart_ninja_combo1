@@ -43,7 +43,9 @@ export const VALID_VARIANT_SCOPES = new Set(VARIANT_SCOPES);
 
 export const VALID_TEMPLATES = new Set(PACK_TEMPLATES.map((template) => template.id));
 export const VALID_STATUSES = new Set(['draft', 'active', 'inactive', 'configuration_error']);
-export const DISCOUNT_TYPES = ['none', 'percentage', 'fixed'];
+// 'set' = a set pack price ("Buy 2 for ₹999"): the discount is the pack's full price minus
+// that price, never below zero (a pack that already costs less gets nothing).
+export const DISCOUNT_TYPES = ['none', 'percentage', 'fixed', 'set'];
 export const MAX_TIERS = 6;
 export const MAX_TIER_QUANTITY = 100;
 
@@ -219,6 +221,76 @@ export function sanitizeExtraProducts(raw) {
     if (out.length >= MAX_EXTRA_PRODUCTS) break;
   }
   return out;
+}
+
+// ─── One Pack on many products (appliesTo) ────────────────────────────────────
+//
+// Besides its own product (productId, used for previews and variant setup), a Pack can be
+// used on more products and on whole collections. On each of those product pages it sells
+// that page's product (every variant), with the same packs, prices and design. `sync` on a
+// collection: products added to it later get the Pack too (checked live: the storefront
+// passes the page's collections, checkout asks Shopify via inCollections). `excluded`:
+// products of a collection the merchant left out. A product with its own Pack keeps it.
+export const MAX_APPLIES_PRODUCTS = 100;
+export const MAX_APPLIES_COLLECTIONS = 10;
+export const MAX_APPLIES_EXCLUDED = 100;
+export const MAX_FROZEN_PRODUCTS = 250;
+
+/** Browser-submitted appliesTo -> { products, collections, excluded }. Never throws. */
+export function sanitizeAppliesTo(raw, mainProductId = null) {
+  const main = toNumericId(mainProductId);
+  const products = [];
+  const seen = new Set(main ? [main] : []);
+  for (const item of Array.isArray(raw?.products) ? raw.products : []) {
+    const productId = toNumericId(item?.productId);
+    if (!productId || seen.has(productId)) continue;
+    seen.add(productId);
+    products.push({
+      productId,
+      handle: HANDLE_RE.test(String(item?.handle || '')) ? String(item.handle) : '',
+      title: String(item?.title || '').slice(0, 255),
+      image: /^https:\/\//.test(String(item?.image || '')) ? String(item.image).slice(0, 500) : '',
+    });
+    if (products.length >= MAX_APPLIES_PRODUCTS) break;
+  }
+  const collections = [];
+  const seenCollections = new Set();
+  for (const item of Array.isArray(raw?.collections) ? raw.collections : []) {
+    const collectionId = toNumericId(item?.collectionId);
+    if (!collectionId || seenCollections.has(collectionId)) continue;
+    seenCollections.add(collectionId);
+    collections.push({
+      collectionId,
+      handle: HANDLE_RE.test(String(item?.handle || '')) ? String(item.handle) : '',
+      title: String(item?.title || '').slice(0, 255),
+      productsCount: Number.isInteger(Number(item?.productsCount)) && Number(item.productsCount) >= 0 ? Number(item.productsCount) : null,
+      sync: item?.sync !== false,
+      // Not synced: the collection's products when the Pack was saved (the server fills these in).
+      ...(item?.sync === false ? { frozenIds: [...new Set((Array.isArray(item?.frozenIds) ? item.frozenIds : []).map((id) => toNumericId(id)).filter(Boolean))].slice(0, MAX_FROZEN_PRODUCTS) } : {}),
+    });
+    if (collections.length >= MAX_APPLIES_COLLECTIONS) break;
+  }
+  const excluded = [...new Set((Array.isArray(raw?.excluded) ? raw.excluded : []).map((id) => toNumericId(id)).filter((id) => id && id !== main))].slice(0, MAX_APPLIES_EXCLUDED);
+  return { products, collections, excluded };
+}
+
+/** Product ids the Pack runs on besides its own product: listed products + products of collections that don't sync. */
+export function appliesProductIds(appliesTo) {
+  const applies = appliesTo || {};
+  const excluded = new Set(applies.excluded || []);
+  const ids = [...(applies.products || []).map((item) => item.productId), ...(applies.collections || []).flatMap((item) => (item.sync === false ? item.frozenIds || [] : []))];
+  return [...new Set(ids)].filter((id) => !excluded.has(id));
+}
+
+/** Collection ids whose products (now and later) get the Pack. */
+export function appliesCollectionIds(appliesTo) {
+  return [...new Set(((appliesTo || {}).collections || []).filter((item) => item.sync !== false).map((item) => item.collectionId))];
+}
+
+/** Does this Pack also run on other products or collections? */
+export function isSharedPack(pack) {
+  const applies = pack?.appliesTo;
+  return Boolean(applies && ((applies.products || []).length || (applies.collections || []).length));
 }
 
 /** Product ids (numeric strings) of extra pages a pack is shown on, deduped and capped. */
@@ -431,6 +503,7 @@ export function calculateTierFromPrices(unitPrices, tier, decimals = 2) {
   let discountMinor = 0;
   if (discountType === 'percentage') discountMinor = Math.round((subtotalMinor * discountValue) / 100);
   else if (discountType === 'fixed') discountMinor = Math.round((discountValue + Number.EPSILON) * factor);
+  else if (discountType === 'set') discountMinor = subtotalMinor - Math.round((discountValue + Number.EPSILON) * factor);
   discountMinor = Math.min(Math.max(discountMinor, 0), subtotalMinor);
   const priceMinor = subtotalMinor - discountMinor;
   return {
@@ -513,7 +586,7 @@ export function normalizeTiers(rawTiers) {
  * Pass basePrice/currencyCode to also reject fixed discounts that would make
  * the Pack price negative.
  */
-export function validateTiers(rawTiers, { basePrice = null, currencyCode = null, packType = null, tierSubtotals = null } = {}) {
+export function validateTiers(rawTiers, { basePrice = null, currencyCode = null, packType = null, tierSubtotals = null, sharedPrices = false } = {}) {
   const errors = [];
   if (!Array.isArray(rawTiers) || rawTiers.length === 0) {
     return { valid: false, errors: [{ index: null, field: 'tiers', message: 'Add at least one Pack tier.' }] };
@@ -548,6 +621,17 @@ export function validateTiers(rawTiers, { basePrice = null, currencyCode = null,
         errors.push({ index, field: 'discountValue', message: 'Discount cannot be negative.' });
       } else if (discountType === 'percentage' && (value <= 0 || value > 100)) {
         errors.push({ index, field: 'discountValue', message: 'Percentage must be greater than 0 and at most 100.' });
+      } else if (discountType === 'set') {
+        // A set price must save something on the pack's own product. A Pack used on several
+        // products (appliesTo) is checked per product by the builder; the storefront leaves a
+        // pack off a product's page when the price saves nothing there.
+        const decimals = currencyCode ? currencyDecimals(currencyCode) : 2;
+        const full = Array.isArray(tierSubtotals) && Number.isFinite(Number(tierSubtotals[index])) ? Number(tierSubtotals[index])
+          : (basePrice !== null && Number.isInteger(quantity) && quantity > 0 ? Number(basePrice) * quantity : null);
+        if (value <= 0) errors.push({ index, field: 'discountValue', message: 'Pack price must be greater than 0.' });
+        else if (full !== null && !sharedPrices && Math.round(value * 10 ** decimals) >= Math.round(full * 10 ** decimals)) {
+          errors.push({ index, field: 'discountValue', message: 'Pack price must be lower than the full price of the pack.' });
+        }
       } else if (discountType === 'fixed') {
         if (value <= 0) errors.push({ index, field: 'discountValue', message: 'Fixed discount must be greater than 0.' });
         else if (Array.isArray(tierSubtotals) && Number.isFinite(Number(tierSubtotals[index]))) {

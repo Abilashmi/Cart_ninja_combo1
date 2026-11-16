@@ -25,6 +25,16 @@ export async function loader({ request }) {
 }
 
 const designLabels = Object.fromEntries(PACK_DESIGNS.map((design) => [design.id, design.name]));
+
+// A Pack used on more products / collections: "+ 3 products · Kurtas collection".
+function appliesLine(pack) {
+  const applies = pack.appliesTo || {};
+  const parts = [];
+  const products = (applies.products || []).length;
+  if (products) parts.push(`+ ${products} product${products === 1 ? '' : 's'}`);
+  for (const collection of applies.collections || []) parts.push(`${collection.title || 'Collection'} collection${collection.sync === false ? ' (as it was)' : ''}`);
+  return parts.join(' · ');
+}
 const statusTone = { active: 'success', inactive: 'attention', draft: 'info', configuration_error: 'critical' };
 const statusLabel = { active: 'Active', inactive: 'Inactive', draft: 'Draft', configuration_error: 'Configuration error' };
 
@@ -129,7 +139,8 @@ export default function AppPacks() {
   }, [clearSelection, revalidator]);
 
   return (
-    <Page title="Packs" subtitle="Quantity-based offers that help your customers save more." primaryAction={{ content: 'Create Pack', onAction: () => navigate('/app/packs/new'), disabled: planState === 'locked' }}>
+    <Page title="Packs" subtitle="Quantity-based offers that help your customers save more." primaryAction={{ content: 'Create Pack', onAction: () => navigate('/app/packs/new'), disabled: planState === 'locked' }}
+      secondaryActions={[{ content: 'Create Pack for a collection', onAction: () => navigate('/app/packs/new?start=collection'), disabled: planState === 'locked' }]}>
       <BlockStack gap="400">
         {planState === 'preview' && <Banner tone="info" title="Packs preview mode"><p>You can build, customize and preview Packs, but publishing them to your storefront requires the Starter or Pro plan.</p></Banner>}
         {planState === 'locked' && <Banner tone="warning" title="Packs is locked"><p>Upgrade your BRIX plan to create quantity-based offers.</p></Banner>}
@@ -166,7 +177,10 @@ export default function AppPacks() {
                   <IndexTable.Cell>
                     <InlineStack gap="200" blockAlign="center" wrap={false}>
                       {pack.productImage ? <Thumbnail source={pack.productImage} alt="" size="extraSmall" /> : null}
-                      <Button variant="plain" onClick={() => navigate(`/app/packs/${pack.id}`)}>{pack.productTitle}</Button>
+                      <BlockStack gap="0">
+                        <Button variant="plain" onClick={() => navigate(`/app/packs/${pack.id}`)}>{pack.productTitle}</Button>
+                        {appliesLine(pack) && <Text as="span" tone="subdued" variant="bodySm">{appliesLine(pack)}</Text>}
+                      </BlockStack>
                     </InlineStack>
                   </IndexTable.Cell>
                   <IndexTable.Cell>{pack.variantScope === 'all' ? 'All variants' : `${(pack.allowedVariantIds || []).length} selected`}</IndexTable.Cell>

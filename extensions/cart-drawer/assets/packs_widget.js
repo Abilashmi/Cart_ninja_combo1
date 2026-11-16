@@ -143,6 +143,8 @@
     var discount = 0;
     if (tier.discountType === 'percentage') discount = Math.round(subtotal * Number(tier.discountValue) / 100);
     else if (tier.discountType === 'fixed') discount = Math.round(Number(tier.discountValue) * factor);
+    // Set pack price: the discount is whatever brings the pack down to it (none when it already costs less).
+    else if (tier.discountType === 'set') discount = subtotal - Math.round(Number(tier.discountValue) * factor);
     discount = Math.min(Math.max(discount, 0), subtotal);
     return { subtotal: subtotal / factor, savings: discount / factor, price: (subtotal - discount) / factor };
   }
@@ -252,13 +254,19 @@
     var packs = [];
     (data.packs || []).forEach(function (pack) {
       // Packs from an older cached response have no productId: they belong to this page's product.
-      var mainId = pack.productId ? String(pack.productId) : String(pageProductId);
+      // A Pack used on many products (shared) sells this page's product, every variant.
+      var shared = pack.shared === true;
+      var mainId = shared ? String(pageProductId) : (pack.productId ? String(pack.productId) : String(pageProductId));
       var main = catalogFor(mainId);
       if (!main) return;
-      var saved = main.byId[numericId(pack.variantId)];
-      if (!saved || saved.price === null) return;
+      var saved = shared ? null : main.byId[numericId(pack.variantId)];
+      if (!shared && (!saved || saved.price === null)) return;
       // Every variant the Pack covers, in the product's own order.
-      var variants = coveredVariants(main, pack.variantScope, pack.allowedVariantIds);
+      var variants = coveredVariants(main, shared ? 'all' : pack.variantScope, pack.allowedVariantIds);
+      if (shared) {
+        if (!variants.length) return;
+        saved = variants.filter(forSale)[0] || variants[0];
+      }
       if (!variants.length) variants = [saved];
       // Price from an in-stock variant when the saved one has sold out
       // (a Pack saved before its first variant ran out).
@@ -280,7 +288,7 @@
       }
       var tiers = (pack.tiers || []).map(function (tier) {
         var t = shallow(tier);
-        if (t.discountType === 'fixed') t.discountValue = Number(t.discountValue) * rate;
+        if (t.discountType === 'fixed' || t.discountType === 'set') t.discountValue = Number(t.discountValue) * rate;
         var prices = [];
         if (pack.packType === 'combo') {
           // Fixed Combo: this product (one) + the tier's items at their live prices. An item that
@@ -305,7 +313,11 @@
         t.effectiveUnitPrice = t.quantity > 0 ? Math.round((priced.price / t.quantity) * Math.pow(10, decimals)) / Math.pow(10, decimals) : 0;
         return t;
       });
+      // A set pack price that saves nothing on this product: that pack isn't offered here.
+      tiers = tiers.filter(function (t) { return t.discountType !== 'set' || t.savings > 0; });
+      if (!tiers.length) return;
       var copy = shallow(pack);
+      if (shared) { copy.productId = String(pageProductId); copy.variantId = String(saved.id); copy.variantScope = 'all'; copy.allowedVariantIds = []; }
       copy.basePrice = anchor.price;
       copy.tiers = tiers;
       copy.variants = variants;
@@ -2848,6 +2860,13 @@
 
     return {
       setData: function (data, locale) {
+        // Priced packs (server or admin data): a set pack price that saves nothing here isn't offered.
+        if (data && Array.isArray(data.packs)) {
+          data = shallow(data, { packs: data.packs.map(function (pack) {
+            var kept = (pack.tiers || []).filter(function (t) { return t.discountType !== 'set' || typeof t.savings !== 'number' || t.savings > 0; });
+            return kept.length && kept.length !== (pack.tiers || []).length ? shallow(pack, { tiers: kept }) : pack;
+          }) });
+        }
         state.data = data;
         money = makeMoney(data.currency || { code: 'USD' }, locale);
       },
@@ -3175,7 +3194,7 @@
   function loadOtherProducts(packs) {
     var wanted = {};
     (packs || []).forEach(function (pack) {
-      if (pack.productId && String(pack.productId) !== String(productId) && pack.productHandle) wanted[String(pack.productId)] = pack.productHandle;
+      if (!pack.shared && pack.productId && String(pack.productId) !== String(productId) && pack.productHandle) wanted[String(pack.productId)] = pack.productHandle;
       if (pack.packType === 'combo') {
         (pack.tiers || []).forEach(function (tier) {
           (tier.items || []).forEach(function (item) {
@@ -3208,7 +3227,9 @@
 
   if (!shop || !productId || !endpoint) { fail('missing shop, product or API address.'); return; }
 
-  var url = endpoint + (endpoint.indexOf('?') >= 0 ? '&' : '?') + 'shop=' + encodeURIComponent(shop) + '&productId=' + encodeURIComponent(productId) + (preview ? '&preview=1' : '');
+  // The page product's collections, for Packs used on whole collections (Packs.liquid).
+  var collectionIds = (root.getAttribute('data-collection-ids') || '').split(',').map(numericId).filter(Boolean).slice(0, 50);
+  var url = endpoint + (endpoint.indexOf('?') >= 0 ? '&' : '?') + 'shop=' + encodeURIComponent(shop) + '&productId=' + encodeURIComponent(productId) + (collectionIds.length ? '&collections=' + collectionIds.join(',') : '') + (preview ? '&preview=1' : '');
   fetch(url, { headers: { Accept: 'application/json' } })
     .then(function (response) { return response.json().then(function (body) { return { ok: response.ok, body: body }; }); })
     .then(function (result) {

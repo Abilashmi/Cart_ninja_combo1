@@ -2,9 +2,9 @@ import { authenticate } from '../shopify.server';
 import { getFeatureState } from '../config/plans';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getShopCurrency } from '../utils/currency.server';
-import { PackError, packErrorResponse, getPack, listPacks, listActivePacks, savePack, deletePack, setPackStatus, parsePackId } from '../services/packs.server';
-import { fetchProduct, verifyProductVariant, verifyPackCoverage, verifyExtraProducts, verifyComboTiers, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
-import { VALID_TEMPLATES, calculateTier, calculateComboTier, resolveSaveStatus, normalizeTiers, sanitizeCustomization, validateTiers, toNumericId, sanitizeShowOn } from '../utils/packs.shared.js';
+import { PackError, packErrorResponse, getPack, listPacks, listActivePacks, savePack, deletePack, setPackStatus, parsePackId, productsWithOwnPack } from '../services/packs.server';
+import { fetchProduct, verifyProductVariant, verifyPackCoverage, verifyExtraProducts, verifyComboTiers, verifyAppliesTo, fetchCollectionProducts, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
+import { VALID_TEMPLATES, calculateTier, calculateComboTier, resolveSaveStatus, normalizeTiers, sanitizeCustomization, validateTiers, toNumericId, sanitizeShowOn, isSharedPack } from '../utils/packs.shared.js';
 
 /**
  * Admin JSON API for BRIX Packs. Response contract (always):
@@ -50,6 +50,16 @@ export async function loader({ request }) {
     requireAvailable(planState);
     const url = new URL(request.url);
     const currency = await getShopCurrency(admin, shop);
+    // A collection's first products with their prices, and which of them already have a Pack of their own
+    // (the builder's "Add a collection" list and per-product price table).
+    if (url.searchParams.get('collection')) {
+      const collection = await fetchCollectionProducts(admin, url.searchParams.get('collection'));
+      const own = new Set(await productsWithOwnPack(shop, url.searchParams.get('exclude') || null));
+      return Response.json({ success: true, collection: { ...collection, products: collection.products.map((item) => ({ ...item, hasPack: own.has(item.productId) })) }, currency });
+    }
+    if (url.searchParams.get('ownPacks')) {
+      return Response.json({ success: true, productIds: await productsWithOwnPack(shop, url.searchParams.get('exclude') || null) });
+    }
     if (url.searchParams.get('product')) {
       const product = await fetchProduct(admin, url.searchParams.get('product'));
       return Response.json({ success: true, product, currency });
@@ -135,7 +145,9 @@ async function assertActivatable(admin, pack, currency) {
   const tiers = normalizeTiers(pack.tiers);
   // Fixed Combo: each tier's items re-checked, its fixed discount against its own items.
   const combo = pack.packType === 'combo' ? await verifyComboTiers(admin, { productId: pack.productId, tiers, mainPrice: comboMainPrice(applicableVariants) }, { requireAvailable: true }) : null;
-  const check = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code, packType: pack.packType, tierSubtotals: combo?.subtotals || null });
+  // More products / collections: each re-checked too.
+  if (isSharedPack(pack)) await verifyAppliesTo(admin, pack.appliesTo, pack.productId, { requireAvailable: true });
+  const check = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code, packType: pack.packType, tierSubtotals: combo?.subtotals || null, sharedPrices: isSharedPack(pack) });
   if (!check.valid) throw new PackError('invalid_tiers', `Fix the Pack tiers before enabling: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
 }
 
@@ -211,7 +223,10 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
     tiers = combo.tiers;
     comboSubtotals = combo.subtotals;
   }
-  const priced = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code, packType: body.packType, tierSubtotals: comboSubtotals });
+  // More products / collections this Pack is used on, checked with Shopify.
+  const applies = await verifyAppliesTo(admin, body.appliesTo, product.id, { requireAvailable: status === 'active' });
+  const shared = isSharedPack(applies);
+  const priced = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code, packType: body.packType, tierSubtotals: comboSubtotals, sharedPrices: shared });
   if (!priced.valid) throw new PackError('invalid_tiers', priced.errors[0].message, { status: 422, details: { errors: priced.errors } });
 
   const saved = await savePack(shop, {
@@ -230,6 +245,7 @@ async function saveFromBody({ admin, shop, planState, currency }, body) {
     allowedVariantIds,
     extraProducts: extra.extraProducts,
     showOn,
+    appliesTo: applies.appliesTo,
     tiers,
     customization: custom.value,
   });

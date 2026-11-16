@@ -6,11 +6,13 @@
  *   - verifying that the checkout discount is really installed and active
  */
 import { PackError, saveStorefrontDiscountState } from './packs.server';
-import { calculateTier, calculateComboTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage, validateExtraProducts, sanitizeExtraProducts, normalizeVariantIds, sanitizeComboItems, comboTierQuantity, validateComboTiers } from '../utils/packs.shared.js';
+import { calculateTier, calculateComboTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage, validateExtraProducts, sanitizeExtraProducts, normalizeVariantIds, sanitizeComboItems, comboTierQuantity, validateComboTiers, sanitizeAppliesTo, appliesProductIds, appliesCollectionIds, isSharedPack, MAX_FROZEN_PRODUCTS } from '../utils/packs.shared.js';
 
 export const PACKS_FUNCTION_HANDLE = 'brix-packs-discount';
 export const PACKS_DISCOUNT_TITLE = 'BRIX Packs';
 export const PACKS_CONFIG_KEY = 'packs_config';
+// The discount's input variables ($collectionIds for the Function's inCollections).
+export const PACKS_VARS_KEY = 'packs_vars';
 
 const VARIANT_FIELDS = `id title price availableForSale inventoryQuantity inventoryPolicy image { url } selectedOptions { name value } product { id title handle status featuredImage { url } }`;
 
@@ -216,6 +218,68 @@ export async function verifyComboTiers(admin, { productId, tiers, mainPrice }, {
 }
 
 /**
+ * A Pack used on more products / collections: each checked with Shopify (never what the browser
+ * sent). Products must exist (titles, handles, images and price ranges from Shopify); collections
+ * must exist; a collection that doesn't sync stores its products as they are now (up to
+ * MAX_FROZEN_PRODUCTS). Returns { appliesTo, products: [{ productId, title, minPrice, maxPrice }] }.
+ */
+export async function verifyAppliesTo(admin, appliesTo, mainProductId, { requireAvailable = false } = {}) {
+  const wanted = sanitizeAppliesTo(appliesTo, mainProductId);
+  if (!wanted.products.length && !wanted.collections.length) return { appliesTo: { products: [], collections: [], excluded: [] }, products: [] };
+  const products = [];
+  const priced = [];
+  const ids = wanted.products.map((item) => toGid('Product', item.productId));
+  for (let start = 0; start < ids.length; start += 50) {
+    const data = await gql(admin, `#graphql
+      query PackAppliesProducts($ids: [ID!]!) {
+        nodes(ids: $ids) { ... on Product { id title handle status featuredImage { url } priceRangeV2 { minVariantPrice { amount } maxVariantPrice { amount } } } }
+      }`, { ids: ids.slice(start, start + 50) });
+    for (const node of data?.nodes || []) {
+      if (!node?.id) continue;
+      if (requireAvailable && !isSellableStatus(node.status)) throw new PackError('product_inactive', `${node.title} is not active in Shopify. Remove it from the Pack, or make it active first.`, { status: 409 });
+      products.push({ productId: toNumericId(node.id), handle: node.handle || '', title: node.title || '', image: node.featuredImage?.url || '' });
+      priced.push({ productId: toNumericId(node.id), title: node.title, minPrice: Number(node.priceRangeV2?.minVariantPrice?.amount), maxPrice: Number(node.priceRangeV2?.maxVariantPrice?.amount) });
+    }
+  }
+  const missing = wanted.products.filter((item) => !products.some((found) => found.productId === item.productId));
+  if (missing.length) throw new PackError('product_not_found', `${missing[0].title || 'A product in this Pack'} no longer exists in Shopify. Remove it and save again.`, { status: 404 });
+  const collections = [];
+  for (const item of wanted.collections) {
+    const data = await gql(admin, `#graphql
+      query PackAppliesCollection($id: ID!, $first: Int!) {
+        collection(id: $id) { id title handle productsCount { count } products(first: $first) { nodes { id } } }
+      }`, { id: toGid('Collection', item.collectionId), first: item.sync === false ? MAX_FROZEN_PRODUCTS : 1 });
+    const node = data?.collection;
+    if (!node) throw new PackError('collection_not_found', `The collection ${item.title || ''} no longer exists in Shopify. Remove it and save again.`.replace('  ', ' '), { status: 404 });
+    collections.push({
+      collectionId: toNumericId(node.id), handle: node.handle || '', title: node.title || '', productsCount: Number(node.productsCount?.count ?? 0), sync: item.sync !== false,
+      ...(item.sync === false ? { frozenIds: (node.products?.nodes || []).map((product) => toNumericId(product.id)).filter((id) => id && id !== toNumericId(mainProductId)) } : {}),
+    });
+  }
+  return { appliesTo: sanitizeAppliesTo({ products, collections, excluded: wanted.excluded }, mainProductId), products: priced };
+}
+
+/** A collection and its first products with their price range (the builder's per-product table). */
+export async function fetchCollectionProducts(admin, collectionId, { first = 50 } = {}) {
+  const data = await gql(admin, `#graphql
+    query PackCollectionProducts($id: ID!, $first: Int!) {
+      collection(id: $id) {
+        id title handle productsCount { count }
+        products(first: $first) { nodes { id title handle status featuredImage { url } priceRangeV2 { minVariantPrice { amount } maxVariantPrice { amount } } } }
+      }
+    }`, { id: toGid('Collection', collectionId), first: Math.min(Math.max(1, first), 100) });
+  const node = data?.collection;
+  if (!node) throw new PackError('collection_not_found', 'That collection no longer exists in Shopify.', { status: 404 });
+  return {
+    collectionId: toNumericId(node.id), title: node.title || '', handle: node.handle || '', productsCount: Number(node.productsCount?.count ?? 0),
+    products: (node.products?.nodes || []).map((product) => ({
+      productId: toNumericId(product.id), title: product.title || '', handle: product.handle || '', status: product.status, image: product.featuredImage?.url || '',
+      minPrice: Number(product.priceRangeV2?.minVariantPrice?.amount), maxPrice: Number(product.priceRangeV2?.maxVariantPrice?.amount),
+    })),
+  };
+}
+
+/**
  * Attach live data + freshly calculated tier prices to stored Packs.
  * `pack.tiers[*].price/savings/...` are always derived here, never stored.
  * A Pack whose variant is gone / unpriced is flagged (`issue`) rather than
@@ -359,6 +423,9 @@ export function buildFunctionConfig(activePacks, currencyCode = null) {
       })),
       // Written only for Fixed Combo packs, so every other pack stays byte-for-byte what it was.
       ...(pack.packType === 'combo' ? { packType: 'combo' } : {}),
+      // A Pack used on more products / collections (written only then): p = product ids, c = collection
+      // ids (checked with the Function's inCollections), x = products left out.
+      ...(isSharedPack(pack) ? { applies: { p: appliesProductIds(pack.appliesTo), c: appliesCollectionIds(pack.appliesTo), x: pack.appliesTo.excluded || [] } } : {}),
       // Other products a Mix & Match pack draws from, keyed by product id. Written only when set,
       // so a pack that doesn't use the feature stays byte-for-byte what it was.
       ...(Array.isArray(pack.extraProducts) && pack.extraProducts.length ? {
@@ -387,7 +454,7 @@ export function fitPacksConfig(config, limit = PACKS_CONFIG_BYTE_LIMIT) {
   if (byteLength(config) <= limit) return { config, skipped: [] };
   const entries = Object.entries(config.packs);
   // Packs with extra products or Fixed Combo items are the ones that can grow; the rest always stay.
-  const grows = (pack) => Boolean(pack.extraProducts) || pack.packType === 'combo';
+  const grows = (pack) => Boolean(pack.extraProducts) || pack.packType === 'combo' || Boolean(pack.applies);
   const fixed = entries.filter(([, pack]) => !grows(pack));
   const variable = entries.filter(([, pack]) => grows(pack)).sort((a, b) => Number(a[0]) - Number(b[0]));
   const kept = Object.fromEntries(fixed);
@@ -404,6 +471,26 @@ export function fitPacksConfig(config, limit = PACKS_CONFIG_BYTE_LIMIT) {
 async function getShopGid(admin) {
   const data = await gql(admin, '#graphql\nquery PackShopId { shop { id } }');
   return data.shop.id;
+}
+
+/** The discount's input variables: every collection the active Packs cover (as gids). */
+export function buildPacksVariables(activePacks) {
+  const ids = new Set();
+  for (const pack of activePacks) if (isSharedPack(pack)) for (const id of appliesCollectionIds(pack.appliesTo)) ids.add(toGid('Collection', id));
+  return { collectionIds: [...ids] };
+}
+const varsMetafield = (variables) => ({ namespace: '$app', key: PACKS_VARS_KEY, type: 'json', value: JSON.stringify(variables) });
+
+async function writePacksVariables(admin, discountId, variables) {
+  const data = await gql(admin, `#graphql
+    mutation PackVars($metafields: [MetafieldsSetInput!]!) {
+      metafieldsSet(metafields: $metafields) { metafields { id } userErrors { field message code } }
+    }`, { metafields: [{ ownerId: discountId, ...varsMetafield(variables) }] });
+  const errors = data?.metafieldsSet?.userErrors || [];
+  if (errors.length) {
+    console.error('[packs-shopify] packs_vars userErrors:', JSON.stringify(errors).slice(0, 300));
+    throw new PackError('config_sync_failed', 'Could not sync the Pack collections to Shopify.', { status: 502 });
+  }
 }
 
 /** Write the shop-level app-owned metafield the discount function reads. */
@@ -448,9 +535,12 @@ async function findInstalledDiscount(admin) {
  * doesn't exist yet. Requires the function to be deployed to the shop
  * (`shopify app dev` for a dev store, `shopify app deploy` for production).
  */
-export async function ensurePacksDiscount(admin) {
+export async function ensurePacksDiscount(admin, variables = null) {
   const existing = await findInstalledDiscount(admin);
-  if (existing) return { created: false, discountId: existing.id, status: existing.automaticDiscount.status };
+  if (existing) {
+    if (variables) await writePacksVariables(admin, existing.id, variables);
+    return { created: false, discountId: existing.id, status: existing.automaticDiscount.status };
+  }
   const data = await gql(admin, `#graphql
     mutation PackDiscountCreate($discount: DiscountAutomaticAppInput!) {
       discountAutomaticAppCreate(automaticAppDiscount: $discount) {
@@ -464,6 +554,7 @@ export async function ensurePacksDiscount(admin) {
       startsAt: new Date(Date.now() - 60_000).toISOString(),
       discountClasses: ['PRODUCT'],
       combinesWith: { productDiscounts: true, orderDiscounts: true, shippingDiscounts: true },
+      metafields: [varsMetafield(variables || { collectionIds: [] })],
     },
   });
   const errors = data?.discountAutomaticAppCreate?.userErrors || [];
@@ -518,7 +609,13 @@ async function readCheckoutDiscountStatus(admin, activePacks) {
 export async function syncCheckoutDiscount(admin, activePacks, { install = true, currencyCode = null } = {}) {
   try {
     const written = await writeFunctionConfig(admin, activePacks, currencyCode);
-    if (install && activePacks.length) await ensurePacksDiscount(admin);
+    const variables = buildPacksVariables(activePacks);
+    if (install && activePacks.length) await ensurePacksDiscount(admin, variables);
+    else {
+      // Not installing: still keep an existing discount's collections in step with the config.
+      const existing = await findInstalledDiscount(admin);
+      if (existing) await writePacksVariables(admin, existing.id, variables);
+    }
     if (written.skipped?.length) {
       return { ok: false, warning: { code: 'config_too_large', message: 'Too many Packs with extra products to sync to checkout at once, so some are not live. Remove extra products from a Pack or turn one off.' } };
     }

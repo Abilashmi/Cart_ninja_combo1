@@ -811,7 +811,9 @@ export async function packAdjustments(admin, { lines, currencyCode = 'INR', skip
   if (!marked.length) return result;
   const { active, config } = await loadPacksContext(admin);
   if (!active || !config) return result;
-  const variants = await loadComboVariants(admin, marked.map(({ line }) => line.variantId));
+  // Packs used on whole collections: which of those collections each line's product is in (as checkout's inCollections).
+  const packCollections = [...new Set(Object.values(config.packs).flatMap((pack) => (Array.isArray(pack?.applies?.c) ? pack.applies.c.map(String) : [])))].slice(0, 25);
+  const variants = await loadComboVariants(admin, marked.map(({ line }) => line.variantId), packCollections);
   const decimals = decimalsFor(currencyCode);
   const minorOf = new Map();
   const plain = marked.map(({ line, index }) => {
@@ -828,6 +830,7 @@ export async function packAdjustments(admin, { lines, currencyCode = 'INR', skip
       variantId: String(line.variantId),
       subtotalAmount: subtotalMinor / 10 ** decimals,
       currencyCode,
+      collectionIds: variant?.collectionIds || [],
     };
   });
   for (const d of packDiscountsFor(config, plain)) {
