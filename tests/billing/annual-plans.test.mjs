@@ -66,6 +66,16 @@ test('trial: 7 days, monthly or yearly; a promo code replaces it', () => {
   assert.equal(trialDaysFor(14), 14);
 });
 
+test('trial: a shop override replaces the 7 days; a promo can only make it longer', () => {
+  assert.equal(trialDaysFor(0, 14), 14);
+  assert.equal(trialDaysFor(0, 3), 3);
+  assert.equal(trialDaysFor(30, 14), 30);
+  assert.equal(trialDaysFor(10, 14), 14);
+  assert.equal(trialDaysFor(0, 0), 7);
+  assert.equal(trialDaysFor(0, null), 7);
+  assert.equal(trialDaysFor(5, 0), 5);
+});
+
 test('PHP mirror: a yearly Lite / Starter / Growth pauses at the cap (overage only when billed monthly)', () => {
   const php = fs.readFileSync(new URL('../../php_backend/plan_helpers.php', import.meta.url), 'utf8');
   assert.match(php, /if \(\$plan\['overageRate'\] > 0 && plan_billing_interval\(\$pdo, \$shopDomain\) !== 'annual'\) return false;/);

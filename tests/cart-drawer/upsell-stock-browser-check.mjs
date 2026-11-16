@@ -10,6 +10,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 const JS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.js'), 'utf8');
 const CSS = fs.readFileSync(path.resolve('extensions/cart-drawer/assets/cart_drawer_inline.css'), 'utf8');
@@ -70,7 +71,7 @@ const page0 = () => `<!doctype html><html><head><meta name="viewport" content="w
 
 const browser = await chromium.launch();
 
-async function open({ cfg = config(), refuse = [], width = 1280, slowCatalog = 0 } = {}) {
+async function open({ cfg = config(), refuse = [], width = 1280, slowCatalog = 0, cart = CART, slowRelated = 0 } = {}) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   const net = { adds: [], related: [], intents: [] };
   page.errors = [];
@@ -90,12 +91,13 @@ async function open({ cfg = config(), refuse = [], width = 1280, slowCatalog = 0
     }
     if (url.origin === 'https://shop.test') {
       if (url.pathname === '/') return route.fulfill({ contentType: 'text/html; charset=utf-8', body: page0() });
-      if (url.pathname === '/cart.js') return json({ items: CART, item_count: 1, total_price: 27500, currency: 'INR' });
+      if (url.pathname === '/cart.js') return json({ items: cart, item_count: cart.length, total_price: cart.reduce((n, it) => n + it.final_line_price, 0), currency: 'INR' });
       if (url.pathname === '/products.json') {
         if (slowCatalog) await new Promise((r) => setTimeout(r, slowCatalog));
         return json({ products: url.searchParams.get('page') ? [] : PRODUCTS });
       }
       if (url.pathname === '/recommendations/products.json') {
+        if (slowRelated) await new Promise((r) => setTimeout(r, slowRelated));
         const intent = url.searchParams.get('intent');
         net.intents.push(`${intent}:${url.searchParams.get('product_id')}`);
         if (intent === 'complementary') return json({ products: COMPLEMENTARY[url.searchParams.get('product_id')] || [] });
@@ -222,11 +224,178 @@ const card = (page, title) => page.locator('.cc-upsell-card', { hasText: title }
   await page.close();
 }
 
+// ── A product the drawer offers, then added from its own product page while
+// the new cart's picks are still loading: the drawer used to open with the
+// old picks (still offering it) and, opened more than once by the add, kept
+// them for good (pabra: "it sticks the cart upsell product"). ──
+{
+  // Nothing related for the sold-out pick or the joggers: the new cart's
+  // picks need a fresh (slow) lookup for the product just added.
+  const saved = { 102: RELATED[102], 1: RELATED[1] };
+  RELATED[102] = []; RELATED[1] = [];
+  const cart = CART.slice();
+  const page = await open({ cart, slowRelated: 1500 });
+  await page.waitForTimeout(3500);
+  const before = await page.$$eval('.cc-upsell-card', (cards) => cards.map((c) => c.getAttribute('data-cc-product')));
+  check('in cart: the drawer offers Cotton Socks first', before.includes('103'), JSON.stringify(before));
+  await page.evaluate(() => document.getElementById('cc-overlay').classList.remove('active'));
+  cart.push({ ...CART[0], key: 'k2', product_id: 103, variant_id: 1031, handle: 'socks', product_title: 'Cotton Socks', variant_title: null, product_has_only_default_variant: true, final_price: 19900, original_price: 19900, final_line_price: 19900, original_line_price: 19900 });
+  // The product page's own add (the theme's fetch), then the drawer opens.
+  await page.evaluate(() => fetch('/cart/add.js', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: [{ id: 1031, quantity: 1 }] }) }));
+  await page.waitForSelector('#cc-overlay.active', { timeout: 5000 });
+  await page.waitForTimeout(400);
+  const opening = await page.$$eval('.cc-upsell-card', (cards) => cards.map((c) => c.getAttribute('data-cc-product')));
+  check('in cart: while the new picks load, the product just added is not offered', !opening.includes('103'), JSON.stringify(opening));
+  await page.evaluate(() => window.testCart());
+  await page.waitForTimeout(3500);
+  const settled = await page.$$eval('.cc-upsell-card', (cards) => cards.map((c) => c.getAttribute('data-cc-product')));
+  check('in cart: the new picks replace the old ones, the added product never comes back', settled.length > 0 && !settled.includes('103'), JSON.stringify(settled));
+  check('in cart: no page errors', page.errors.length === 0, page.errors.join(' | '));
+  await page.close();
+  Object.assign(RELATED, saved);
+}
+
 // ── grid and compact card styles also get the dropdown ──
 for (const [name, upsell] of [['grid', { layout: 'grid' }], ['compact', { direction: 'horizontal' }]]) {
   const page = await open({ cfg: config(upsell) });
   const sel = card(page, 'Girls Grey Denim Jeans').locator('select.cc-upsell-variant');
   check(`${name} card has the dropdown on the in-stock size`, (await sel.count()) === 1 && (await sel.inputValue()) === '1012');
+  await page.close();
+}
+
+// ── Slider (one product at a time): full-width list rows, one per slide.
+// Desktop: arrows outside the row. Phones: no arrows, the row as wide as the
+// section, and it moves on its own (back to the first after the last) ──
+{
+  const page = await open({ cfg: config({ direction: 'vertical', layout: 'carousel', listSlider: true }), width: 1280 });
+  await page.waitForSelector('.cc-upsell-card--row', { timeout: 8000 }).catch(() => {});
+  const m = await page.evaluate(() => {
+    const list = document.getElementById('cc-upsell-list');
+    const rows = [...document.querySelectorAll('.cc-upsell-card--row')];
+    const lr = list.getBoundingClientRect();
+    const r0 = rows[0] && rows[0].getBoundingClientRect();
+    const right = document.getElementById('upsell-nav-right'), left = document.getElementById('upsell-nav-left');
+    const rr = right && right.getBoundingClientRect();
+    return { n: rows.length, fill: r0 ? Math.abs(r0.width - lr.width) < 1 : false,
+      oneShown: rows.filter((r) => { const b = r.getBoundingClientRect(); return b.left >= lr.left - 1 && b.right <= lr.right + 1; }).length,
+      rightShown: !!right && getComputedStyle(right).display !== 'none', leftShown: !!left && getComputedStyle(left).display !== 'none',
+      arrowOutside: rr ? rr.left >= lr.right - 6 : false, page: document.documentElement.scrollWidth > innerWidth + 1 };
+  });
+  check('slider (desktop): one full-width row per slide, the next one hidden', m.n === 3 && m.fill && m.oneShown === 1, JSON.stringify(m));
+  check('slider (desktop): → shown outside the row, ← hidden at the start, no page scroll', m.rightShown && !m.leftShown && m.arrowOutside && !m.page, JSON.stringify(m));
+  await page.locator('#upsell-nav-right').click();
+  await page.waitForTimeout(700);
+  const second = await page.evaluate(() => {
+    const list = document.getElementById('cc-upsell-list'), lr = list.getBoundingClientRect();
+    const shown = [...document.querySelectorAll('.cc-upsell-card--row')].findIndex((r) => Math.abs(r.getBoundingClientRect().left - lr.left) < 2);
+    return { shown, left: getComputedStyle(document.getElementById('upsell-nav-left')).display !== 'none' };
+  });
+  check('slider (desktop): → moves exactly one product, ← appears', second.shown === 1 && second.left, JSON.stringify(second));
+  await page.waitForTimeout(4200);
+  check('slider (desktop): never moves on its own', await page.evaluate(() => [...document.querySelectorAll('.cc-upsell-card--row')].findIndex((r) => Math.abs(r.getBoundingClientRect().left - document.getElementById('cc-upsell-list').getBoundingClientRect().left) < 2)) === 1);
+  // Closed and opened again: the drawer reuses the list it built for this
+  // cart; its arrows used to stay hidden until an add (pabra).
+  await page.click('#cc-backdrop', { position: { x: 5, y: 5 } }).catch(() => {});
+  await page.waitForTimeout(500);
+  await page.evaluate(() => window.testCart());
+  await page.waitForSelector('#cc-overlay.active .cc-upsell-card--row', { timeout: 5000 });
+  await page.waitForTimeout(600);
+  const reopened = await page.evaluate(() => ({
+    right: getComputedStyle(document.getElementById('upsell-nav-right')).display !== 'none',
+  }));
+  check('slider (desktop): opened again, the → arrow shows without an add', reopened.right, JSON.stringify(reopened));
+  await page.locator('#upsell-nav-right').click();
+  await page.waitForTimeout(700);
+  check('slider (desktop): opened again, → still moves one product', await page.evaluate(() => [...document.querySelectorAll('.cc-upsell-card--row')].findIndex((r) => Math.abs(r.getBoundingClientRect().left - document.getElementById('cc-upsell-list').getBoundingClientRect().left) < 2)) === 1);
+  await page.close();
+}
+{
+  const page = await open({ cfg: config({ direction: 'vertical', layout: 'carousel', listSlider: true }), width: 390 });
+  await page.waitForSelector('.cc-upsell-card--row', { timeout: 8000 }).catch(() => {});
+  const shownNow = () => page.evaluate(() => {
+    const lr = document.getElementById('cc-upsell-list').getBoundingClientRect();
+    return [...document.querySelectorAll('.cc-upsell-card--row')].findIndex((r) => Math.abs(r.getBoundingClientRect().left - lr.left) < 2);
+  });
+  const m = await page.evaluate(() => {
+    const row = document.querySelector('.cc-upsell-card--row').getBoundingClientRect();
+    const title = document.querySelector('.cc-upsell-section p').getBoundingClientRect();
+    return { arrows: [...document.querySelectorAll('#upsell-nav-left, #upsell-nav-right')].filter((b) => getComputedStyle(b).display !== 'none').length,
+      left: Math.round(row.left - title.left), right: Math.round(title.right - row.right), page: document.documentElement.scrollWidth > innerWidth + 1 };
+  });
+  check('slider (phone): no arrows, the row as wide as the section (100%)', m.arrows === 0 && Math.abs(m.left) <= 1 && Math.abs(m.right) <= 1 && !m.page, JSON.stringify(m));
+  await page.locator('.cc-upsell-section').screenshot({ path: path.join(os.tmpdir(), 'upsell-list-slider-390.png') }).catch(() => {});
+  const seen = [await shownNow()];
+  for (let i = 0; i < 3; i++) { await page.waitForTimeout(3700); seen.push(await shownNow()); }
+  check('slider (phone): slides on its own, one product at a time, back to the first after the last', JSON.stringify(seen) === '[0,1,2,0]', JSON.stringify(seen));
+  // A swipe pauses it.
+  await page.locator('#cc-upsell-list').dispatchEvent('pointerdown');
+  const before = await shownNow();
+  await page.waitForTimeout(4000);
+  check('slider (phone): a touch pauses the auto slide', (await shownNow()) === before, String(before));
+  await page.close();
+}
+{
+  const page = await open({ cfg: config({ direction: 'vertical', layout: 'carousel', listSlider: true }) });
+  const jeans = card(page, 'Girls Grey Denim Jeans');
+  const sel = jeans.locator('select.cc-upsell-variant');
+  check('slider row: dropdown on the in-stock size', (await sel.count()) === 1 && (await sel.inputValue()) === '1012');
+  await sel.selectOption('1013');
+  check('slider row: picking a size changes the price', ((await jeans.locator('.cc-upsell-price').textContent()) || '').includes('949'));
+  check('slider row: Add carries the picked size', (await jeans.locator('.cc-add-btn').getAttribute('data-cc-id')) === '1013');
+  // A tap that started on one card's Add and lands on another's (the row slid
+  // under the finger, or the drawer redrew) adds nothing (pabra: "adds another product").
+  const moved = await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('.cc-upsell-card .cc-add-btn')];
+    btns[0].dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    btns[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return btns[1].getAttribute('data-cc-id');
+  });
+  await page.waitForTimeout(600);
+  check('slider row: a tap that slid onto another card adds nothing', page.net.adds.length === 0, JSON.stringify(page.net.adds) + ' (other card ' + moved + ')');
+  await page.waitForTimeout(1500); // the press guard's window
+  await jeans.locator('.cc-add-btn').click();
+  await page.waitForTimeout(600);
+  check('slider row: a normal tap still adds that card\'s product', JSON.stringify(page.net.adds) === '[1013]', JSON.stringify(page.net.adds));
+  await page.close();
+}
+{
+  // One product: no arrows, so no space kept for them: the row is as wide as the section title.
+  const one = [{ id: 'r1', enabled: true, triggerType: 'all', triggerProductIds: [], upsellProductIds: ['gid://shopify/Product/103'] }];
+  const page = await open({ cfg: config({ direction: 'vertical', layout: 'carousel', listSlider: true, manualRules: one }), width: 390 });
+  await page.waitForSelector('.cc-upsell-card--row', { timeout: 8000 }).catch(() => {});
+  const m = await page.evaluate(() => {
+    const row = document.querySelector('.cc-upsell-card--row').getBoundingClientRect();
+    const title = document.querySelector('.cc-upsell-section p').getBoundingClientRect();
+    const sel = document.querySelector('.cc-upsell-card--row .cc-upsell-variant');
+    return { rowLeft: Math.round(row.left), titleLeft: Math.round(title.left), rowRight: Math.round(row.right), titleRight: Math.round(title.right),
+      arrows: [...document.querySelectorAll('#upsell-nav-left, #upsell-nav-right')].filter((b) => getComputedStyle(b).display !== 'none').length,
+      selH: sel ? Math.round(sel.getBoundingClientRect().height) : null };
+  });
+  check('slider, one product: no arrows, the row lines up with the section title (no empty sides)', m.arrows === 0 && Math.abs(m.rowLeft - m.titleLeft) <= 1 && Math.abs(m.rowRight - m.titleRight) <= 1, JSON.stringify(m));
+  await page.locator('.cc-upsell-section').screenshot({ path: path.join(os.tmpdir(), 'upsell-list-slider-one-390.png') }).catch(() => {});
+  await page.close();
+}
+{
+  const page = await open({ cfg: config({ direction: 'vertical', layout: 'grid', listSlider: true }) });
+  check('listSlider only counts with Carousel: Grid stays a grid', (await page.locator('.cc-upsell-card--row').count()) === 0 && (await page.locator('.cc-layout-grid').count()) > 0);
+  await page.close();
+}
+
+// ── Sticky at the bottom: on a short cart it sits right on the footer (it
+// used to sit after the items with empty space below it); with a bottom
+// coupon section after it, that keeps its place under the upsell ──
+for (const width of [1280, 390]) {
+  const page = await open({ cfg: config({ sticky: true, position: 'bottom', layout: 'carousel', listSlider: true }), width });
+  await page.waitForSelector('.cc-upsell-section--sticky', { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(300);
+  const m = await page.evaluate(() => {
+    const up = document.querySelector('.cc-upsell-section--sticky').getBoundingClientRect();
+    const foot = document.getElementById('cc-drawer-footer').getBoundingClientRect();
+    const items = document.querySelector('.bxcd-items').getBoundingClientRect();
+    return { gap: Math.round(foot.top - up.bottom), spaceAbove: Math.round(up.top - items.bottom) };
+  });
+  check(`sticky bottom upsell (${width}px): sits right on the footer, the free space above it`, Math.abs(m.gap) <= 1 && m.spaceAbove > 20, JSON.stringify(m));
+  if (width === 390) await page.screenshot({ path: path.join(os.tmpdir(), 'upsell-sticky-bottom-390.png') }).catch(() => {});
   await page.close();
 }
 

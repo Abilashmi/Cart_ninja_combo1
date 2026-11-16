@@ -32,10 +32,12 @@ import {
   DontDeliverSection, ShippingTestSection, RefPicker,
 } from '../components/cod/ShippingSections';
 import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discount-shopify.server';
+import { syncPartialCodPaymentRule } from '../services/partial-cod.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
 import { smsProviderStatus } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
-import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags } from '../utils/cod.shared';
+import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags, codCharges } from '../utils/cod.shared';
+import { partialCodSplit } from '../utils/partial-cod.shared.js';
 import LogoUploader from '../components/cod/LogoUploader';
 import ChipInput from '../components/cod/ChipInput';
 import { buildCodScreen, cartSliderMax, suggestedValue } from '../components/cod/CodPreview';
@@ -155,7 +157,9 @@ export async function action({ request }) {
       // Unlisted products COD may not sell, so their product pages hide the button.
       syncUnlisted: (next) => loadUnlistedBlocked(admin, next),
     });
-    return { success: true, settings, prepaid, shipping };
+    // Partial COD: the payment rule that keeps Cash on Delivery off its Shopify checkout.
+    const partialCod = await syncPartialCodPaymentRule(admin, Boolean(settings.partialCod?.enabled));
+    return { success: true, settings, prepaid, shipping, partialCod };
   } catch (error) {
     const message = error instanceof CodError ? error.message : 'Settings could not be saved. Please try again.';
     if (!(error instanceof CodError)) console.error('[app.cod.customize] save failed:', String(error?.message || error).slice(0, 300));
@@ -199,8 +203,8 @@ function PicksField({ value, onChange, error, help }) {
 // Help under a COD button's text field: the price tags it can use.
 function priceTagHelp(text, priceIs) {
   return hasPriceTags(text)
-    ? `Prices fill in for each shopper. {price} = ${priceIs}, {cod_fee} = COD fee, {cod_price} = both.`
-    : 'Add a price with {price}, {cod_fee} or {cod_price}, e.g. "Buy it for {cod_price} COD".';
+    ? `Prices fill in for each shopper. {price} = ${priceIs}, {cod_fee} = COD fee, {cod_price} = both, {partial_cod_amount} = what Partial COD takes now.`
+    : 'Add a price with {price}, {cod_fee}, {cod_price} or {partial_cod_amount}, e.g. "Buy it for {cod_price} COD" or "Pay {partial_cod_amount} now".';
 }
 
 function RadiusCard({ option, active, accent, onPick }) {
@@ -302,7 +306,8 @@ const GROUPS = [
   {
     title: 'Charges & rules',
     items: [
-      { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom'], toggle: 'codFeeEnabled' },
+      { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom', 'codFeeOwnAmount'], toggle: 'codFeeEnabled' },
+      { id: 'partial', label: 'Partial COD', icon: CashRupeeIcon, preview: 'sheet', fields: ['partialAmount', 'partialPercent', 'partialMinOrder', 'partialMaxOrder'], toggle: 'partialEnabled' },
       { id: 'eligibility', label: 'Eligibility', icon: FilterIcon, preview: 'drawer', fields: ['minOrder', 'maxOrder', 'unlistedPicks'] },
       { id: 'fraud', label: 'Fraud protection', icon: ShieldCheckMarkIcon, preview: 'sheet', fields: ['dailyLimitPerPhone', 'blockedPincodes'] },
     ],
@@ -757,7 +762,7 @@ export default function CodCustomizePage() {
                       maxLength={60}
                       placeholder="Buy it now"
                       autoComplete="off"
-                      helpText={'Shopify\'s Buy it now (still opens Shopify checkout). Empty = Shopify\'s text. Prices: {price} = product price × quantity, {cod_price}, {cod_fee}. For {prepaid_price}, turn on Payment options with a prepaid discount.'}
+                      helpText={'Shopify\'s Buy it now (still opens Shopify checkout). Empty = Shopify\'s text. Prices: {price} = product price × quantity, {cod_price}, {cod_fee}, {partial_cod_amount}. For {prepaid_price}, turn on Payment options with a prepaid discount.'}
                     />
                   )}
                   <TextField
@@ -866,9 +871,27 @@ export default function CodCustomizePage() {
                       autoComplete="off"
                     />
                   </FormLayout.Group>
+                  <BlockStack gap="200">
+                    <Text as="h3" variant="headingSm">Products with their own fee</Text>
+                    <RefPicker type="product" value={form.codFeeOwnProducts} max={COD_PICK_MAX.products} onChange={set('codFeeOwnProducts')} />
+                    {form.codFeeOwnProducts.length > 0 && (
+                      <TextField
+                        label="Their COD fee"
+                        type="number"
+                        min={0}
+                        prefix={data.currencyCode}
+                        value={form.codFeeOwnAmount}
+                        onChange={set('codFeeOwnAmount')}
+                        placeholder="0"
+                        error={errors.codFeeOwnAmount}
+                        helpText={`An order of only these products pays ${money(Number(form.codFeeOwnAmount) || 0)} instead of the fee above. Mixed with other products, the order pays the higher of the two fees.`}
+                        autoComplete="off"
+                      />
+                    )}
+                  </BlockStack>
                   <Checkbox
                     label="Show fee to customers"
-                    helpText={form.showCodFee ? 'Its own line in the order summary, and under the COD button.' : 'Still charged, but shown inside one "Delivery charges" line, and not on the COD button.'}
+                    helpText={form.showCodFee ? 'Its own line in the COD popup\'s order summary. To show it on a COD button, put {cod_fee} or {cod_price} in the button text.' : 'Still charged, but shown inside one "Delivery charges" line in the COD popup.'}
                     checked={form.showCodFee}
                     onChange={set('showCodFee')}
                   />
@@ -894,6 +917,91 @@ export default function CodCustomizePage() {
         <BlockStack gap="400">
           {data.shippingLoadError && <Banner tone="warning">{data.shippingLoadError}</Banner>}
           {body}
+        </BlockStack>
+      );
+    }
+    if (id === 'partial') {
+      // The advance for a sample order, so the merchant sees what shoppers get.
+      const sample = 1599;
+      const sampleSettings = sanitizeCodSettings(toSettings(form));
+      // Shipping + COD fee mode: the sample's charges under the one-price
+      // shipping (dynamic shipping prices each order by its delivery option).
+      const sampleCharges = codCharges(sampleSettings, sample);
+      const advancedShipping = sampleSettings.shippingMode === 'advanced';
+      const sampleSplit = partialCodSplit(sampleSettings.partialCod, sample, sampleCharges.total);
+      const ruleMessage = fetcher.data?.success ? fetcher.data.partialCod?.message : null;
+      return (
+        <BlockStack gap="400">
+          <Text as="p" tone="subdued">
+            Shoppers pay a small advance online in your Shopify checkout and the rest when the order arrives. It shows as a second choice on the COD popup&apos;s review step, next to Cash on Delivery.
+          </Text>
+          {ruleMessage && <Banner tone="warning" title="The checkout payment rule isn't set up">{ruleMessage}</Banner>}
+          <Card>
+            <FormLayout>
+              <Checkbox
+                label="Offer Partial COD"
+                checked={form.partialEnabled}
+                onChange={set('partialEnabled')}
+                helpText="The advance is paid with your online payment methods only: BRIX hides Cash on Delivery in that checkout."
+              />
+              {form.partialEnabled && (
+                <>
+                  <ChoiceList
+                    title="Advance"
+                    choices={[
+                      { label: 'A fixed amount', value: 'fixed' },
+                      { label: 'A percentage of the order', value: 'percent', helpText: 'Rounded up to the next rupee.' },
+                      { label: 'Shipping + COD fee', value: 'charges', helpText: 'The shopper pays the order’s shipping and COD fee online, the items on delivery. An order with free shipping and no COD fee gets normal COD.' },
+                    ]}
+                    selected={[form.partialMode]}
+                    onChange={([v]) => set('partialMode')(v)}
+                  />
+                  {form.partialMode === 'fixed' && <TextField label="Advance amount" type="number" min={1} value={form.partialAmount} onChange={set('partialAmount')} prefix={data.currencyCode} error={errors.partialAmount} autoComplete="off" />}
+                  {form.partialMode === 'percent' && <TextField label="Advance percentage" type="number" min={1} max={90} value={form.partialPercent} onChange={set('partialPercent')} suffix="%" error={errors.partialPercent} autoComplete="off" />}
+                  <Checkbox
+                    label="Only offer part payment"
+                    checked={form.partialOnly}
+                    onChange={set('partialOnly')}
+                    helpText={form.partialOnly
+                      ? 'Shoppers must pay the advance online: full Cash on Delivery isn’t offered where Partial COD is. Orders outside the order values below still get normal COD.'
+                      : 'Off: shoppers choose Cash on Delivery or Part payment.'}
+                  />
+                  <FormLayout.Group>
+                    <TextField label="Offer from order value" type="number" min={0} value={form.partialMinOrder} onChange={set('partialMinOrder')} placeholder="No minimum" prefix={data.currencyCode} error={errors.partialMinOrder} autoComplete="off" />
+                    <TextField label="Up to order value" type="number" min={0} value={form.partialMaxOrder} onChange={set('partialMaxOrder')} placeholder="No maximum" prefix={data.currencyCode} error={errors.partialMaxOrder} autoComplete="off" />
+                  </FormLayout.Group>
+                  <Text as="p" tone="subdued">
+                    {form.partialMode === 'charges' && advancedShipping
+                      ? 'Example: the advance is the shipping of the delivery option the shopper picks plus your COD fee.'
+                      : sampleSplit
+                        ? `Example: on a ₹${sample.toLocaleString('en-IN')} order${form.partialMode === 'charges' ? ` (₹${sampleCharges.shipping.toLocaleString('en-IN')} shipping + ₹${sampleCharges.codFee.toLocaleString('en-IN')} COD fee)` : ''}, the shopper pays ₹${sampleSplit.advance.toLocaleString('en-IN')} now and ₹${sampleSplit.balance.toLocaleString('en-IN')} on delivery.`
+                        : form.partialMode === 'charges'
+                          ? `Not offered on a ₹${sample.toLocaleString('en-IN')} order: it has no shipping charge or COD fee with your current settings, so it gets normal COD.`
+                          : `Not offered on a ₹${sample.toLocaleString('en-IN')} order with these settings.`}
+                  </Text>
+                </>
+              )}
+            </FormLayout>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">Show the amount on your COD buttons</Text>
+              <Text as="p" tone="subdued">
+                Put {'{partial_cod_amount}'} in a COD button&apos;s text (Cart drawer button, Product page button), e.g. &quot;Pay {'{partial_cod_amount}'} now, rest on delivery&quot;. It fills in what the shopper pays now for that cart or product, with your COD fee and flat shipping. Where part payment isn&apos;t offered, it shows the full amount.
+              </Text>
+            </BlockStack>
+          </Card>
+          <Card>
+            <BlockStack gap="200">
+              <Text as="h3" variant="headingMd">How the order looks in Shopify</Text>
+              <Text as="p" tone="subdued">
+                The checkout shows a one-time BRIX code that takes off everything except the advance. When the order comes in, BRIX adds a &quot;Balance payable on delivery&quot; line, so the order total is the full amount again and Shopify marks it Partially paid. It is tagged partial-cod. If that ever fails, the order is tagged partial-cod-check so you can look at it.
+              </Text>
+              <Text as="p" tone="subdued">
+                Check with your shipping app that it collects the outstanding balance on delivery, and with your accountant how the code and balance line read on your invoices.
+              </Text>
+            </BlockStack>
+          </Card>
         </BlockStack>
       );
     }

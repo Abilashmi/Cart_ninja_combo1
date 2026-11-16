@@ -1,8 +1,9 @@
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 import { afterResponse } from "../services/webhook-queue.server";
 import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
 import { countBillableOrder } from "../services/billable-orders.server";
+import { completePartialCodOrder } from "../services/partial-cod.server";
 
 // Order/line-item capture, plus the order's count toward the plan's monthly
 // orders — no revenue applied to the rollup here.
@@ -24,5 +25,11 @@ async function handle(shop, payload) {
     await countBillableOrder(db, shop, payload, dateStr);
   } catch (error) {
     console.error("[Webhook orders/create] Failed to upsert order:", error.message);
+  }
+  // Partial COD: add the balance back and tag the order (services/partial-cod.server.js).
+  try {
+    await completePartialCodOrder(shop, payload, { getAdmin: async () => (await unauthenticated.admin(shop)).admin });
+  } catch (error) {
+    console.error("[Webhook orders/create] Partial COD failed:", error.message);
   }
 }

@@ -15,7 +15,9 @@ if (!process.env.SKIP_HARNESS_BUILD) execFileSync(process.execPath, [path.join('
 const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' };
 const shotDir = path.join(os.tmpdir(), 'brix-i18n-admin');
 fs.mkdirSync(shotDir, { recursive: true });
-const cat = (lang) => JSON.parse(fs.readFileSync(lang === 'en' ? 'app/i18n/en.json' : `app/i18n/locales/${lang}.json`, 'utf8'));
+const readCat = (lang) => JSON.parse(fs.readFileSync(lang === 'en' ? 'app/i18n/en.json' : `app/i18n/locales/${lang}.json`, 'utf8'));
+// A text with no translation yet shows in English, so the check reads the same fallback.
+const cat = (lang) => ({ ...readCat('en'), ...readCat(lang) });
 
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
@@ -41,7 +43,7 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
   const t = cat(lang);
   const account = await open('account', lang);
   const text = await account.innerText('body');
-  const want = ['admin.language.title', 'admin.account.store_info', 'admin.account.plan_billing', 'admin.account.price_label', 'admin.account.support'].map((k) => t[k]);
+  const want = ['admin.language.title', 'admin.account.store_info', 'admin.account.plan_billing', 'admin.account.price_label', 'admin.account.support', 'admin.home.videos', 'admin.home.step1_title', 'admin.home.tips', 'admin.home.tip1_title'].map((k) => t[k]);
   const missing = want.filter((w) => !text.includes(w));
   check(`${lang}: Account page in ${lang}`, missing.length === 0, missing.length ? `missing ${JSON.stringify(missing)}` : '');
   // The picker always names each language in its own script.
@@ -59,18 +61,59 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
 
   const home = await open('home', lang);
   const homeText = await home.innerText('body');
-  // First visit opens "Getting started"; check its texts, then the dashboard.
-  const gs = ['admin.home.welcome', 'admin.home.videos', 'admin.home.step1_title', 'admin.home.tips', 'admin.home.tip1_title'].map((k) => t[k]);
-  const gsMissing = gs.filter((w) => !homeText.includes(w));
-  check(`${lang}: Home getting started in ${lang}`, gsMissing.length === 0, gsMissing.length ? `missing ${JSON.stringify(gsMissing)}` : '');
-  await home.screenshot({ path: path.join(shotDir, `${lang}-home-start.png`), fullPage: true });
-  await home.getByRole('button', { name: t['admin.home.go_dashboard'] }).click();
-  await home.waitForTimeout(300);
-  const dash = await home.innerText('body');
-  const dWant = ['admin.home.welcome_back', 'admin.home.kpi_revenue', 'admin.home.quick_links', 'admin.home.feedback', 'admin.nav.cart_editor'].map((k) => t[k]);
-  const dMissing = dWant.filter((w) => !dash.includes(w));
-  check(`${lang}: Home dashboard in ${lang}`, dMissing.length === 0, dMissing.length ? `missing ${JSON.stringify(dMissing)}` : '');
+  const hWant = ['admin.home.kpi_orders', 'admin.home.kpi_revenue_generated', 'admin.home.mod_cart_title', 'admin.home.mod_combo_title', 'admin.home.mod_cod_title', 'admin.home.mod_packs_title', 'admin.home.mod_fbt_title', 'admin.home.mod_coupon_title', 'admin.home.feedback'].map((k) => t[k]);
+  const hMissing = hWant.filter((w) => !homeText.includes(w));
+  check(`${lang}: Home in ${lang}`, hMissing.length === 0, hMissing.length ? `missing ${JSON.stringify(hMissing)}` : '');
   await home.screenshot({ path: path.join(shotDir, `${lang}-home.png`), fullPage: true });
+  if (lang === 'en') {
+    const switches = home.getByRole('switch');
+    // The harness says Cart Editor, COD and FBT are on, Combo and Packs off, Coupon unknown (shown off).
+    const states = await switches.evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-checked')));
+    check('en: six switches show which features are on', states.join(',') === 'true,false,true,false,true,false', states.join(','));
+    // The card pictures sit still (finished picture) until the pointer is on the card.
+    const running = () => home.evaluate(() => document.querySelector('svg.brx-art-cod').getAnimations({ subtree: true }).length);
+    await home.mouse.move(5, 5);
+    await home.waitForTimeout(200);
+    const still = await running();
+    const fee = await home.evaluate(() => getComputedStyle(document.querySelector('.brx-cod-c3')).opacity);
+    await home.locator('.brx-art-host').nth(2).hover();
+    await home.waitForTimeout(300);
+    const playing = await running();
+    check('en: card pictures play only on hover', still === 0 && fee === '1' && playing > 5, `still ${still} (fee shown ${fee}), hovered ${playing}`);
+    await home.mouse.move(5, 5);
+    check('en: tutorials are no longer on Home', !(await home.innerText('body')).includes(t['admin.home.videos']));
+    const routes = ['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'];
+    for (let i = 0; i < routes.length; i += 1) {
+      const page = await open('home', lang);
+      await page.getByRole('switch').nth(i).click();
+      await page.waitForSelector('[data-testid="module-page"]');
+      check(`en: switch ${i + 1} opens ${routes[i]}`, (await page.locator('[data-testid="module-page"]').innerText()) === routes[i]);
+      await page.close();
+    }
+    // Date range picker (toolbar): Last 30 days by default, quick periods, a pick reloads the stats.
+    const rangePage = await open('home', lang);
+    const rangeButton = rangePage.getByRole('button', { name: /Last 30 days/ }).first();
+    check('en: period picker defaults to Last 30 days', (await rangeButton.count()) === 1);
+    await rangeButton.click();
+    const presets = rangePage.locator('.drp-presets');
+    await presets.waitFor();
+    const presetText = await presets.innerText();
+    check('en: period picker lists the quick periods', ['Today', 'Yesterday', 'Last 7 days', 'Last 90 days', 'This month', 'Last month'].every((w) => presetText.includes(w)), presetText.replace(/\s+/g, ' '));
+    await presets.getByText('Last 7 days', { exact: true }).click();
+    await rangePage.waitForTimeout(400);
+    check('en: picking Last 7 days changes the period', (await rangePage.getByRole('button', { name: /Last 7 days/ }).count()) >= 1);
+    await rangePage.close();
+    // "How to set up": a popup with the steps, "Watch video tutorials" opens them on the Account page.
+    const helpPage = await open('home', lang);
+    await helpPage.getByText('How to set up', { exact: true }).first().click();
+    await helpPage.getByText('How to set up BRIX').waitFor();
+    check('en: How to set up opens the steps popup', (await helpPage.innerText('body')).includes('Turn on the app embed.'));
+    await helpPage.getByRole('button', { name: 'Watch video tutorials' }).click();
+    await helpPage.waitForTimeout(600);
+    const helpText = await helpPage.innerText('body');
+    check('en: Watch video tutorials opens the Account page at the tutorials', helpText.includes(t['admin.account.store_info']) && helpText.includes(t['admin.home.videos']));
+    await helpPage.close();
+  }
   await home.close();
 }
 

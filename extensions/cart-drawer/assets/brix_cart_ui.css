@@ -167,6 +167,39 @@
   white-space: nowrap;
 }
 
+/* ---------- BRIX Pack card ----------
+ * A pack with several cart lines (Fixed Combo, Mix & Match) drawn as one card:
+ *  [Pack] Kurta + Dupatta                    (x)
+ *  [img] Kurta / M
+ *  [img] Dupatta / Red
+ *  You save Rs 404               Rs 4,049  Rs 3,645  */
+.bxcd-root .bxcd-pack {
+  box-sizing: border-box;
+  position: relative;
+  padding: var(--bxcd-d-item-pad, 14px);
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  text-align: left;
+  line-height: 1.35;
+  min-width: 0;
+}
+.bxcd-root .bxcd-pack__head { display: flex; align-items: center; gap: 8px; padding-right: 30px; min-width: 0; }
+.bxcd-root .bxcd-pack__tag { flex: 0 0 auto; padding: 2px 8px; border-radius: 999px; background: #0f172a; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.bxcd-root .bxcd-pack__title { margin: 0; min-width: 0; font-size: var(--bxcd-d-title, 14px); font-weight: 700; color: #0f172a; overflow-wrap: anywhere; }
+.bxcd-root .bxcd-pack__lines { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bxcd-root .bxcd-pack__line { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bxcd-root .bxcd-pack__img { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 10px; border: 1px solid #f1f5f9; background: #f8fafc; overflow: hidden; }
+.bxcd-root .bxcd-pack__img img { display: block; width: 100%; height: 100%; object-fit: contain; margin: 0; }
+.bxcd-root .bxcd-pack__text { display: flex; flex-direction: column; min-width: 0; }
+.bxcd-root .bxcd-pack__name { font-size: 13px; font-weight: 600; color: #334155; overflow-wrap: anywhere; }
+.bxcd-root .bxcd-pack__variant { margin-top: 2px; font-size: 12px; color: #64748b; }
+.bxcd-root .bxcd-pack__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed #e2e8f0; }
+.bxcd-root .bxcd-pack__save { padding: 3px 9px; border-radius: 999px; background: #ecfdf5; color: #047857; font-size: 12px; font-weight: 700; }
+.bxcd-root .bxcd-pack__total { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; font-size: var(--bxcd-d-total, 15px); font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums; }
+.bxcd-root .bxcd-pack__was { font-size: 12px; font-weight: 500; color: #94a3b8; text-decoration: line-through; }
+
 /* quantity selector  [ - ] 1 [ + ] */
 .bxcd-root .bxcd-qty {
   display: inline-flex;
@@ -270,6 +303,10 @@
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-summary__label--total { font-size: 15px; }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-summary__value--total { font-size: 17px; }
   .bxcd-root:not(.bxcd-root--desktop) .bxcd-banner { border-radius: 10px; }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-pack { padding: var(--bxcd-m-item-pad, 12px); border-radius: 14px; }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-pack__title { font-size: var(--bxcd-m-title, 13.5px); }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-pack__img { width: 46px; height: 46px; }
+  .bxcd-root:not(.bxcd-root--desktop) .bxcd-pack__total { font-size: var(--bxcd-m-total, 14px); }
 }
 /* the same, for the Cart Editor preview's phone frame */
 .bxcd-root.bxcd-root--mobile .bxcd-items { gap: var(--bxcd-m-item-gap, 12px); }
@@ -293,6 +330,10 @@
 .bxcd-root.bxcd-root--mobile .bxcd-item__price { font-size: var(--bxcd-m-price, 13px); }
 .bxcd-root.bxcd-root--mobile .bxcd-item__total { min-width: 56px; min-height: 36px; font-size: var(--bxcd-m-total, 14px); }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__label { font-size: 13.5px; }
+.bxcd-root.bxcd-root--mobile .bxcd-pack { padding: var(--bxcd-m-item-pad, 12px); border-radius: 14px; }
+.bxcd-root.bxcd-root--mobile .bxcd-pack__title { font-size: var(--bxcd-m-title, 13.5px); }
+.bxcd-root.bxcd-root--mobile .bxcd-pack__img { width: 46px; height: 46px; }
+.bxcd-root.bxcd-root--mobile .bxcd-pack__total { font-size: var(--bxcd-m-total, 14px); }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__value { font-size: 13.5px; }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__label--total { font-size: 15px; }
 .bxcd-root.bxcd-root--mobile .bxcd-summary__value--total { font-size: 17px; }

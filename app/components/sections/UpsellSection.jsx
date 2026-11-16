@@ -431,12 +431,20 @@ export function UpsellSection() {
               />
               <Select
                 label="Layout"
+                // Slider = layout 'carousel' + listSlider (blob only, so the
+                // upsell_widget_settings layout column only ever holds grid / carousel).
                 options={[
                   { label: 'Carousel (Scrollable)', value: 'carousel' },
-                  { label: 'Grid (2 Columns)', value: 'grid' },
+                  { label: 'Slider (one product at a time)', value: 'slider' },
+                  { label: upsellProducts.direction === 'horizontal' ? 'Grid (2 Columns)' : 'Grid (1 Column)', value: 'grid' },
                 ]}
-                value={upsellProducts.layout}
-                onChange={(v) => updateUpsellProducts({ layout: v })}
+                value={upsellProducts.layout === 'carousel' && upsellProducts.listSlider === true ? 'slider' : upsellProducts.layout}
+                onChange={(v) => updateUpsellProducts(v === 'slider' ? { layout: 'carousel', listSlider: true } : { layout: v, listSlider: false })}
+                helpText={upsellProducts.layout === 'carousel' && upsellProducts.listSlider === true
+                  ? 'One product per slide as a row (picture, name and price, Add button), with arrows on both sides.'
+                  : upsellProducts.direction === 'horizontal'
+                    ? 'Carousel slides small cards sideways with arrows. Grid shows 2 per row.'
+                    : 'Carousel slides tall product cards sideways with arrows. Grid stacks them in one column.'}
               />
               <Checkbox
                 label="Sticky upsell"

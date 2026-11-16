@@ -37,6 +37,9 @@ function CartEditorContent() {
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved | error
   const [giftNotice, setGiftNotice] = useState('');
   const savedTimerRef = useRef(null);
+  // "Checkout opens" as last loaded / saved: written only when it changes, so
+  // a normal save never touches the store's Shiprocket switch.
+  const savedViaRef = useRef(footer.checkoutButton.checkoutVia || 'shopify');
 
   const handleSave = useCallback(async () => {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
@@ -82,8 +85,10 @@ function CartEditorContent() {
     }, { method: 'POST', action: '/app/cartdrawer', encType: 'application/json' });
 
     // ── 2. Normalized saves ──────────────────────────────────────────────
+    const via = cb.checkoutVia === 'shiprocket' ? 'shiprocket' : 'shopify';
     try {
       await Promise.all([
+        ...(via !== savedViaRef.current ? [postJson('/api/checkout-via', { via }).then(() => { savedViaRef.current = via; })] : []),
 
         postJson('/api/cart-drawer-config', {
           is_enabled:                         status === 'active' ? 1 : 0,
@@ -183,15 +188,15 @@ function CartEditorContent() {
           manualRules:           up.manualRules       || [],
         }),
 
+        // The shared coupon_slider_settings row: on/off, template, position
+        // and layout there are the Coupon Banner's (the product page banner
+        // reads them), so the drawer never writes them; its own live in
+        // coupon_data above.
         postJson('/api/coupon-slider-settings', {
-          is_enabled:        cs.enabled ? 1 : 0,
-          selected_template: cs.template          || 'template1',
           title_text:        cs.sectionTitle      || cs.titleText || 'Apply Coupon',
           title_color:       cs.titleColor        || '#1e293b',
           title_font_size:   cs.titleFontSize     || 14,
           title_alignment:   cs.titleTextAlign    || cs.titleAlignment || 'left',
-          position:          cs.position          || 'top',
-          layout:            cs.layout            || 'grid',
           selectedCoupons:   cs.selectedCoupons   || [],
         }),
 
@@ -282,6 +287,7 @@ export default function CartEditorPage() {
       initialPbRecord={pbRecord}
       initialCsRecord={csRecord}
       initialUpsellRecord={upsellRecord}
+      initialShiprocket={data?.shiprocketEnabled === true}
     >
       <CartEditorContent />
     </CartEditorProvider>

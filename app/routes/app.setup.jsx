@@ -127,8 +127,8 @@ export default function SetupPage() {
                   },
                   {
                     name: "Product Recommendations (FBT)",
-                    desc: "Displays Frequently Bought Together upsell products in the cart.",
-                    url: `https://${shop}/admin/themes/current/editor?template=index&addAppBlockId=${EXTENSION_UUID}/Fbt&target=mainSection`,
+                    desc: "Adds the Frequently Bought Together widget to the product page. Set placement to Custom on the FBT page so the app does not move it.",
+                    url: `https://${shop}/admin/themes/current/editor?template=product&addAppBlockId=${EXTENSION_UUID}/FbtSection&target=mainSection`,
                   },
                   {
                     name: "Star Rating",

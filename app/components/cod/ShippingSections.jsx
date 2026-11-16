@@ -687,6 +687,7 @@ function MethodsEditor({ ship, setShip, err, errors, cur, fmt }) {
 
 export function ShippingChargesSection({ form, set, errors, ship, setShip, shipErrors, cur, fmt, onModeChange }) {
   const advanced = form.shippingMode === 'advanced';
+  const fromShopify = form.shippingMode === 'shopify';
   const err = (k) => shipErrors[k];
   const at = setterFor(setShip);
   const fi = ship.freeItems || { products: [], collections: [], tags: [] };
@@ -699,12 +700,22 @@ export function ShippingChargesSection({ form, set, errors, ship, setShip, shipE
           choices={[
             { label: 'One price', value: 'simple', helpText: 'The same shipping on every order, free from an order value.' },
             { label: 'Dynamic shipping', value: 'advanced', helpText: 'Delivery options (standard, express, same day, next day, scheduled) priced by zone, state, city, PIN code, weight, order value or number of items, with rules, extra charges and delivery dates.' },
+            { label: 'My Shopify shipping rates', value: 'shopify', helpText: 'The rates you already set in Shopify (Settings > Shipping and delivery), for the shopper\'s address and cart, the same as your online checkout.' },
           ]}
-          selected={[advanced ? 'advanced' : 'simple']}
+          selected={[advanced || fromShopify ? form.shippingMode : 'simple']}
           onChange={([v]) => onModeChange(v)}
         />
       </Card>
-      {!advanced && (
+      {fromShopify && (
+        <Card>
+          <BlockStack gap="200">
+            <Text as="p">COD orders charge the shipping rates from your Shopify settings for the shopper&apos;s address and cart: the same zones, prices, free-shipping thresholds and weight or price based rates as your online checkout.</Text>
+            <Text as="p" tone="subdued">With more than one rate (e.g. Standard and Express), shoppers pick one in the COD popup at review; the cheapest is picked first. If Shopify has no rate for the address, COD isn&apos;t offered for it. Your COD fee is added on top.</Text>
+            <InlineStack><Button url="shopify://admin/settings/shipping" target="_top" variant="plain">Open Shipping and delivery in Shopify</Button></InlineStack>
+          </BlockStack>
+        </Card>
+      )}
+      {!advanced && !fromShopify && (
         <Card>
           <FormLayout>
             <TextField label="Shipping" type="number" min={0} value={form.shippingFee} onChange={set('shippingFee')} placeholder="Free" prefix={cur} error={errors.shippingFee} helpText="Leave empty for free shipping" autoComplete="off" />

@@ -8,6 +8,7 @@
 
 import { DEFAULT_PRODUCT_PAYMENT, sanitizeProductPayment } from './product-payment.shared.js';
 import { DEFAULT_CONTINUE_SHOPPING, sanitizeContinueShopping } from './continue-shopping.shared.js';
+import { DEFAULT_PARTIAL_COD, sanitizePartialCod } from './partial-cod.shared.js';
 
 export const COD_SURFACES = ['drawer', 'product', 'combo'];
 export const COD_SOURCES = COD_SURFACES; // where an order was placed from
@@ -32,7 +33,10 @@ export const COD_UNLISTED_MODES = ['all', 'only'];
 // The most products / collections one pick list holds (all settings share
 // cod_settings.php's 60,000 byte limit).
 export const COD_PICK_MAX = Object.freeze({ products: 50, collections: 25 });
-export const COD_SHIPPING_MODES = ['simple', 'advanced'];
+// simple = one price (shippingFee / freeShippingAbove); advanced = BRIX's dynamic
+// rules (cod_shipping); shopify = the store's own Shopify shipping rates for the
+// address and cart (draftOrderCalculate availableShippingRates).
+export const COD_SHIPPING_MODES = ['simple', 'advanced', 'shopify'];
 
 // Price tags in button texts ({price}, {cod_price}, ...): price-tags.shared.js.
 export { COD_PRICE_TAGS, hasPriceTags, showsCodFee, fillPriceTags, codPriceValues, paymentPriceValues } from './price-tags.shared.js';
@@ -62,6 +66,10 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // of codFee (e.g. ₹80 below ₹1,000, 10% from ₹1,000). 0 % = always codFee.
   codFeePercent: 0,
   codFeePercentFrom: 0,
+  // These products have their own COD fee (instead of codFee / the %): an
+  // order of only them pays `fee`; mixed with other products, the higher of
+  // the two. Only while the fee switch is on. [{ id: gid, title }].
+  codFeeProducts: { fee: 0, products: [] },
   showCodFee: true, // false = fee is still charged, but folded into one "Delivery charges" line
   codFeeLabel: COD_FEE_LABEL_DEFAULT,
   shippingFee: 0,
@@ -165,6 +173,9 @@ export const DEFAULT_COD_SETTINGS = Object.freeze({
   // Product page payment selector (Pay Online / Cash on Delivery) and the
   // prepaid discount it advertises. See utils/product-payment.shared.js.
   productPayment: DEFAULT_PRODUCT_PAYMENT,
+  // Partial COD: a small advance paid online in Shopify checkout, the rest on
+  // delivery (utils/partial-cod.shared.js, services/partial-cod.server.js).
+  partialCod: DEFAULT_PARTIAL_COD,
 });
 
 export const GA4_ID_RE = /^G-[A-Z0-9]{4,12}$/;
@@ -296,6 +307,15 @@ function sanitizeShowOn(patch, base) {
   return {
     mode: COD_SHOW_ON_MODES.includes(q.mode) ? q.mode : COD_SHOW_ON_MODES.includes(b.mode) ? b.mode : 'all',
     ...sanitizeCodPicks(q, b),
+  };
+}
+
+function sanitizeCodFeeProducts(patch, base) {
+  const q = patch && typeof patch === 'object' ? patch : {};
+  const b = base && typeof base === 'object' ? base : DEFAULT_COD_SETTINGS.codFeeProducts;
+  return {
+    fee: 'fee' in q ? money(q.fee, b.fee) : money(b.fee),
+    products: sanitizeCodPicks({ products: 'products' in q ? q.products : b.products }, {}).products,
   };
 }
 
@@ -510,6 +530,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     codFee,
     codFeePercent: has('codFeePercent') ? feePercent(p.codFeePercent, b.codFeePercent) : feePercent(b.codFeePercent, 0),
     codFeePercentFrom: has('codFeePercentFrom') ? money(p.codFeePercentFrom, b.codFeePercentFrom) : money(b.codFeePercentFrom),
+    codFeeProducts: sanitizeCodFeeProducts(has('codFeeProducts') ? p.codFeeProducts : null, b.codFeeProducts),
     showCodFee: has('showCodFee') ? Boolean(p.showCodFee) : b.showCodFee !== false,
     codFeeLabel: text(has('codFeeLabel') ? p.codFeeLabel : b.codFeeLabel, COD_FEE_LABEL_DEFAULT, 40),
     shippingFee: has('shippingFee') ? money(p.shippingFee, b.shippingFee) : money(b.shippingFee),
@@ -533,6 +554,7 @@ export function sanitizeCodSettings(patch = {}, base = DEFAULT_COD_SETTINGS) {
     sheet,
     tracking,
     productPayment: sanitizeProductPayment(p.productPayment, b.productPayment),
+    partialCod: sanitizePartialCod(p.partialCod, b.partialCod),
   };
   return out;
 }
@@ -592,19 +614,12 @@ export function splitName(full) {
   return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
 }
 
-/** Line properties that mark lines whose price only Shopify checkout can apply. */
-export function isCheckoutOnlyLine(properties) {
-  const props = properties || {};
-  if (props._brix_pack_id) return true;
-  return isRewardGiftLine(props);
-}
-
 /**
- * A free reward gift (its price comes from a Shopify Function that only runs in
- * Shopify checkout). Pack lines are NOT in here: COD prices a Pack's tier itself
- * (cod.server.js packAdjustments) when the Pack widget's COD button sends them.
+ * Line properties that mark lines whose price only Shopify checkout can apply:
+ * free reward gifts. (Packs are fine: COD gives them the Pack price itself,
+ * cod.server.js packAdjustments.)
  */
-export function isRewardGiftLine(properties) {
+export function isCheckoutOnlyLine(properties) {
   const props = properties || {};
   return props._brixReward === 'true' || props._brixReward === true;
 }
@@ -615,14 +630,29 @@ export function isRewardGiftLine(properties) {
  * fixed codFee. Without a subtotal, the fixed fee. brix_cod.js codFeeFor
  * mirrors this exactly (same rounding).
  */
-export function codFeeOf(settings, subtotal = null) {
+export function codFeeOf(settings, subtotal = null, productIds = null) {
   if (settings.codFeeEnabled === false) return 0;
   const pct = Number(settings.codFeePercent) || 0;
   const value = Number(subtotal);
-  if (pct > 0 && subtotal != null && Number.isFinite(value) && value >= (Number(settings.codFeePercentFrom) || 0)) {
-    return Math.round(value * pct) / 100;
-  }
-  return money(settings.codFee);
+  const normal = pct > 0 && subtotal != null && Number.isFinite(value) && value >= (Number(settings.codFeePercentFrom) || 0)
+    ? Math.round(value * pct) / 100
+    : money(settings.codFee);
+  return codProductFee(settings, normal, productIds);
+}
+
+/**
+ * The fee for an order of these products (`productIds`, gids or numeric;
+ * null = not known, the normal fee): products with their own fee
+ * (codFeeProducts) only → that fee; mixed with others → the higher of the
+ * two; none of them → `normal`. Mirrored by brix_cod.js codFeeFor.
+ */
+export function codProductFee(settings, normal, productIds) {
+  const own = settings?.codFeeProducts;
+  const picked = new Set((own?.products || []).map((p) => numericId(p?.id ?? p)).filter(Boolean));
+  const ids = (Array.isArray(productIds) ? productIds : []).map(numericId).filter(Boolean);
+  if (!picked.size || !ids.some((id) => picked.has(id))) return normal;
+  const fee = money(own.fee);
+  return ids.every((id) => picked.has(id)) ? fee : Math.max(normal, fee);
 }
 
 /**
@@ -630,14 +660,15 @@ export function codFeeOf(settings, subtotal = null) {
  * chosen delivery option's price under advanced shipping (shipping.shared.js
  * quoteShipping); without it, the simple flat fee and free-shipping threshold.
  */
-export function codCharges(settings, subtotal, shipping = null) {
+export function codCharges(settings, subtotal, shipping = null, productIds = null) {
   if (shipping == null) {
-    shipping = settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
+    // Shopify's rates are known only with an address (quoteCod): none until then.
+    shipping = settings.shippingMode !== 'shopify' && settings.shippingFee > 0 && !(settings.freeShippingAbove > 0 && subtotal >= settings.freeShippingAbove)
       ? settings.shippingFee
       : 0;
   }
   shipping = money(shipping);
-  const codFee = codFeeOf(settings, subtotal);
+  const codFee = codFeeOf(settings, subtotal, productIds);
   return { shipping, codFee, total: money(shipping + codFee) };
 }
 

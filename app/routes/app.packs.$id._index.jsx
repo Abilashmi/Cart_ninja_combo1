@@ -93,17 +93,18 @@ export default function PackDetail() {
                   </InlineStack>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                      <thead><tr style={{ textAlign: 'left', color: '#6d7175' }}>{['Tier', 'Qty', 'Subtotal', 'Discount', 'Pack price', 'Savings', 'Per item'].map((heading) => <th key={heading} style={{ padding: '6px 8px', fontWeight: 500 }}>{heading}</th>)}</tr></thead>
+                      <thead><tr style={{ textAlign: 'left', color: '#6d7175' }}>{(pack.packType === 'combo' ? ['Pack', 'Contents', 'Subtotal', 'Discount', 'Pack price', 'Savings'] : ['Tier', 'Qty', 'Subtotal', 'Discount', 'Pack price', 'Savings', 'Per item']).map((heading) => <th key={heading} style={{ padding: '6px 8px', fontWeight: 500 }}>{heading}</th>)}</tr></thead>
                       <tbody>
-                        {pack.tiers.map((tier) => (
-                          <tr key={tier.quantity} style={{ borderTop: '1px solid #e1e3e5' }}>
+                        {pack.tiers.map((tier, rowIndex) => (
+                          <tr key={rowIndex} style={{ borderTop: '1px solid #e1e3e5' }}>
                             <td style={{ padding: 8 }}>{tier.name || `Buy ${tier.quantity}`} {tier.badge ? <Badge tone="info">{tier.badge}</Badge> : null}</td>
-                            <td style={{ padding: 8 }}>{tier.quantity}</td>
-                            <td style={{ padding: 8 }}>{tier.formatted.subtotal}</td>
-                            <td style={{ padding: 8 }}>{tier.discountType === 'none' ? '—' : tier.discountType === 'percentage' ? `${tier.discountValue}%` : tier.formatted.discountAmount}</td>
-                            <td style={{ padding: 8, fontWeight: 600 }}>{tier.formatted.price}</td>
-                            <td style={{ padding: 8 }}>{tier.savings > 0 ? tier.formatted.savings : '—'}</td>
-                            <td style={{ padding: 8 }}>{tier.formatted.effectiveUnitPrice}</td>
+                            {/* Fixed Combo: what's in the pack; a pack whose product couldn't be priced shows dashes. */}
+                            <td style={{ padding: 8 }}>{pack.packType === 'combo' ? [pack.productTitle, ...(tier.items || []).map((item) => `${item.quantity > 1 ? `${item.quantity} × ` : ''}${item.title}${item.variantTitle ? ` (${item.variantTitle})` : ''}`)].join(' + ') : tier.quantity}</td>
+                            <td style={{ padding: 8 }}>{tier.formatted?.subtotal || '—'}</td>
+                            <td style={{ padding: 8 }}>{tier.discountType === 'none' ? '—' : tier.discountType === 'percentage' ? `${tier.discountValue}%` : tier.formatted?.discountAmount || '—'}</td>
+                            <td style={{ padding: 8, fontWeight: 600 }}>{tier.formatted?.price || '—'}</td>
+                            <td style={{ padding: 8 }}>{tier.savings > 0 ? tier.formatted?.savings : '—'}</td>
+                            {pack.packType !== 'combo' && <td style={{ padding: 8 }}>{tier.formatted?.effectiveUnitPrice || '—'}</td>}
                           </tr>
                         ))}
                       </tbody>

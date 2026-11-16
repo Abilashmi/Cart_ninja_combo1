@@ -48,6 +48,32 @@ function packs_json($value, $fallback) {
     return $decoded === null ? $fallback : $decoded;
 }
 
+// Fixed Combo items, as saved (mirrors sanitizeComboItems in app/utils/packs.shared.js; the
+// app server already checked each one with Shopify): numeric ids, 1-10 each, at most 5.
+function packs_combo_items($raw) {
+    $items = [];
+    foreach ($raw as $item) {
+        if (!is_array($item)) continue;
+        $productId = preg_replace('/\D+/', '', (string)($item['productId'] ?? ''));
+        $variantId = preg_replace('/\D+/', '', (string)($item['variantId'] ?? ''));
+        $quantity = (int)($item['quantity'] ?? 1);
+        if ($productId === '' || $variantId === '' || $quantity < 1) continue;
+        $handle = is_string($item['handle'] ?? null) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', $item['handle']) ? $item['handle'] : '';
+        $image = is_string($item['image'] ?? null) && strpos($item['image'], 'https://') === 0 ? $item['image'] : '';
+        $items[] = [
+            'productId' => $productId,
+            'variantId' => $variantId,
+            'quantity' => min(10, $quantity),
+            'handle' => $handle,
+            'title' => is_string($item['title'] ?? null) ? mb_substr(trim($item['title']), 0, 255) : '',
+            'variantTitle' => is_string($item['variantTitle'] ?? null) ? mb_substr(trim($item['variantTitle']), 0, 255) : '',
+            'image' => $image,
+        ];
+        if (count($items) >= 5) break;
+    }
+    return $items;
+}
+
 // Mirrors normalizeTiers in app/utils/packs.shared.js.
 function packs_normalize_tiers($raw) {
     if (!is_array($raw)) return [];
@@ -55,17 +81,50 @@ function packs_normalize_tiers($raw) {
     foreach ($raw as $tier) {
         if (!is_array($tier)) continue;
         $type = in_array($tier['discountType'] ?? null, ['none', 'percentage', 'fixed'], true) ? $tier['discountType'] : 'none';
-        $tiers[] = [
+        $out = [
             'quantity' => (int)($tier['quantity'] ?? 0),
             'name' => is_string($tier['name'] ?? null) ? trim($tier['name']) : '',
             'badge' => is_string($tier['badge'] ?? null) ? trim($tier['badge']) : '',
             'discountType' => $type,
             'discountValue' => $type === 'none' ? 0 : (float)($tier['discountValue'] ?? 0),
         ];
+        // Fixed Combo: the tier's products besides the page's own (sanitizeComboItems).
+        if (isset($tier['items']) && is_array($tier['items'])) $out['items'] = packs_combo_items($tier['items']);
+        $tiers[] = $out;
     }
     $tiers = array_values(array_filter($tiers, function ($tier) { return $tier['quantity'] > 0; }));
     usort($tiers, function ($a, $b) { return $a['quantity'] - $b['quantity']; });
     return $tiers;
+}
+
+// Mirrors sanitizeExtraProducts in app/utils/packs.shared.js: the other products a Mix & Match pack draws from.
+function packs_extra_products($raw) {
+    $out = [];
+    $seen = [];
+    foreach ((array)$raw as $item) {
+        if (!is_array($item)) continue;
+        $id = packs_numeric_id($item['productId'] ?? '');
+        if (!$id || isset($seen[$id])) continue;
+        $seen[$id] = true;
+        $scope = ($item['variantScope'] ?? '') === 'all' ? 'all' : 'selected';
+        $allowed = [];
+        if ($scope !== 'all') {
+            foreach ((array)($item['allowedVariantIds'] ?? []) as $variantId) {
+                $numeric = packs_numeric_id($variantId);
+                if ($numeric && !in_array($numeric, $allowed, true)) $allowed[] = $numeric;
+            }
+        }
+        $handle = (string)($item['handle'] ?? '');
+        $out[] = [
+            'productId' => $id,
+            'handle' => preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', $handle) ? $handle : '',
+            'title' => mb_substr((string)($item['title'] ?? ''), 0, 255),
+            'variantScope' => $scope,
+            'allowedVariantIds' => $allowed,
+        ];
+        if (count($out) >= 6) break;
+    }
+    return $out;
 }
 
 // Mirrors rowToPack + publicPack in the Node app — only what the widget needs.
@@ -87,6 +146,10 @@ function packs_public($row) {
         'id' => (int)$row['id'],
         'version' => (int)($row['version'] ?? 1),
         'variantId' => $anchor,
+        // The main product (the widget needs it on the extra pages a pack is shown on) and the extra products.
+        'productId' => packs_numeric_id($row['product_id'] ?? '') ?: '',
+        'productHandle' => preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', (string)($row['product_handle'] ?? '')) ? $row['product_handle'] : '',
+        'extraProducts' => $packType === 'mix_match' ? packs_extra_products(packs_json($row['extra_products_json'] ?? '', [])) : [],
         'template' => $template,
         'packType' => $packType,
         'variantScope' => $scope,
@@ -120,8 +183,16 @@ try {
         packs_ok(array_merge($empty, ['reason' => 'order_cap_reached']));
     }
 
-    $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)");
-    $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId]);
+    // Packs of this product, plus packs the merchant chose to also show on this product's page
+    // (show_on_ids is ",101,102,"; before migrations/alter_brix_packs_extra_products.sql was run only the first part applies).
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND (product_id IN (?, ?) OR show_on_ids LIKE ?)");
+        $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId, '%,' . $productId . ',%']);
+    } catch (PDOException $e) {
+        if (stripos($e->getMessage(), 'show_on_ids') === false) throw $e;
+        $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)");
+        $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId]);
+    }
     $packs = array_map('packs_public', $stmt->fetchAll(PDO::FETCH_ASSOC));
     if (!$packs) packs_ok(array_merge($empty, ['reason' => 'no_active_pack']));
 } catch (PDOException $e) {

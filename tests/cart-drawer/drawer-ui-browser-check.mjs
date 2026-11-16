@@ -74,7 +74,7 @@ const browser = await chromium.launch();
 async function open({ width, cart = CART, cfg = config(), before = '', heldReads = false, path = '/' }) {
   const context = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
-  const net = { images: [], changes: [], nav: [], cartReads: [], adds: [] };
+  const net = { images: [], changes: [], nav: [], cartReads: [], adds: [], updates: [] };
   page.errors = [];
   page.on('pageerror', (e) => page.errors.push(e.message));
   let currentCart = [...cart];
@@ -122,6 +122,13 @@ async function open({ width, cart = CART, cfg = config(), before = '', heldReads
         }
         const total = currentCart.reduce((n, l) => n + l.final_line_price, 0);
         return json({ items: currentCart, item_count: currentCart.reduce((n, l) => n + l.quantity, 0), total_price: total, currency: 'INR' });
+      }
+      if (url.pathname === '/cart/update.js') {
+        const body = JSON.parse(req.postData() || '{}');
+        net.updates.push(body);
+        const updates = body.updates || {};
+        currentCart = currentCart.filter((l) => !(l.key in updates && Number(updates[l.key]) === 0));
+        return json({ items: currentCart });
       }
       if (url.pathname === '/cart/change.js') {
         const body = JSON.parse(req.postData() || '{}');
@@ -769,6 +776,48 @@ for (const width of [1280, 390]) {
   check('fast add: Shopify\'s refusal message shows', true);
   allErrors.push(...page.errors);
   await page.context().close();
+}
+
+// BRIX Packs: a pack of several lines (Fixed Combo, Mix & Match) is one card; a one-line pack and
+// other products stay rows; the card's remove takes every line of that pack out in one update.
+{
+  const packProps = (group, name, quantity = '2') => ({ _brix_pack_id: '11', _brix_pack_quantity: quantity, _brix_pack_version: '1', _brix_pack_group: group, ...(name ? { _brix_pack_name: name } : {}) });
+  const PACK_CART = [
+    { ...line('p1', 'Botanical Grace Cotton Skirt Set | NAANAL', 'M', 1, 2655, 2950, 11), properties: packProps('g1', 'Skirt Set + Saree') },
+    { ...line('p2', 'Liva Certified Maheshwari Silk Saree | NAANAL', null, 1, 989.1, 1099, 12), properties: packProps('g1', 'Skirt Set + Saree') },
+    { ...line('s1', 'Boys Charcoal Grey Cotton Joggers', 'Grey / 8-9 Y', 3, 250, 275, 1), properties: packProps('g2', '', '3') },
+    { ...line('o1', 'Old Pack Dupatta', 'Red', 1, 400, 400, 13), properties: packProps('g3', '') },
+    { ...line('o2', 'Old Pack Kurta', 'L', 1, 900, 900, 14), properties: packProps('g3', '') },
+    line('k1', 'Plain Tee', null, 1, 499, null, 15),
+  ];
+  for (const width of [375, 1200]) {
+    const page = await open({ width, cart: PACK_CART });
+    const view = await page.evaluate(() => {
+      const cards = [...document.querySelectorAll('#cc-drawer .bxcd-pack')];
+      const drawer = document.getElementById('cc-drawer');
+      return {
+        cards: cards.map((c) => c.innerText.replace(/\s+/g, ' ').trim()),
+        rows: [...document.querySelectorAll('#cc-drawer .bxcd-item')].map((r) => r.querySelector('.bxcd-item__title').textContent),
+        chip: document.querySelector('#cc-drawer .bxcd-item .bxcd-item__pack')?.textContent || '',
+        overflow: drawer.scrollWidth > drawer.clientWidth + 1 || cards.some((c) => c.scrollWidth > c.clientWidth + 1),
+      };
+    });
+    if (width === 375) await page.screenshot({ path: path.join(shotDir, 'pack-card-375.png'), fullPage: false });
+    check(`pack card ${width}px: a two-product pack is one card with its name, both products, the saving and the pack price`,
+      view.cards.length === 2 && /Skirt Set \+ Saree/.test(view.cards[0]) && /Botanical Grace/.test(view.cards[0]) && /Maheshwari Silk Saree/.test(view.cards[0]) && /You save ₹404\.90/.test(view.cards[0]) && /₹4,049\.00/.test(view.cards[0]) && /₹3,644\.10/.test(view.cards[0]),
+      JSON.stringify(view.cards));
+    check(`pack card ${width}px: a pack saved before names were sent reads "Pack of 2"`, /Pack of 2/.test(view.cards[1] || ''), view.cards[1]);
+    check(`pack card ${width}px: a one-line pack and other products stay rows`, view.rows.length === 2 && view.rows.some((t) => /Joggers/.test(t)) && /Pack of 3/.test(view.chip), JSON.stringify(view));
+    check(`pack card ${width}px: nothing overflows`, !view.overflow);
+    if (width === 1200) {
+      await page.locator('#cc-drawer .bxcd-pack').first().getByRole('button', { name: 'Remove pack' }).click();
+      await page.waitForFunction(() => document.querySelectorAll('#cc-drawer .bxcd-pack').length === 1, null, { timeout: 4000 }).catch(() => {});
+      const left = await page.evaluate(() => document.querySelectorAll('#cc-drawer .bxcd-pack').length);
+      check('pack card: Remove pack takes every line of that pack out in one cart update', page.net.updates.length === 1 && JSON.stringify(page.net.updates[0]) === JSON.stringify({ updates: { p1: 0, p2: 0 } }) && left === 1, JSON.stringify({ updates: page.net.updates, left }));
+    }
+    allErrors.push(...page.errors);
+    await page.context().close();
+  }
 }
 
 check('no page errors', allErrors.length === 0, allErrors.slice(0, 3).join(' | '));

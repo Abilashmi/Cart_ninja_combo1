@@ -268,9 +268,17 @@ export function aiCreditAllowed(planKey, interval, creditsUsed) {
   return (plan.aiBrixOverageRate > 0 && billsUsage(interval)) || creditsUsed < plan.aiBrixCredits;
 }
 
+// Longest trial a shop override may set (promo_admin.php "Shop trials").
+export const MAX_SHOP_TRIAL_DAYS = 365;
+
 // Trial length for a new subscription, monthly or yearly: a redeemed promo
-// code's length, else the standard 7 days.
-export function trialDaysFor(promoTrialDays = 0) {
+// code's length, else the standard 7 days. A shop with its own trial
+// (`shopTrialDays`, shops.trial_days_override, set by the BRIX team for one
+// store) gets that instead of the standard 7, and a promo code can only make
+// it longer, never shorter.
+export function trialDaysFor(promoTrialDays = 0, shopTrialDays = 0) {
   const promo = Number(promoTrialDays) || 0;
+  const shop = Number(shopTrialDays) || 0;
+  if (shop > 0) return Math.max(promo, shop);
   return promo > 0 ? promo : TRIAL_DAYS;
 }

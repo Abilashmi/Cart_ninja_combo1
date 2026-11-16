@@ -29,31 +29,17 @@
 // multiple selected variants, so a shopper can be on any allowed variant's
 // product page and still get the discount for that exact variant.
 
+import { packDiscountsFor, packNumericId } from '../../../app/utils/packs-discount.shared.js';
+
 const NONE = { operations: [] };
-const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'UGX', 'XAF', 'XOF', 'XPF', 'PYG', 'RWF', 'KMF', 'DJF', 'GNF', 'VUV', 'BIF']);
-const THREE_DECIMAL = new Set(['BHD', 'KWD', 'OMR', 'JOD', 'TND']);
-
-function decimalsFor(currencyCode) {
-  if (ZERO_DECIMAL.has(currencyCode)) return 0;
-  if (THREE_DECIMAL.has(currencyCode)) return 3;
-  return 2;
-}
-
-function numericId(gid) {
-  const match = /(\d+)$/.exec(String(gid ?? ''));
-  return match ? match[1] : null;
-}
-
-function positiveInt(value) {
-  const n = Number.parseInt(String(value ?? ''), 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 function percentString(value) {
   return String(Math.round(value * 10000) / 10000);
 }
 
 /**
+ * The pack rule itself lives in app/utils/packs-discount.shared.js, shared
+ * with Cash on Delivery (draft orders never run this Function).
  * @param {object} input Function run input (see the .graphql query)
  * @returns {{ operations: object[] }}
  */
@@ -65,67 +51,27 @@ export function cartLinesDiscountsGenerateRun(input) {
   const classes = input?.discount?.discountClasses;
   if (Array.isArray(classes) && !classes.includes('PRODUCT')) return NONE;
 
-  // 1. Group marked lines into packs.
-  const groups = new Map();
-  for (const line of lines) {
-    const merchandise = line.merchandise;
-    if (!merchandise || merchandise.__typename !== 'ProductVariant') continue;
-    const packId = line.packId?.value;
-    const packQuantity = positiveInt(line.packQuantity?.value);
-    if (!packId || !packQuantity) continue;
-    const pack = Object.values(packs).find((entry) => String(entry?.id) === String(packId));
-    if (!pack || !Array.isArray(pack.tiers)) continue;
-    // The line must really be this pack's product, and (unless the pack's
-    // variant coverage is 'all') one of the variants it's actually configured
-    // for — properties alone prove nothing.
-    if (numericId(merchandise.product?.id) !== String(pack.productId)) continue;
-    if (pack.variantScope !== 'all') {
-      const allowed = Array.isArray(pack.allowedVariantIds) ? pack.allowedVariantIds : [String(pack.variantId)];
-      if (!allowed.some((id) => String(id) === numericId(merchandise.id))) continue;
-    }
-    const key = `${packId}:${packQuantity}:${line.packGroup?.value || line.id}`;
-    if (!groups.has(key)) groups.set(key, { pack, packQuantity, lines: [] });
-    groups.get(key).lines.push(line);
-  }
-
-  // 2. One discount per group whose quantity is a whole multiple of a tier.
-  const candidates = [];
-  for (const { pack, packQuantity, lines: groupLines } of groups.values()) {
-    const tier = pack.tiers.find((item) => Number(item.quantity) === packQuantity);
-    if (!tier || tier.discountType === 'none') continue;
-    const total = groupLines.reduce((sum, line) => sum + line.quantity, 0);
-    if (total <= 0 || total % packQuantity !== 0) continue;
-    const packCount = total / packQuantity;
-    const value = Number(tier.discountValue);
-    if (!Number.isFinite(value) || value <= 0) continue;
-    const message = `Pack: Buy ${packQuantity}`;
-
-    if (tier.discountType === 'percentage') {
-      if (value > 100) continue;
-      for (const line of groupLines) {
-        candidates.push({ message, targets: [{ cartLine: { id: line.id, quantity: line.quantity } }], value: { percentage: { value: percentString(value) } } });
-      }
-    } else if (tier.discountType === 'fixed') {
-      // Fixed amounts are stored in the shop currency; only apply them when the
-      // cart is in that same currency (no conversion rate is available here).
-      const currency = groupLines[0].cost?.subtotalAmount?.currencyCode;
-      if (!config.currency || currency !== config.currency) continue;
-      const decimals = decimalsFor(currency);
-      const factor = 10 ** decimals;
-      const subtotals = groupLines.map((line) => Math.round(Number(line.cost?.subtotalAmount?.amount) * factor));
-      const groupSubtotal = subtotals.reduce((sum, amount) => sum + amount, 0);
-      if (!(groupSubtotal > 0)) continue;
-      const totalDiscount = Math.min(Math.round(value * factor) * packCount, groupSubtotal);
-      let remaining = totalDiscount;
-      groupLines.forEach((line, index) => {
-        const isLast = index === groupLines.length - 1;
-        const share = isLast ? remaining : Math.min(remaining, Math.floor((totalDiscount * subtotals[index]) / groupSubtotal));
-        remaining -= share;
-        if (share <= 0) return;
-        candidates.push({ message, targets: [{ cartLine: { id: line.id, quantity: line.quantity } }], value: { fixedAmount: { amount: (share / factor).toFixed(decimals), appliesToEachItem: false } } });
-      });
-    }
-  }
+  const plain = lines
+    .filter((line) => line.merchandise && line.merchandise.__typename === 'ProductVariant')
+    .map((line) => ({
+      id: line.id,
+      quantity: line.quantity,
+      packId: line.packId?.value,
+      packQuantity: line.packQuantity?.value,
+      packGroup: line.packGroup?.value,
+      productId: packNumericId(line.merchandise.product?.id),
+      variantId: packNumericId(line.merchandise.id),
+      subtotalAmount: line.cost?.subtotalAmount?.amount,
+      currencyCode: line.cost?.subtotalAmount?.currencyCode,
+    }));
+  const byId = new Map(lines.map((line) => [line.id, line]));
+  const candidates = packDiscountsFor(config, plain).map((d) => ({
+    message: d.message,
+    targets: [{ cartLine: { id: d.id, quantity: byId.get(d.id).quantity } }],
+    value: d.percent != null
+      ? { percentage: { value: percentString(d.percent) } }
+      : { fixedAmount: { amount: (d.amount / 10 ** d.decimals).toFixed(d.decimals), appliesToEachItem: false } },
+  }));
 
   if (candidates.length === 0) return NONE;
   return { operations: [{ productDiscountsAdd: { candidates, selectionStrategy: 'ALL' } }] };

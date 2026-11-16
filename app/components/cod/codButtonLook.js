@@ -1,6 +1,6 @@
 // How the storefront draws the COD button (extensions/cart-drawer/assets/brix_cod.js
-// buttonPaint / drawerSize / feeHint), for the admin's previews. Keep in step.
-import { COD_FEE_LABEL_DEFAULT, codFeeOf } from '../../utils/cod.shared';
+// buttonPaint / drawerSize), for the admin's previews. Keep in step.
+import { COD_FEE_LABEL_DEFAULT } from '../../utils/cod.shared';
 
 /** Colours for settings.buttons.style. Outline and Minimal use the button colour for the text. */
 export function codButtonColors(buttons) {
@@ -37,12 +37,6 @@ export function codDrawerSize(settings, where) {
 
 export function codFeeLabel(settings) {
   return settings.codFeeLabel || COD_FEE_LABEL_DEFAULT;
-}
-
-/** "+₹40 Cash on Delivery Fee" under the button, or '' when there's no fee or it's hidden. */
-export function codFeeHint(settings, money, subtotal = null) {
-  const fee = codFeeOf(settings, subtotal);
-  return fee > 0 && settings.showCodFee !== false ? `+${money(fee)} ${codFeeLabel(settings)}` : '';
 }
 
 /**

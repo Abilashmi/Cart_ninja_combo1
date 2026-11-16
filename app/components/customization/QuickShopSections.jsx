@@ -2,13 +2,14 @@
 // is a flat qs_* key on the combo config; a missing key shows the default
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
 // what the storefront and the preview fall back to.
-import { memo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { BlockStack, Button, Checkbox, ChoiceList, Combobox, FormLayout, Icon, InlineStack, Listbox, Select, Tag, Text, TextField } from '@shopify/polaris';
 import { SearchIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
 import { createComboWeightCore, defaultWeightPricing, fixedMeasureFor } from '../../utils/combo-weight.shared.js';
 import { createQuickShopKit } from '../../utils/combo-quickshop.shared.js';
+import { filterHiddenNote } from '../../utils/combo-filter-notes.shared.js';
 
 const kit = createQuickShopKit(createComboWeightCore());
 const val = (config, key) => kit.opt(config, key);
@@ -459,13 +460,39 @@ function SizeField({ PxField, config, updateConfig, keyName, label, fallback, mi
   return <PxField label={label} value={value} min={min} max={max} onChange={(n) => updateConfig(keyName, n)} />;
 }
 
-function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField }) {
+function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, collections, PxField, pageProducts }) {
   const source = val(config, 'qs_chips_source');
-  const toggleWithLabel = (key, labelKey, title, help) => (
+  // The different product types / vendors / typed tags among the page's products (null = not loaded).
+  const pageValues = useMemo(() => {
+    const pool = Object.values(pageProducts || {}).flat().filter(Boolean);
+    if (!pool.length) return null;
+    const uniq = (list) => [...new Set(list.map((v) => String(v || '').trim()).filter(Boolean))];
+    const typed = String(config.qs_filter_custom_tags || '').split(',').map((t) => t.trim()).filter(Boolean);
+    const hasTag = (p, t) => (p.tags || []).some((x) => String(x).toLowerCase() === t.toLowerCase());
+    return {
+      type: uniq(pool.map((p) => p.productType)),
+      brand: uniq(pool.map((p) => p.vendor)),
+      custom: typed.filter((t) => pool.some((p) => hasTag(p, t))),
+    };
+  }, [pageProducts, config.qs_filter_custom_tags]);
+  const hiddenNote = (key) => {
+    const kind = { qs_filter_type: 'type', qs_filter_brand: 'brand', qs_filter_custom: 'custom' }[key];
+    return kind && isOn(config, key) && pageValues ? filterHiddenNote(kind, pageValues[kind], config.qs_filter_custom_tags) : null;
+  };
+  const toggleWithLabel = (key, labelKey, title, help, styleKey = null) => (
     <BlockStack gap="100">
       <Checkbox label={title} checked={isOn(config, key)} onChange={(v) => updateConfig(key, v)} helpText={help} />
+      {hiddenNote(key) && <Text as="p" variant="bodySm" tone="caution">{hiddenNote(key)}</Text>}
       {isOn(config, key) && (
         <TextField label="Label" labelHidden value={val(config, labelKey)} onChange={(v) => updateConfig(labelKey, v)} autoComplete="off" />
+      )}
+      {/* Type / Brand / own tag / Sort: each a dropdown or a row of chips ('' = the old all-in-one setting). */}
+      {isOn(config, key) && styleKey && (
+        <Select
+          label="Shown as" options={GROUP_STYLES}
+          value={val(config, styleKey) || val(config, 'qs_filter_dd_style') || 'dropdown'}
+          onChange={(v) => updateConfig(styleKey, v)}
+        />
       )}
     </BlockStack>
   );
@@ -520,9 +547,9 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Collection filters</Text></div>
         <CollectionFilterGroups config={config} updateConfig={updateConfig} collections={collections} />
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Dropdown filters</Text></div>
-        {toggleWithLabel('qs_filter_type', 'qs_filter_type_label', 'Product type', 'Lists the Shopify product types on the page.')}
-        {toggleWithLabel('qs_filter_brand', 'qs_filter_brand_label', 'Brand (vendor)', 'Lists the vendors on the page.')}
-        {toggleWithLabel('qs_filter_custom', 'qs_filter_custom_label', 'Your own tag filter', 'A dropdown of tags you choose, e.g. Cut: Boneless, With skin.')}
+        {toggleWithLabel('qs_filter_type', 'qs_filter_type_label', 'Product type', 'Lists the Shopify product types on the page.', 'qs_filter_type_style')}
+        {toggleWithLabel('qs_filter_brand', 'qs_filter_brand_label', 'Brand (vendor)', 'Lists the vendors on the page.', 'qs_filter_brand_style')}
+        {toggleWithLabel('qs_filter_custom', 'qs_filter_custom_label', 'Your own tag filter', 'Tags you choose, e.g. Cut: Boneless, With skin.', 'qs_filter_custom_style')}
         {isOn(config, 'qs_filter_custom') && (
           <TextField
             label="Tags in this dropdown" value={config.qs_filter_custom_tags || ''} onChange={(v) => updateConfig('qs_filter_custom_tags', v)}
@@ -532,9 +559,9 @@ function FiltersSectionComponent({ config, updateConfig, expanded, onToggle, col
         {toggleWithLabel('qs_filter_weight', 'qs_filter_weight_label', 'Weight', 'From your products\' Shopify variant weights, e.g. 250 g, 500 g, 1 kg.')}
         {isOn(config, 'qs_filter_weight') && <WeightFilterOptions config={config} updateConfig={updateConfig} />}
         {toggleWithLabel('qs_filter_price', 'qs_filter_price_label', 'Price slider', 'Shoppers drag from – to between the cheapest and dearest product on the page.')}
-        {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.')}
+        {toggleWithLabel('qs_filter_sort', 'qs_filter_sort_label', 'Sort', 'Price, biggest discount, name.', 'qs_filter_sort_style')}
         {toggleWithLabel('qs_filter_instock', 'qs_filter_instock_label', '“In stock” chip', 'Hides sold-out products when on.')}
-        <Text as="p" variant="bodySm" tone="subdued">A dropdown only shows when the products on the page have at least two values for it.</Text>
+        <Text as="p" variant="bodySm" tone="subdued">A filter only shows when the products on the page have at least two values for it.</Text>
         <div className="cst-section-divider"><Text variant="headingSm" as="h6">Filter look</Text></div>
         <Select
           label="Where filters show on desktop"

@@ -5,6 +5,7 @@ export const getShopPlan = null;
 export const getPriceDisplay = null;
 export const savePriceDisplay = null;
 export const getAnalyticsData = null;
+export const loadModuleStatus = null;
 export const getAgencyStoreStatus = null;
 export const getAdminLanguage = null;
 export const saveAdminLanguage = null;

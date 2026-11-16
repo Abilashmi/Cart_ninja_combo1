@@ -38,7 +38,7 @@
   var PRODUCT_COLLECTIONS = String((script && script.getAttribute('data-product-collections')) || '').split(',').filter(function (id) { return /^\d+$/.test(id); });
   var BRIX_LOGO = (script && script.getAttribute('data-brix-logo')) || '';
   var ROOT = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-  var CONFIG_KEY = 'brix_cod_config_v7'; // bump when the config shape changes (v7: product picks, unlisted products)
+  var CONFIG_KEY = 'brix_cod_config_v8'; // bump when the config shape changes (v7: product picks, unlisted products; v8: products' own COD fee, products left out of prepaid)
   var ADDRESS_KEY = 'brix_cod_address_v1';
   var TOKEN_KEY = 'brix_cod_token_v1';
 
@@ -95,6 +95,8 @@
     invalid_phone: ['error.cod.invalid_phone', 'Enter a valid 10-digit mobile number.'],
     invalid_pincode: ['error.cod.invalid_pincode', 'Enter a valid 6-digit PIN code.'],
     otp_invalid: ['error.cod.otp_invalid', 'Enter the 4-digit code from the SMS.'],
+    partial_unavailable: ['error.cod.partial_unavailable', 'Part payment is not available for this order. Please choose Cash on Delivery or pay online.'],
+    partial_required: ['error.cod.partial_required', 'This order needs a part payment online. Please choose Part payment.'],
     otp_locked: ['error.cod.otp_locked', 'Too many wrong tries. Ask for a new code.'],
     otp_expired: ['error.cod.otp_expired', 'This code has expired. Ask for a new one.'],
     otp_wrong: ['error.cod.otp_wrong', 'That code doesn\'t match. {attemptsLeft, plural, one {# try left.} other {# tries left.}}'],
@@ -102,7 +104,7 @@
     otp_send_failed: ['error.cod.otp_send_failed', 'We couldn\'t send the code to this number. Check it and try again, or pay online.'],
     item_unavailable: ['error.cod.item_unavailable', 'One of the items in your cart is no longer available. Refresh the page and try again.'],
     item_sold_out: ['error.cod.item_sold_out', '{title} is sold out.'],
-    checkout_only: ['error.cod.checkout_only', 'This cart has a Pack or free gift that is only available with online payment.'],
+    checkout_only: ['error.cod.checkout_only', 'This cart has a free gift that is only available with online payment.'],
     in_progress: ['error.cod.in_progress', 'Your order is already being placed. Please wait a moment.'],
     database_error: ['error.cod.unavailable', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.'],
     storage_missing: ['error.cod.unavailable', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.'],
@@ -125,6 +127,25 @@
     v[name] = '\u0001';
     return esc(bxT(key, en, v)).replace('\u0001', html);
   }
+  // Partial COD: { advance, balance } for an order total, or null when it isn't on
+  // offer (mirrors partialCodSplit in app/utils/partial-cod.shared.js; the app
+  // server works out the real amounts again). `q` = the quote: its shipping +
+  // COD fee are the advance in `charges` mode.
+  function partialSplit(cfg, q) {
+    var p = cfg && cfg.partialCod;
+    var t = Number(q && q.total);
+    if (!p || !isFinite(t) || t <= 0) return null;
+    if (Number(p.minOrder) > 0 && t < Number(p.minOrder)) return null;
+    if (Number(p.maxOrder) > 0 && t > Number(p.maxOrder)) return null;
+    var raw = p.mode === 'percent' ? (t * Number(p.percent)) / 100
+      : p.mode === 'charges' ? (Number(q.shipping) || 0) + (Number(q.codFee) || 0)
+        : Number(p.amount);
+    if (!isFinite(raw) || raw <= 0) return null;
+    var advance = Math.max(1, Math.ceil(raw - 1e-9));
+    if (advance >= t) return null;
+    return { advance: advance, balance: Math.round((t - advance) * 100) / 100 };
+  }
+
   function errorText(res) {
     var known = res && res.code && Object.prototype.hasOwnProperty.call(COD_ERRORS, res.code) ? COD_ERRORS[res.code] : null;
     var vars = res && res.details && res.details.vars;
@@ -183,36 +204,70 @@
 
   // Price tags in the merchant's button text ("Buy it for {cod_price} COD"),
   // {{tag}} too. Mirrors app/utils/price-tags.shared.js fillPriceTags.
-  var PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving)\s*\}?\}/g;
+  var PRICE_TAG = /\{\{?\s*(price|cod_fee|cod_price|prepaid_price|saving|partial_cod_amount)\s*\}?\}/g;
   function hasPriceTags(text) { return new RegExp(PRICE_TAG.source).test(String(text || '')); }
-  function showsCodFee(text) { return /\{\{?\s*(cod_fee|cod_price)\s*\}?\}/.test(String(text || '')); }
   function priceTags(text, values, fmt) {
     return String(text || '').replace(PRICE_TAG, function (all, key) {
       var n = values ? values[key] : null;
       return n == null || !isFinite(Number(n)) ? '' : fmt(Number(n));
     }).replace(/\s+/g, ' ').trim();
   }
+  // {partial_cod_amount}: what Partial COD takes now for items worth `price`
+  // with COD fee `fee`, plus the flat shipping; where part payment isn't
+  // offered, the whole amount to pay on delivery. Mirrors
+  // partial-cod.shared.js partialCodTagAmount.
+  function partialTagAmount(cfg, price, fee) {
+    var p = Number(price);
+    if (price == null || !isFinite(p)) return null;
+    var c = cfg || configValue || {};
+    var f = Number(fee) || 0;
+    var ship = Number(c.shippingFee) > 0 && !(Number(c.freeShippingAbove) > 0 && p >= Number(c.freeShippingAbove)) ? Number(c.shippingFee) : 0;
+    var total = Math.round((p + f + ship) * 100) / 100;
+    var split = partialSplit(c, { total: total, shipping: ship, codFee: f });
+    return split ? split.advance : total;
+  }
+  // Adds {partial_cod_amount} to a set of tag values that has {cod_price}.
+  function withPartialTag(values, cfg) {
+    if (values && values.cod_price != null && isFinite(Number(values.cod_price))) {
+      var fee = Number(values.cod_fee) || 0;
+      values.partial_cod_amount = partialTagAmount(cfg, Math.round((Number(values.cod_price) - fee) * 100) / 100, fee);
+    }
+    return values;
+  }
   // The COD fee for an order of `price` (cod.shared.js codFeeOf, same
   // rounding): codFeePercent % of it from codFeePercentFrom on, else the
   // fixed codFee (also when the price isn't known yet).
-  function codFeeFor(cfg, price) {
+  // `ids`: the order's product ids (numeric), when known: products with
+  // their own fee (cfg.codFeeProducts) only = that fee, mixed with others =
+  // the higher one. Mirrors cod.shared.js codFeeOf / codProductFee.
+  function codFeeFor(cfg, price, ids) {
     var fixed = cfg && cfg.codFee > 0 ? Number(cfg.codFee) : 0;
     var pct = cfg && cfg.codFeePercent > 0 ? Number(cfg.codFeePercent) : 0;
     var value = Number(price);
-    if (!pct || price == null || !isFinite(value) || value < (Number(cfg.codFeePercentFrom) || 0)) return fixed;
-    return Math.round(value * pct) / 100;
+    var normal = !pct || price == null || !isFinite(value) || value < (Number(cfg.codFeePercentFrom) || 0) ? fixed : Math.round(value * pct) / 100;
+    var own = cfg && cfg.codFeeProducts;
+    var picked = own && Array.isArray(own.products) ? own.products.map(String) : [];
+    var list = (ids || []).map(String).filter(Boolean);
+    var hit = function (id) { return picked.indexOf(id) !== -1; };
+    if (!picked.length || !list.some(hit)) return normal;
+    var fee = Number(own.fee) > 0 ? Math.round(Number(own.fee) * 100) / 100 : 0;
+    return list.every(hit) ? fee : Math.max(normal, fee);
+  }
+  // The cart's product ids (numeric), for codFeeFor.
+  function cartProductIds(cart) {
+    return ((cart && cart.items) || []).map(function (it) { return String(it.product_id || ''); }).filter(Boolean);
   }
   // The merchant's COD button texts; left at the English default = the shopper's language.
   function drawerText(cfg) { return bxText(cfg.buttons && cfg.buttons.drawerText, 'storefront.cod.button', 'Cash on Delivery'); }
   function productText(cfg) { return bxText(cfg.buttons && cfg.buttons.productText, 'storefront.cod.product_button', 'Buy with Cash on Delivery'); }
-  function hasCodFee(cfg) { return Boolean(cfg && (cfg.codFee > 0 || cfg.codFeePercent > 0)); }
+  function hasCodFee(cfg) { return Boolean(cfg && (cfg.codFee > 0 || cfg.codFeePercent > 0 || (cfg.codFeeProducts && cfg.codFeeProducts.fee > 0))); }
 
   // A COD button's text for this price (null = not known yet).
-  function codLabel(cfg, text, price) {
+  function codLabel(cfg, text, price, ids) {
     if (!hasPriceTags(text)) return text;
-    var fee = codFeeFor(cfg, price);
+    var fee = codFeeFor(cfg, price, ids);
     var values = price == null || !isFinite(Number(price)) ? { cod_fee: fee }
-      : { price: Number(price), cod_fee: fee, cod_price: Math.round((Number(price) + fee) * 100) / 100 };
+      : withPartialTag({ price: Number(price), cod_fee: fee, cod_price: Math.round((Number(price) + fee) * 100) / 100 }, cfg);
     return priceTags(text, values, shopperMoney());
   }
 
@@ -460,10 +515,12 @@
     return loadConfig().then(function (cfg) { return Boolean(cfg && cfg.enabled && (!surface || cfg.surfaces[surface] !== false)); });
   }
 
+  // Free reward gifts only: Packs can be paid on delivery (the server gives
+  // them the Pack price, cod.server.js packAdjustments).
   function cartHasCheckoutOnlyLines(cart) {
     return (cart.items || []).some(function (item) {
       var p = item.properties || {};
-      return Boolean(p._brix_pack_id) || p._brixReward === 'true' || p._brixReward === true;
+      return p._brixReward === 'true' || p._brixReward === true;
     });
   }
 
@@ -631,6 +688,11 @@
     '.pay{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:14px;border:1px solid #eef0f3}',
     '.pay .ic{flex:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--cod-bg,#111827)}',
     '.pay .cb{flex:1;font-size:13px;color:#6b7280}.pay .cb b{display:block;font-size:14.5px;color:#111827}',
+    // Partial COD: Cash on Delivery and Part payment as two choices.
+    'button.pay{width:100%;background:#fff;font:inherit;text-align:start;cursor:pointer;margin:0 0 8px}',
+    'button.pay[aria-pressed="true"]{border-color:var(--cod-bg,#111827);box-shadow:0 0 0 1px var(--cod-bg,#111827)}',
+    'button.pay .rd{flex:none;width:20px;height:20px;border-radius:50%;border:2px solid #d0d5dd}',
+    'button.pay[aria-pressed="true"] .rd{border:6px solid var(--cod-bg,#111827)}',
     '.nud{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,#eff6ff,#f5f3ff);color:#1e3a8a;font-size:13px}',
     '.nud .cb{flex:1}',
     '.nud .b{width:auto;padding:8px 12px;font-size:13px;border-radius:10px;background:#fff;color:#1e3a8a;border-color:#c7d2fe;flex:none}',
@@ -1533,28 +1595,34 @@
     return html;
   }
 
-  // The quote's "box" discount is a Pack's tier when every entry says so (cod.server.js packAdjustments).
-  function isPackQuote(q) {
-    var list = q.comboDiscounts || [];
-    return list.length > 0 && list.every(function (b) { return b.kind === 'pack'; });
-  }
-
   Sheet.prototype.renderReview = function (couponFailed) {
     var q = this.quote, fmt = this.fmt, a = this.addr;
+    // Partial COD: offered for this total? Picked? (this.payMode)
+    var split = partialSplit(this.cfg, q);
+    // "Only part payment": no full Cash on Delivery where Partial COD is offered.
+    var partialOnly = Boolean(split) && Boolean(this.cfg.partialCod && this.cfg.partialCod.only);
+    if (!split) this.payMode = 'cod';
+    else if (partialOnly) this.payMode = 'partial';
+    var partial = Boolean(split) && this.payMode === 'partial';
     var prevBody = this.sh.querySelector('.bd');
     var scrollTop = prevBody ? prevBody.scrollTop : 0;
     var rows = '<div class="rows">' +
       '<div><span>' + esc(bxT('storefront.cod.items', 'Items')) + '</span><span class="num">' + fmt(q.itemsTotal) + '</span></div>' +
       // Weight combo box price: the same discount Shopify checkout gives (cod.server.js).
-      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>' + esc(isPackQuote(q) ? bxT('storefront.cod.pack_discount', 'Pack discount') : bxT('storefront.cod.combo_discount', 'Combo box discount')) + '</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
+      (q.comboDiscount > 0 ? '<div style="color:#067647"><span>' + esc(bxT('storefront.cod.combo_discount', 'Combo box discount')) + '</span><span class="num">−' + fmt(q.comboDiscount) + '</span></div>' : '') +
+      // Pack price (Buy 2 / Buy 3 ...): the same discount Shopify checkout gives.
+      (q.packDiscount > 0 ? '<div style="color:#067647"><span>' + esc(bxT('storefront.cod.pack_discount', 'Pack discount')) + '</span><span class="num">−' + fmt(q.packDiscount) + '</span></div>' : '') +
       discountRows(q, fmt) +
       chargeRows(this.cfg, q, fmt) +
       (q.tax > 0 && !q.taxesIncluded ? '<div><span>' + esc(bxT('storefront.cod.taxes', 'Taxes')) + '</span><span class="num">' + fmt(q.tax) + '</span></div>' : '') +
-      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>' + esc(bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(q.total) + '</span></div>' +
+      // Part payment: the full amount is the order total, split into Pay now / Pay on delivery below.
+      '<div class="tot' + (this.couponJustApplied ? ' flash' : '') + '"><span>' + esc(partial ? bxT('storefront.drawer.total', 'Total') : bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(q.total) + '</span></div>' +
       (q.tax > 0 && q.taxesIncluded ? '<div class="mu"><span>' + esc(bxT('storefront.cod.includes_tax', 'Includes {amount} in taxes', { amount: fmt(q.tax) })) + '</span></div>' : '') +
+      (partial ? '<div><span>' + esc(bxT('storefront.cod.partial_pay_now', 'Pay now')) + '</span><span class="num">' + fmt(split.advance) + '</span></div>' +
+        '<div><span>' + esc(bxT('storefront.cod.pay_on_delivery', 'Pay on delivery')) + '</span><span class="num">' + fmt(split.balance) + '</span></div>' : '') +
       '</div>';
     // The coupon card already shows its saving; this banner is for automatic discounts.
-    var autoSaving = (q.comboDiscount || 0) + (q.coupon && q.coupon.applied ? 0 : q.discounts);
+    var autoSaving = (q.comboDiscount || 0) + (q.packDiscount || 0) + (q.coupon && q.coupon.applied ? 0 : q.discounts);
     var save = autoSaving > 0 ? '<div class="save">' + icon('tag', 16) + esc(bxT('storefront.cod.saving_order', 'You\'re saving {amount} on this order', { amount: fmt(autoSaving) })) + '</div>' : '';
     var nudge = this.cfg.prepaidNudgeText && typeof this.opts.onPayOnline === 'function'
       ? '<div class="nud">' + icon('card', 22) + '<div class="cb">' + esc(this.cfg.prepaidNudgeText) + '</div><button type="button" class="b" data-act="online">' + esc(bxT('storefront.cod.pay_online', 'Pay online')) + '</button></div>' : '';
@@ -1563,13 +1631,26 @@
       '<br><span dir="ltr">+91 ' + esc(prettyPhone(this.phone)) + '</span></div><button type="button" class="lk" data-go="address">' + esc(bxT('storefront.common.edit', 'Edit')) + '</button></div>';
     var pay = '<div class="pay"><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div>' +
       icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>';
+    var partialNote = partial ? '<p class="mu" style="margin:0 0 4px;font-size:12.5px">' + esc(bxT('storefront.cod.partial_note', 'You\'ll pay {advance} in the store\'s secure checkout. Keep {balance} ready at delivery.', { advance: split ? fmt(split.advance) : '', balance: split ? fmt(split.balance) : '' })) + '</p>' : '';
+    if (partialOnly) {
+      // The only way to pay: the advance now online + the rest on delivery.
+      pay = '<div class="pay"><div class="ic">' + icon('card', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.partial_title', 'Part payment')) + '</b>' + esc(bxT('storefront.cod.partial_desc', 'Pay {advance} now online, {balance} on delivery', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</div>' +
+        icon('checkCircle', 22, ' style="color:#12b76a;flex:none"') + '</div>' + partialNote;
+    } else if (split) {
+      // Two choices: the whole amount on delivery, or the advance now online + the rest on delivery.
+      pay = '<button type="button" class="pay" data-act="pay-mode" data-mode="cod" aria-pressed="' + String(!partial) + '"><span class="rd"></span><div class="ic">' + icon('cash', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.title', 'Cash on Delivery')) + '</b>' + esc(bxT('storefront.cod.pay_when_arrives', 'Pay {amount} when your order arrives', { amount: fmt(q.total) })) + '</div></button>' +
+        '<button type="button" class="pay" data-act="pay-mode" data-mode="partial" aria-pressed="' + String(partial) + '"><span class="rd"></span><div class="ic">' + icon('card', 20) + '</div><div class="cb"><b>' + esc(bxT('storefront.cod.partial_title', 'Part payment')) + '</b>' + esc(bxT('storefront.cod.partial_desc', 'Pay {advance} now online, {balance} on delivery', { advance: fmt(split.advance), balance: fmt(split.balance) })) + '</div></button>' +
+        partialNote;
+    }
     this.frame(bxT('storefront.cod.review_title', 'Review your order'), 'address', 'review',
       this.lineList(q) + this.couponBlock() + save + rows +
       '<div class="ttl">' + esc(bxT('storefront.cod.deliver_to', 'Deliver to')) + '</div>' + ship + this.deliveryBlock() +
       '<div class="ttl">' + esc(bxT('storefront.cod.payment', 'Payment')) + '</div>' + pay + nudge + '<div data-err></div>',
       '<label class="agr"><input type="checkbox" name="policy"' + (this.policyOk ? ' checked' : '') + '>' +
       '<span>' + bxHtml('storefront.cod.agree', 'I agree to the {terms}', 'terms', '<a href="' + esc(termsUrl(this.cfg)) + '" target="_blank" rel="noopener">' + esc(bxT('storefront.cod.terms', 'Terms and conditions')) + '</a>') + '</span></label>' +
-      '<button type="submit" class="b p">' + esc(bxT('storefront.cod.place_order', 'Place COD order')) + ' \u00b7 ' + fmt(q.total) + '</button>');
+      '<button type="submit" class="b p">' + (partial
+        ? esc(bxT('storefront.cod.partial_button', 'Pay {amount} now', { amount: fmt(split.advance) }))
+        : esc(bxT('storefront.cod.place_order', 'Place COD order')) + ' \u00b7 ' + fmt(q.total)) + '</button>');
     this.submitAction = 'place';
     var body = this.sh.querySelector('.bd');
     if (body) body.scrollTop = scrollTop;
@@ -1627,6 +1708,7 @@
       if (typeof cb === 'function') { try { cb(); } catch (err) { /* caller */ } }
       return;
     }
+    if (act === 'pay-mode') { this.payMode = t.getAttribute('data-mode') === 'partial' ? 'partial' : 'cod'; this.setError(''); this.renderReview(); return; }
     if (act === 'resend') { this.sendCode(true); return; }
     if (act === 'summary') {
       var box = t.closest('.sum');
@@ -1710,6 +1792,7 @@
     if (this.submitAction === 'place') {
       var active = (this.shadow && this.shadow.activeElement) || document.activeElement;
       if (active && active.name === 'coupon') return this.applyCoupon();
+      if (this.payMode === 'partial' && this.quote && partialSplit(this.cfg, this.quote)) return this.payPartial();
       return this.placeOrder();
     }
   };
@@ -1838,6 +1921,76 @@
     });
   };
 
+  // Partial COD: the app server prices the order like a COD order and makes a
+  // one-time code that leaves only the advance to pay (app/services/
+  // partial-cod.server.js). Shopify checkout then opens for these items with
+  // the code, the shopper's address filled in, and the _brix_partial_cod
+  // attribute (BRIX's payment customization hides Cash on Delivery there, so
+  // the advance is paid online). When the order comes in, BRIX adds the rest
+  // back as "Balance payable on delivery" and Shopify shows it Partially paid.
+  Sheet.prototype.payPartial = function () {
+    var self = this;
+    var policy = this.sh.querySelector('[name="policy"]');
+    if (policy && !policy.checked) {
+      this.setError(bxT('storefront.cod.need_terms', 'Please agree to the Terms and conditions to place your order.'));
+      policy.parentNode.classList.add('bad');
+      vibrate(50);
+      return;
+    }
+    this.setError('');
+    this.setBusy(true, bxT('storefront.cod.opening_checkout', 'Opening secure checkout\u2026'));
+    api('partial-cod', {
+      surface: this.opts.surface,
+      items: this.items,
+      coupon: this.quote && this.quote.coupon && this.quote.coupon.applied ? this.quote.coupon.code : null,
+      cartCodes: this.cartCodes,
+      cartAttributes: this.cartAttributes,
+      address: this.addr,
+      delivery: this.delivery,
+    }).then(function (json) {
+      if (!json.success || !json.code) {
+        self.setBusy(false);
+        if (json.code === 'delivery_changed') { self.reviewNotice = json.error; self.go('review'); return; }
+        self.setError(errorText(json));
+        return;
+      }
+      window.location.href = partialCheckoutUrl(self.items, json, self.addr, self.phone);
+    });
+  };
+
+  // The Shopify checkout of a Partial COD order: a cart permalink for exactly
+  // these items, with the code, the address filled in and the attribute that
+  // keeps Cash on Delivery off that checkout.
+  function partialCheckoutUrl(items, res, addr, phone) {
+    var merged = {};
+    var order = [];
+    (items || []).forEach(function (it) {
+      var id = String(it.variantId || it.id || '');
+      if (!/^\d+$/.test(id)) return;
+      if (!merged[id]) { merged[id] = 0; order.push(id); }
+      merged[id] += Number(it.quantity) || 1;
+    });
+    var a = addr || {};
+    var name = String(a.name || '').trim().split(/\s+/);
+    var first = name.shift() || '';
+    var params = [
+      ['discount', res.code],
+      ['attributes[_brix_partial_cod]', String(res.advance)],
+      ['checkout[email]', a.email || ''],
+      ['checkout[shipping_address][first_name]', first],
+      ['checkout[shipping_address][last_name]', name.join(' ') || first],
+      ['checkout[shipping_address][address1]', a.address1 || ''],
+      ['checkout[shipping_address][address2]', a.address2 || ''],
+      ['checkout[shipping_address][city]', a.city || ''],
+      ['checkout[shipping_address][province]', a.state || ''],
+      ['checkout[shipping_address][zip]', a.pincode || ''],
+      ['checkout[shipping_address][country]', 'IN'],
+      ['checkout[shipping_address][phone]', phone ? '+91' + phone : ''],
+    ].filter(function (pair) { return pair[1]; });
+    return ROOT + 'cart/' + order.map(function (id) { return id + ':' + merged[id]; }).join(',') + '?' +
+      params.map(function (pair) { return encodeURIComponent(pair[0]).replace(/%5B/g, '[').replace(/%5D/g, ']') + '=' + encodeURIComponent(pair[1]); }).join('&');
+  }
+
   /* ---------- public: open ---------- */
 
   // opts: { surface: 'drawer'|'product'|'combo', items?, useCart?, coupon?, attributes?,
@@ -1860,7 +2013,7 @@
       sheet.loading(bxT('storefront.cod.checking', 'Checking Cash on Delivery\u2026'));
       itemsPromise.then(function (res) {
         if (!sheet) return;
-        if (res.checkoutOnly) { sheet.fail(bxT('error.cod.checkout_only', 'This cart has a Pack or free gift that is only available with online payment.')); return; }
+        if (res.checkoutOnly) { sheet.fail(bxT('error.cod.checkout_only', 'This cart has a free gift that is only available with online payment.')); return; }
         if (!res.items.length) { sheet.fail(bxT('storefront.cod.cart_empty', 'Your cart is empty.')); return; }
         sheet.items = res.items;
         sheet.cartCodes = res.cartCodes || [];
@@ -1955,12 +2108,9 @@
     });
   }
 
-  // "+₹40 Cash on Delivery Fee" under the button, unless the merchant hides
-  // the fee; `price` = the order it's for (a % fee needs it).
-  function feeHint(cfg, fmt, price) {
-    var fee = codFeeFor(cfg, price);
-    return fee > 0 && cfg.showCodFee !== false ? '+' + fmt(fee) + ' ' + feeLabel(cfg) : '';
-  }
+  // No "+₹40 Cash on Delivery Fee" line under the COD buttons: the fee shows
+  // on a button only where the merchant puts {cod_fee} / {cod_price} in its
+  // text (it is always in the popup's bill).
 
   var PLACEMENTS = ['replace', 'above', 'below'];
   function placementOf(cfg) { return PLACEMENTS.indexOf(cfg.drawerPlacement) !== -1 ? cfg.drawerPlacement : 'above'; }
@@ -2130,7 +2280,7 @@
       return p._brixReward === 'true' ? sum : sum + (Number(it.final_line_price) || 0);
     }, 0) / 100;
     var reason = '';
-    if (cartHasCheckoutOnlyLines(cart)) reason = bxT('storefront.cod.not_with_packs', 'Not available with Packs or free gifts');
+    if (cartHasCheckoutOnlyLines(cart)) reason = bxT('storefront.cod.not_with_packs', 'Not available with free gifts');
     else if (cfg.minOrder > 0 && subtotal < cfg.minOrder) reason = bxT('storefront.cod.min_order', 'Available on orders from {amount}', { amount: fmt(cfg.minOrder) });
     else if (cfg.maxOrder > 0 && subtotal > cfg.maxOrder) reason = bxT('storefront.cod.max_order', 'Available on orders up to {amount}', { amount: fmt(cfg.maxOrder) });
     // total: what the cart costs after its discounts (shown in price tags).
@@ -2142,18 +2292,22 @@
     var shownSaving = prepaidShownSaving(cart);
     total = Math.round((total - shownSaving) * 100) / 100;
     var saving = Math.round((codTotal - total) * 100) / 100;
-    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal, saving: saving } : { sub: showsCodFee(cfg.buttons.drawerText) ? '' : feeHint(cfg, fmt, codTotal), subtotal: subtotal, total: total, codTotal: codTotal, saving: saving };
+    var ids = cartProductIds(cart);
+    return reason ? { reason: reason, subtotal: subtotal, total: total, codTotal: codTotal, saving: saving, ids: ids } : { sub: '', subtotal: subtotal, total: total, codTotal: codTotal, saving: saving, ids: ids };
   }
 
   // Show-only prepaid (paymentValue.prepaid.showOnly): the saving the online
   // price shows, worked out like the Function (paid lines only, never gifts
   // or combo boxes, the minimum and the cap). Collections left out of it can't
-  // be told from the cart, so they aren't. 0 when BRIX creates the discount.
+  // be told from the cart, so they aren't; products left out one by one are.
+  // 0 when BRIX creates the discount.
   function prepaidShownSaving(cart) {
     var pre = paymentValue && paymentValue.prepaid;
     if (!pre || !pre.showOnly || !cart) return 0;
+    var leftOut = (Array.isArray(pre.excludedProducts) ? pre.excludedProducts : []).map(String);
     var base = (cart.items || []).reduce(function (sum, it) {
       var p = it.properties || {};
+      if (leftOut.indexOf(String(it.product_id)) !== -1) return sum;
       return p._brixReward === 'true' || p._brixReward === true || p._brix_combo_id ? sum : sum + (Number(it.final_line_price) || 0);
     }, 0) / 100;
     if (!(base > 0) || (pre.minSubtotal > 0 && base < pre.minSubtotal)) return 0;
@@ -2178,8 +2332,8 @@
     var saving = Math.round((inCart + shown) * 100) / 100;
     var cfg = configValue || null;
     var codBase = Math.round((t + inCart) * 100) / 100;
-    var fee = cfg ? codFeeFor(cfg, codBase) : null;
-    return {
+    var fee = cfg ? codFeeFor(cfg, codBase, cartProductIds(cart)) : null;
+    return withPartialTag({
       price: t,
       prepaid_price: Math.round((t - shown) * 100) / 100,
       saving: saving > 0 ? saving : null,
@@ -2187,7 +2341,7 @@
       cod_price: cfg ? Math.round((codBase + fee) * 100) / 100 : null,
       ready: configValue !== undefined,
       codText: Boolean(cfg && cfg.drawerCheckoutText && cfg.surfaces && cfg.surfaces.drawer !== false),
-    };
+    }, cfg);
   }
 
   // The BRIX prepaid discount (product page payment options) is a Shopify
@@ -2239,7 +2393,7 @@
       return;
     }
     var size = drawerSize(cfg, replace ? 'replace' : where === 'replace' ? 'above' : where, gap);
-    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, drawerText(cfg), codPrice(state)), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
+    slot.innerHTML = buttonHtml(cfg, codLabel(cfg, drawerText(cfg), codPrice(state), state.ids), state.reason || state.sub, Boolean(state.reason), size, { look: lookOf(cfg, 'drawer') });
     setReplaced(place && place.checkout, replace);
     var btn = slot.querySelector('[data-brix-cod-btn]');
     if (btn && !state.reason) {
@@ -2425,6 +2579,49 @@
     });
   }
 
+  // A Pack (packs_widget.js) tapped through Shiprocket's own product Buy Now:
+  // the Pack goes in the cart with its _brix_pack_* properties, then Shiprocket
+  // opens for the cart and applies the Pack's automatic discount itself. No
+  // discount code is made. Shiprocket missing: Shopify checkout (the Pack
+  // Function gives the Pack price). The cart add failing: opts.fallback (the
+  // Pack's own Buy Now). BRIX's own Shiprocket switch isn't needed: the tap
+  // came from Shiprocket's button (Silverline runs Shiprocket's app directly).
+  function payOnlinePack(items, opts) {
+    var fallback = function () { payingOnline = false; if (opts && typeof opts.fallback === 'function') opts.fallback(); };
+    if (payingOnline) return false;
+    if (!window.BrixCheckout || typeof window.BrixCheckout.checkoutCart !== 'function') return false;
+    payingOnline = true;
+    setTimeout(function () { payingOnline = false; }, 10000);
+    var lines = items.map(function (it) { return { id: Number(it.variantId), quantity: Number(it.quantity) || 1, properties: it.properties || {} }; });
+    window.fetch(ROOT + 'cart/add.js', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ items: lines }) })
+      .then(function (res) {
+        if (!res.ok) { fallback(); return; }
+        window.BrixCheckout.checkoutCart({
+          allowPacks: true,
+          fallbackUrl: ROOT + 'checkout',
+          onOpen: function () { payingOnline = false; if (opts && typeof opts.onOpen === 'function') opts.onOpen(); },
+        });
+      }, fallback);
+    return true;
+  }
+
+  // The selected Pack's total (shopper's currency) while a Pack widget takes
+  // over Shiprocket's Buy Now; null = the theme's variant x quantity as usual.
+  // order: the Pack widget's "theme's buttons under the Pack" mode, where this
+  // file's own product COD button orders the Pack: a function returning
+  // { items, onPayOnline } for the selected Pack (null = not ready; the widget
+  // shows why). Its label uses the Pack price then too.
+  var packPrice = null;
+  var packOrder = null;
+  function setPackPrice(price, order) {
+    var next = price != null && isFinite(price) && Number(price) > 0 ? Number(price) : null;
+    var nextOrder = next != null && typeof order === 'function' ? order : null;
+    if (next === packPrice && nextOrder === packOrder) return;
+    packPrice = next;
+    packOrder = nextOrder;
+    if (productMount && typeof productMount.relabel === 'function') productMount.relabel();
+  }
+
   // "Pay online" goes through the theme's own Checkout button, so anything
   // the theme or another app does on checkout (notes, terms box, checkout
   // apps) still happens. Clicking works while it's hidden by "Replace".
@@ -2540,8 +2737,8 @@
     if (!text) return '';
     var price = state ? cartPrice(state) : null;
     var cod = state ? codPrice(state) : null;
-    var fee = codFeeFor(cfg, cod);
-    var values = price == null ? {} : { price: price, prepaid_price: price, saving: state.saving > 0 ? state.saving : null, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 };
+    var fee = codFeeFor(cfg, cod, state && state.ids);
+    var values = price == null ? {} : withPartialTag({ price: price, prepaid_price: price, saving: state.saving > 0 ? state.saving : null, cod_fee: fee, cod_price: Math.round((cod + fee) * 100) / 100 }, cfg);
     return hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
   }
 
@@ -2704,6 +2901,15 @@
     return form.getAttribute('id') || '';
   }
 
+  // The button itself, or the row it sits in when that row is a one-line flex
+  // row (a block put after the button there would squeeze into the row).
+  function rowOf(btn) {
+    var row = btn.parentNode;
+    if (!row || row.nodeType !== 1) return btn;
+    var cs = window.getComputedStyle(row);
+    return /flex/.test(cs.display) && !/column/.test(cs.flexDirection) && cs.flexWrap === 'nowrap' ? row : btn;
+  }
+
   function submitButtonFor(form) {
     var id = formIdOf(form);
     return form.querySelector('[type="submit"][name="add"], button[name="add"], [type="submit"]')
@@ -2848,23 +3054,40 @@
   // is hidden. So: never one inside a cart drawer or marked for the cart; the
   // one in the product's own section first, else the first other match.
   var CART_PLACES = 'cart-drawer, cart-notification, #CartDrawer, #cart-drawer, .cart-drawer, .drawer--cart, #cc-root, [data-brix-cod-drawer]';
-  function customBuyNow(cfg) {
+  // Every product-page match: a page can have more than one (Silverline:
+  // Shiprocket drew a second product Buy Now, and only the first, not the
+  // one on screen, got the merchant's text).
+  function customBuyNows(cfg) {
     var sel = cfg && cfg.productButton && cfg.productButton.buyNowSelector;
-    if (!sel) return null;
+    if (!sel) return [];
     var list;
-    try { list = document.querySelectorAll(sel); } catch (e) { return null; }
-    var form = productForm();
-    var section = form && (form.closest('.shopify-section') || form.parentNode);
-    var first = null;
+    try { list = document.querySelectorAll(sel); } catch (e) { return []; }
+    var out = [];
     for (var i = 0; i < list.length; i++) {
       var el = list[i];
-      var kind = String(el.getAttribute('data-type') || '').toLowerCase();
+      // The place mark can sit on a box around the match: a selector for
+      // Shiprocket's button itself (.sr-headless-checkout) has its
+      // data-type on the .shiprocket-headless wrapper.
+      var typed = el.closest ? el.closest('[data-type]') : el;
+      var kind = String((typed && typed.getAttribute('data-type')) || '').toLowerCase();
       if (kind === 'mini-cart' || kind === 'cart') continue;
       if (el.closest && el.closest(CART_PLACES)) continue;
-      if (section && section.contains(el)) return el;
-      if (!first) first = el;
+      if (out.some(function (o) { return o.contains(el) || el.contains(o); })) continue;
+      out.push(el);
     }
-    return first;
+    return out;
+  }
+  function shownOnPage(el) { return el.getClientRects().length > 0; }
+  // The one to place COD next to: in the product's section and on screen
+  // first, then in the section, then on screen, then the first.
+  function customBuyNow(cfg) {
+    var list = customBuyNows(cfg);
+    if (!list.length) return null;
+    var form = productForm();
+    var section = form && (form.closest('.shopify-section') || form.parentNode);
+    var inSection = list.filter(function (el) { return section && section.contains(el); });
+    var pick = function (arr) { return arr.filter(shownOnPage)[0] || null; };
+    return pick(inSection) || inSection[0] || pick(list) || list[0];
   }
   function findBuyNow(form, cfg) {
     var custom = customBuyNow(cfg);
@@ -2879,13 +3102,29 @@
   // so that CSS text is replaced too. A ::before/::after with no letters
   // (borders, icons, effects) is left alone.
   var LABEL_PSEUDOS = ['before', 'after'];
+  // The text element and every box up to its button: the painted label can
+  // sit on any of them. Shiprocket on silverline925.in hides the text span
+  // (display:none) and paints .sr-button-text-container::after { content:
+  // "BUY NOW" }, the box between them, so the merchant's text never showed.
+  function labelHosts(el) {
+    var hosts = [el];
+    var btn = el.closest && el.closest('button, a, [role="button"], input[type="submit"]');
+    if (!btn || btn === el) return hosts;
+    for (var up = el.parentElement; up && up !== btn; up = up.parentElement) hosts.push(up);
+    hosts.push(btn);
+    return hosts;
+  }
+  // Takes the merchant's text back off the painted labels (back to the theme's).
+  function clearButtonLabel(el) {
+    if (!el) return;
+    labelHosts(el).forEach(function (host) {
+      LABEL_PSEUDOS.forEach(function (pseudo) { host.removeAttribute('data-brix-label-' + pseudo); });
+    });
+  }
   function setButtonText(el, text) {
     if (!el || !text) return;
     if (el.textContent !== text) el.textContent = text;
-    var hosts = [el];
-    var btn = el.closest && el.closest('button, a, [role="button"], input[type="submit"]');
-    if (btn && btn !== el) hosts.push(btn);
-    hosts.forEach(function (host) {
+    labelHosts(el).forEach(function (host) {
       LABEL_PSEUDOS.forEach(function (pseudo) {
         var attr = 'data-brix-label-' + pseudo;
         var content = '';
@@ -2895,7 +3134,9 @@
         if (!document.getElementById('brix-cod-label-style')) {
           var style = document.createElement('style');
           style.id = 'brix-cod-label-style';
-          style.textContent = LABEL_PSEUDOS.map(function (p) { return '[data-brix-label-' + p + ']::' + p + '{content:attr(data-brix-label-' + p + ') !important}'; }).join('');
+          // The attribute three times: beats a theme's / Shiprocket's own
+          // !important rule such as .shiprocket-headless .sr-button-text-container::after.
+          style.textContent = LABEL_PSEUDOS.map(function (p) { var a = '[data-brix-label-' + p + ']'; return a + a + a + '::' + p + '{content:attr(data-brix-label-' + p + ') !important}'; }).join('');
           document.head.appendChild(style);
         }
       });
@@ -2926,20 +3167,22 @@
   function relabelBuyNow(cfg, form, info) {
     var text = cfg && cfg.productButton && cfg.productButton.buyNowText;
     if (!text || !form) return;
-    var btn = textTarget(findBuyNow(form, cfg));
-    if (!btn) return;
-    var price = productPrice(form, info);
-    var fee = codFeeFor(cfg, price);
+    var hosts = customBuyNows(cfg);
+    if (!hosts.length) { var one = findBuyNow(form, cfg); if (one) hosts = [one]; }
+    var targets = hosts.map(textTarget).filter(Boolean);
+    if (!targets.length) return;
+    var price = packPrice != null ? packPrice : productPrice(form, info);
+    var fee = codFeeFor(cfg, price, info && info.id ? [info.id] : null);
     var online = price;
     var pre = paymentValue && paymentValue.prepaid;
-    if (pre && price != null && !Pay.prepaidExcludedHere(pre)) {
+    if (pre && price != null && !Pay.prepaidExcludedHere(pre, info && info.id)) {
       var active = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY;
       var pr = Pay.pricing(price, 1, pre, 0, Boolean(pre.currency && pre.currency === active));
       if (pr.qualifies) online = pr.online;
     }
-    var values = price == null ? {} : { price: price, prepaid_price: online, saving: price - online > 0 ? Math.round((price - online) * 100) / 100 : null, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 };
+    var values = price == null ? {} : withPartialTag({ price: price, prepaid_price: online, saving: price - online > 0 ? Math.round((price - online) * 100) / 100 : null, cod_fee: fee, cod_price: Math.round((price + fee) * 100) / 100 }, cfg);
     var next = hasPriceTags(text) ? priceTags(text, values, shopperMoney()) : text;
-    setButtonText(btn, next);
+    targets.forEach(function (btn) { setButtonText(btn, next); });
   }
 
   var PRODUCT_BUTTON_DEFAULTS = { replaceBuyNow: true, buyNowPlacement: '', marginTop: 10, marginBottom: 0, paddingY: 14, paddingX: 16, radius: 12 };
@@ -2972,6 +3215,11 @@
       // The theme's spacing rules for its buttons must not add to the merchant's.
       slot.style.cssText = important('display:block;width:100%;margin:0;padding:0');
       var anchor = addBtn && addBtn.parentNode && form.contains(addBtn) ? addBtn : null;
+      // Add to cart outside its form, tied to it by form="..." (Silverline:
+      // <button type="submit" form="pdp-form"> in a row with the quantity,
+      // the form itself hidden): COD goes after that button, or after its
+      // row when the row can't wrap; it used to go inside the hidden form.
+      if (!anchor && addBtn && addBtn.parentNode && !form.contains(addBtn)) anchor = rowOf(addBtn);
       if (buyNow && where === 'below') buyNow.parentNode.insertBefore(slot, buyNow.nextSibling);
       else if (buyNow) buyNow.parentNode.insertBefore(slot, buyNow);
       else if (anchor) anchor.parentNode.insertBefore(slot, anchor.nextSibling);
@@ -2980,27 +3228,22 @@
     if (replacing) {
       hideBuyNow(form.closest('.shopify-section') || form);
       // A Buy it now found by the merchant's selector is hidden directly.
-      var custom = customBuyNow(cfg);
-      if (custom) custom.style.setProperty('display', 'none', 'important');
+      customBuyNows(cfg).forEach(function (custom) { custom.style.setProperty('display', 'none', 'important'); });
     }
     productMount = { form: form, slot: slot, addBtn: addBtn };
 
-    var fmt = buttonMoney(cfg.currency);
     var text = productText(cfg);
-    var label = codLabel(cfg, text, productPrice(form, info));
-    var sub = excluded ? bxT('storefront.cod.not_for_product', 'Not available for this product') : showsCodFee(text) ? '' : feeHint(cfg, fmt, productPrice(form, info));
+    var here = info && info.id ? [info.id] : null;
+    var label = codLabel(cfg, text, productPrice(form, info), here);
+    var sub = excluded ? bxT('storefront.cod.not_for_product', 'Not available for this product') : '';
     slot.innerHTML = buttonHtml(cfg, label, sub, Boolean(excluded), look, { look: lookOf(cfg, 'product') });
     var btn = slot.querySelector('[data-brix-cod-btn]');
     var keepsBuyNow = !replacing;
     productMount.relabel = function () {
       var el = slot.querySelector('[data-brix-cod-label]');
-      var price = productPrice(form, info);
-      var next = codLabel(cfg, text, price);
+      var price = packOrder && packPrice != null ? packPrice : productPrice(form, info);
+      var next = codLabel(cfg, text, price, here);
       if (el && el.textContent !== next) el.textContent = next;
-      // A % COD fee follows the variant and quantity too.
-      var subEl = slot.querySelector('[data-brix-cod-sub]');
-      var nextSub = excluded || showsCodFee(text) ? null : feeHint(cfg, fmt, price);
-      if (subEl && nextSub && subEl.textContent !== nextSub) subEl.textContent = nextSub;
       if (keepsBuyNow) relabelBuyNow(cfg, form, info);
     };
     productMount.relabel();
@@ -3018,6 +3261,11 @@
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
+      if (packOrder) {
+        var pack = packOrder();
+        if (pack && pack.items && pack.items.length) open({ surface: 'product', items: pack.items, onPayOnline: pack.onPayOnline });
+        return;
+      }
       var sel = formSelection(form);
       if (!/^\d+$/.test(sel.variantId)) return;
       open({
@@ -3092,7 +3340,7 @@
       var b = String(bxText(base, 'storefront.cod.buy_it_now', 'Buy it now')).trim();
       if (hasPriceTags(b)) {
         var values = pr && pr.subtotal != null
-          ? { price: pr.subtotal, prepaid_price: pr.online, saving: pr.savings > 0 ? pr.savings : null, cod_fee: pr.codFee, cod_price: pr.codTotal }
+          ? withPartialTag({ price: pr.subtotal, prepaid_price: pr.online, saving: pr.savings > 0 ? pr.savings : null, cod_fee: pr.codFee, cod_price: pr.codTotal })
           : {};
         return priceTags(b, values, st ? st.fmt : shopperMoney());
       }
@@ -3296,9 +3544,12 @@
       return Boolean(b && (b.disabled || b.getAttribute('aria-disabled') === 'true'));
     }
 
-    // This product is in a collection the merchant left out of the prepaid
-    // discount: no offer on this page (Shopify won't give it at checkout).
-    function prepaidExcludedHere(prepaid) {
+    // This product (`productId`, numeric) was left out of the prepaid
+    // discount, by itself or by a collection it's in: no offer on this page
+    // (Shopify won't give it at checkout).
+    function prepaidExcludedHere(prepaid, productId) {
+      var products = prepaid && Array.isArray(prepaid.excludedProducts) ? prepaid.excludedProducts : [];
+      if (productId && products.map(String).indexOf(String(productId)) !== -1) return true;
       var ids = prepaid && Array.isArray(prepaid.excludedCollections) ? prepaid.excludedCollections : [];
       for (var i = 0; i < ids.length; i++) if (PRODUCT_COLLECTIONS.indexOf(String(ids[i])) !== -1) return true;
       return false;
@@ -3308,9 +3559,9 @@
       var pp = st.pp;
       var sel = selection();
       var unit = priceOf(sel.variantId);
-      var prepaid = pp.online.enabled && !prepaidExcludedHere(pp.prepaid) ? pp.prepaid : null;
+      var prepaid = pp.online.enabled && !prepaidExcludedHere(pp.prepaid, st.info && st.info.id) ? pp.prepaid : null;
       var active = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || CURRENCY;
-      var codFee = codFeeFor(st.cfg, unit != null ? Math.round(unit * sel.quantity * 100) / 100 : null);
+      var codFee = codFeeFor(st.cfg, unit != null ? Math.round(unit * sel.quantity * 100) / 100 : null, st.info && st.info.id ? [st.info.id] : null);
       var pr = unit != null
         ? pricing(unit, sel.quantity, prepaid, codFee, Boolean(prepaid && prepaid.currency && prepaid.currency === active))
         // Price unknown: promise the percentage only when there's no minimum to check.
@@ -3416,7 +3667,7 @@
       // The purchase button for the chosen method.
       var look = Object.assign({}, PRODUCT_BUTTON_DEFAULTS, (st.cfg && st.cfg.productButton) || {});
       if (v.method === 'cod') {
-        st.cta.innerHTML = buttonHtml(st.cfg, codLabel(st.cfg, productText(st.cfg), v.pr.subtotal), v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
+        st.cta.innerHTML = buttonHtml(st.cfg, codLabel(st.cfg, productText(st.cfg), v.pr.subtotal, st.info && st.info.id ? [st.info.id] : null), v.cod.reason || '', Boolean(v.cod.reason) || v.soldOut, look, { look: lookOf(st.cfg, 'product') });
       } else if (v.method === 'online' && !st.buyNow) {
         var bg = st.colors.online;
         st.cta.innerHTML = buttonHtml(st.cfg, onlineLabel(pp.online.buttonText, v.pr, v.prepaid), '', v.soldOut, look, {
@@ -3448,19 +3699,22 @@
       // Product page, e.g. Shiprocket's .shiprocket-headless) isn't one of
       // Shopify's that the rule above hides: it stayed next to "Buy with COD"
       // with COD chosen. Hidden on itself (a redrawn one is marked again here).
-      var custom = customBuyNow(st.cfg);
-      if (custom && hide !== custom.hasAttribute('data-brix-pay-hidden')) {
+      var customs = customBuyNows(st.cfg);
+      customs.forEach(function (custom) {
+        if (hide === custom.hasAttribute('data-brix-pay-hidden')) return;
         if (hide) custom.setAttribute('data-brix-pay-hidden', ''); else custom.removeAttribute('data-brix-pay-hidden');
-      }
-      var btn = custom ? textTarget(st.buyNow) : nativeButton(st.buyNow);
-      if (!btn) return;
-      if (!btn.hasAttribute('data-brix-pay-orig')) btn.setAttribute('data-brix-pay-orig', btn.textContent.replace(SAVE_SUFFIX, '').trim());
-      var original = btn.getAttribute('data-brix-pay-orig');
+      });
+      var btns = customs.length ? customs.map(textTarget).filter(Boolean) : [nativeButton(st.buyNow)].filter(Boolean);
       var tagged = hasPriceTags(st.pp.online.buttonText);
-      var wanted = st.pp.relabelBuyNow && (tagged ? v.pr.subtotal != null : v.pr.qualifies && v.prepaid && v.prepaid.showBadge)
-        ? onlineLabel(st.pp.online.buttonText, v.pr, v.prepaid)
-        : original;
-      if (wanted && btn.textContent !== wanted) btn.textContent = wanted;
+      var relabel = st.pp.relabelBuyNow && (tagged ? v.pr.subtotal != null : v.pr.qualifies && v.prepaid && v.prepaid.showBadge);
+      var label = relabel ? onlineLabel(st.pp.online.buttonText, v.pr, v.prepaid) : null;
+      btns.forEach(function (btn) {
+        if (!btn.hasAttribute('data-brix-pay-orig')) btn.setAttribute('data-brix-pay-orig', btn.textContent.replace(SAVE_SUFFIX, '').trim());
+        if (label) { setButtonText(btn, label); return; }
+        clearButtonLabel(btn);
+        var orig = btn.getAttribute('data-brix-pay-orig');
+        if (orig && btn.textContent !== orig) btn.textContent = orig;
+      });
     }
 
     function track(name, params) { Track.ui(st.cfg, name, params); }
@@ -3603,9 +3857,11 @@
           var v = st.last;
           if (!v || v.method !== 'online' || !st.buyNow) return;
           var path = e.composedPath ? e.composedPath() : [];
-          if (!(path.indexOf(st.buyNow) >= 0 || (e.target.closest && e.target.closest(BUY_NOW) === st.buyNow))) return;
+          var customs = customBuyNows(st.cfg);
+          var hit = customs.filter(function (c) { return path.indexOf(c) >= 0; })[0];
+          if (!(hit || path.indexOf(st.buyNow) >= 0 || (e.target.closest && e.target.closest(BUY_NOW) === st.buyNow))) return;
           if (v.pr.qualifies) track('brix_prepaid_offer_clicked', { percent: Number(v.pr.percent) });
-          var text = customBuyNow(st.cfg) ? st.buyNow : nativeButton(st.buyNow);
+          var text = customs.length ? (hit || st.buyNow) : nativeButton(st.buyNow);
           if (!shiprocketOn() || !text || path.indexOf(text) < 0 || v.soldOut) return;
           var sel = selection();
           if (!/^\d+$/.test(sel.variantId)) return;
@@ -3689,6 +3945,8 @@
     prepaidCartCode: prepaidCartCode,
     prepareCartCode: prepareCartCode,
     priceTagValues: priceTagValues,
+    payOnlinePack: payOnlinePack,
+    setPackPrice: setPackPrice,
   };
 
   function init() {

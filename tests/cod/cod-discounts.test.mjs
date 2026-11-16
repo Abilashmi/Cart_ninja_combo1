@@ -177,3 +177,19 @@ test('coupon cap: settings keep it; empty = no limit', () => {
   assert.equal(settings().couponMaxDiscount, 0);
   assert.equal(settings({ couponMaxDiscount: '250' }).couponMaxDiscount, 250);
 });
+
+test('BRIX\'s own one-time codes left on the cart never count again (Partial COD started twice)', async () => {
+  // The shopper went to a Partial COD checkout (code PC…), came back and started again:
+  // the old code is still on their cart, next to a real store code.
+  const { admin, inputs } = fakeAdmin(shopify);
+  const { quote } = await quoteCod(admin, {
+    settings: settings({ allowCoupons: true }), lines: LINES, surface: 'drawer',
+    cartCodes: ['PCFLZAZ3DANW', 'ppabcdefghjk', 'BX23456789AB', 'KO10'],
+  });
+  assert.deepEqual(inputs[0].discountCodes, ['KO10'], 'only the store\'s own code reaches Shopify');
+  assert.deepEqual(quote.cartCodes.map((c) => c.code), ['KO10']);
+  // Typed into the popup's coupon field: ignored as well.
+  const typed = fakeAdmin(shopify);
+  await quoteCod(typed.admin, { settings: settings({ allowCoupons: true }), lines: LINES, surface: 'drawer', coupon: 'PCFLZAZ3DANW' });
+  assert.equal(typed.inputs[0].discountCodes, undefined);
+});

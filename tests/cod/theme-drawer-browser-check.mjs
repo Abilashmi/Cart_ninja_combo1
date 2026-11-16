@@ -196,7 +196,7 @@ const done = async (page, name) => {
   check('theme drawer: one button per drawer (Shop Pay button and cart page ignored)', s.slots === 1 && !s.inMain);
   check('Above Checkout: COD sits above Checkout, Checkout still shown', s.before === true && s.checkoutShown === true);
   check('Above Checkout: COD gets its own full-width row, not squeezed into the flex row', s.slotParent === 'drawer__footer' && Math.abs(s.btnWidth - s.coWidth) < 2, `${s.slotParent}, ${s.btnWidth} vs ${s.coWidth}`);
-  check('fee: "+₹40 Cash on Delivery Fee" under the button', s.text.includes('+₹40.00 Cash on Delivery Fee') || s.text.includes('+₹40 Cash on Delivery Fee'), s.text);
+  check('fee: no "+₹40 Cash on Delivery Fee" line under the button (its text has no fee tag)', !/fee/i.test(s.text) && !s.text.includes('40'), s.text);
   check('theme CSS does not restyle the COD button (no uppercase, merchant radius, merchant colour)', s.transform === 'none' && s.radius === '12px' && s.bg === 'rgb(13, 107, 76)', `${s.transform} ${s.radius} ${s.bg}`);
   check('the BRIX Cart Drawer did not take over the theme drawer', await page.evaluate(() => window.__brixCartDrawerActive === false));
   await page.locator('[data-brix-cod-drawer] [data-brix-cod-btn]').click();
@@ -295,10 +295,10 @@ const done = async (page, name) => {
 
 /* 7. Fee title and "Show fee to customers" */
 {
-  let page = await open('dawn', { cfg: { codFeeLabel: 'Handling fee' } });
+  let page = await open('dawn', { cfg: { codFeeLabel: 'Handling fee', buttons: { drawerText: 'Cash on Delivery + {cod_fee} fee' } } });
   await waitButton(page);
   let s = await look(page, DAWN_CO);
-  check('fee title: the merchant\'s title is used under the button', s.text.includes('Handling fee') && !s.text.includes('Cash on Delivery Fee'), s.text);
+  check('fee tag: {cod_fee} in the button text shows the fee, no extra line under it', /Cash on Delivery \+ ₹40(\.00)? fee/.test(s.text) && !s.text.includes('Handling fee'), s.text);
   await page.context().close();
   page = await open('dawn', { cfg: { showCodFee: false } });
   await waitButton(page);
@@ -655,10 +655,10 @@ const done = async (page, name) => {
   allErrors.push(...page.errors);
   await page.context().close();
 
-  const hint = await open('dawn', { cfg: { codFee: 80, codFeePercent: 10, codFeePercentFrom: 1000 } });
+  const hint = await open('dawn', { cfg: { codFee: 80, codFeePercent: 10, codFeePercentFrom: 1000, buttons: { drawerText: 'COD (+{cod_fee})' } } });
   await waitButton(hint);
   s = await look(hint, DAWN_CO);
-  check('% fee: the fee line under the button shows the % amount (+₹129.90)', /\+₹129\.9/.test(s.text), s.text);
+  check('% fee: {cod_fee} in the button text shows the % amount (₹129.90)', /\(\+₹129\.9/.test(s.text), s.text);
   allErrors.push(...hint.errors);
   await hint.context().close();
 }

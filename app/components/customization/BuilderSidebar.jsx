@@ -57,6 +57,7 @@ function BuilderSidebarComponent({
   expandedSections,
   toggleSection,
   collections,
+  pageProducts,
   updateConfig,
   getStyleKey,
   stepErrors,
@@ -275,7 +276,7 @@ function BuilderSidebarComponent({
                   ColorPickerField={ColorPickerField}
                 />
                 <QuickShopProductsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsProducts} onToggle={() => toggleSection('qsProducts')} />
-                <QuickShopFiltersSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsFilters} onToggle={() => toggleSection('qsFilters')} collections={collections} PxField={PxField} />
+                <QuickShopFiltersSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsFilters} onToggle={() => toggleSection('qsFilters')} collections={collections} PxField={PxField} pageProducts={pageProducts} />
                 <QuickShopCardsSection config={config} updateConfig={updateConfig} expanded={expandedSections.qsCards} onToggle={() => toggleSection('qsCards')} PxField={PxField} />
               </>
             )}

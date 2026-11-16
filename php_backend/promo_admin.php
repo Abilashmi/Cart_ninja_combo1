@@ -36,6 +36,34 @@ if (!in_array('trial_days', $existingCols, true)) {
     $pdo->exec('ALTER TABLE promo_codes ADD COLUMN trial_days INT NOT NULL DEFAULT 14');
 }
 
+// Per-shop trial override ("Shop trials" below): the trial length one store
+// gets instead of the standard 7 days, read by the Node plan page
+// (getShopTrialDays in app/services/promo.server.js, which adds the same
+// column). NULL = standard trial.
+$shopCols = $pdo->query("SHOW COLUMNS FROM shops")->fetchAll(PDO::FETCH_COLUMN);
+if (!in_array('trial_days_override', $shopCols, true)) {
+    $pdo->exec('ALTER TABLE shops ADD COLUMN trial_days_override INT NULL DEFAULT NULL');
+}
+
+// Longest trial a shop override may set; mirrors MAX_SHOP_TRIAL_DAYS in app/config/plans.js.
+const MAX_SHOP_TRIAL_DAYS = 365;
+
+// "1fd597-3", "1fd597-3.myshopify.com", "https://1fd597-3.myshopify.com/" or
+// "admin.shopify.com/store/1fd597-3" -> "1fd597-3.myshopify.com"; null if it
+// isn't a store handle.
+function normalize_shop_domain(string $input): ?string {
+    $s = strtolower(trim($input));
+    if (preg_match('~admin\.shopify\.com/store/([a-z0-9][a-z0-9-]*)~', $s, $m)) {
+        $s = $m[1];
+    }
+    $s = preg_replace('~^https?://~', '', $s);
+    $s = rtrim(explode('/', $s)[0], '.');
+    if (strpos($s, '.') === false) {
+        $s .= '.myshopify.com';
+    }
+    return preg_match('~^[a-z0-9][a-z0-9-]*\.myshopify\.com$~', $s) ? $s : null;
+}
+
 $adminPassword = getenv('PROMO_ADMIN_PASSWORD') ?: '';
 $loginError = null;
 
@@ -94,9 +122,100 @@ if ($isAuthed && ($_POST['action'] ?? null) === 'create') {
     $id = (int) ($_POST['id'] ?? 0);
     $pdo->prepare('UPDATE promo_codes SET is_active = NOT is_active WHERE id = ?')->execute([$id]);
     $flash = ['type' => 'success', 'text' => 'Updated.'];
+} elseif ($isAuthed && ($_POST['action'] ?? null) === 'shop_trial') {
+    $shopDomain = normalize_shop_domain($_POST['shop'] ?? '');
+    $daysRaw = trim($_POST['trial_days'] ?? '');
+    $days = $daysRaw === '' ? 0 : (int) $daysRaw;
+
+    if ($shopDomain === null) {
+        $flash = ['type' => 'error', 'text' => 'Enter a store like 1fd597-3 or 1fd597-3.myshopify.com.'];
+    } elseif ($days < 0 || $days > MAX_SHOP_TRIAL_DAYS) {
+        $flash = ['type' => 'error', 'text' => 'Trial days must be between 1 and ' . MAX_SHOP_TRIAL_DAYS . ' (0 or blank removes it).'];
+    } else {
+        // Same upsert redeemPromoCode uses, so a store not installed yet
+        // still gets its trial when it installs and picks a plan.
+        $stmt = $pdo->prepare(
+            'INSERT INTO shops (shop_domain, trial_days_override, updated_at) VALUES (?, ?, NOW())
+             ON DUPLICATE KEY UPDATE trial_days_override = VALUES(trial_days_override), updated_at = NOW()'
+        );
+        $stmt->execute([$shopDomain, $days > 0 ? $days : null]);
+        $flash = ['type' => 'success', 'text' => $days > 0
+            ? "$shopDomain now gets a $days-day trial on its next paid plan."
+            : "$shopDomain is back on the standard trial."];
+    }
+} elseif ($isAuthed && ($_POST['action'] ?? null) === 'extend_trial') {
+    $shopDomain = normalize_shop_domain($_POST['shop'] ?? '');
+    $days = (int) trim($_POST['extra_days'] ?? '');
+
+    if ($shopDomain === null) {
+        $flash = ['type' => 'error', 'text' => 'Enter a store like 1fd597-3 or 1fd597-3.myshopify.com.'];
+    } elseif ($days < 1 || $days > MAX_SHOP_TRIAL_DAYS) {
+        $flash = ['type' => 'error', 'text' => 'Extra days must be between 1 and ' . MAX_SHOP_TRIAL_DAYS . '.'];
+    } else {
+        $result = extend_current_trial($shopDomain, $days);
+        if (!empty($result['success'])) {
+            $ends = !empty($result['trialEndsOn']) ? ' It now ends on ' . $result['trialEndsOn'] . '.' : '';
+            $flash = ['type' => 'success', 'text' => "Added $days days to $shopDomain's trial on " . ($result['plan'] ?? 'its plan') . ".$ends"];
+        } else {
+            $flash = ['type' => 'error', 'text' => $result['error'] ?? 'Could not extend the trial.'];
+        }
+    }
+}
+
+// A running trial can only be changed through Shopify (appSubscriptionTrialExtend),
+// and only the Node app holds the shop's access token, so this asks it to:
+// app/routes/api.admin.trial-extend.jsx. BRIX_ADMIN_SECRET must be set on
+// both servers (same value).
+function extend_current_trial(string $shop, int $days): array {
+    $secret = getenv('BRIX_ADMIN_SECRET') ?: '';
+    if ($secret === '') {
+        return ['success' => false, 'error' => 'BRIX_ADMIN_SECRET is not set on this server.'];
+    }
+    $appUrl = rtrim(getenv('BRIX_APP_URL') ?: 'https://cartdrawer.fly.dev', '/');
+    $ch = curl_init($appUrl . '/api/admin/trial-extend');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => json_encode(['shop' => $shop, 'days' => $days]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 5,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_HTTPHEADER => [
+            'Content-Type: application/json',
+            'Accept: application/json',
+            'X-Brix-Admin-Secret: ' . $secret,
+            'ngrok-skip-browser-warning: 1',
+        ],
+    ]);
+    $response = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    $json = is_string($response) ? json_decode($response, true) : null;
+    if (!is_array($json)) {
+        error_log("[promo_admin] trial extend for $shop: HTTP $status" . ($error ? " ($error)" : '') . ': ' . substr((string) $response, 0, 200));
+        return ['success' => false, 'error' => "The app server did not answer (HTTP $status)."];
+    }
+    if ($status === 401) {
+        return ['success' => false, 'error' => 'The app server refused the request: BRIX_ADMIN_SECRET differs between the two servers.'];
+    }
+    return $json;
 }
 
 $codes = $isAuthed ? $pdo->query('SELECT * FROM promo_codes ORDER BY created_at DESC')->fetchAll() : [];
+$shopTrials = $isAuthed ? $pdo->query(
+    'SELECT shop_domain, trial_days_override, plan_key, updated_at FROM shops
+     WHERE trial_days_override IS NOT NULL ORDER BY updated_at DESC'
+)->fetchAll() : [];
+// Stores in a free trial right now (trial_ends_on / subscription_status are
+// synced by update-subscription-status.php from the subscriptions webhook).
+$inTrial = ($isAuthed && in_array('trial_ends_on', $shopCols, true) && in_array('subscription_status', $shopCols, true))
+    ? $pdo->query(
+        "SELECT shop_domain, plan_key, trial_ends_on FROM shops
+         WHERE trial_ends_on >= CURDATE() AND LOWER(subscription_status) = 'active'
+         ORDER BY trial_ends_on ASC"
+    )->fetchAll()
+    : [];
 ?>
 <!DOCTYPE html>
 <html>
@@ -123,6 +242,7 @@ $codes = $isAuthed ? $pdo->query('SELECT * FROM promo_codes ORDER BY created_at 
   .badge.inactive { background:#f3f4f6; color:#6b7280; }
   .row-actions form { display:inline; }
   a.logout { float:right; font-size:13px; color:#6b7280; }
+  .hint { font-size:13px; color:#6b7280; margin:0 0 14px; }
 </style>
 </head>
 <body>
@@ -183,6 +303,89 @@ $codes = $isAuthed ? $pdo->query('SELECT * FROM promo_codes ORDER BY created_at 
             <?php endforeach; ?>
             <?php if (!$codes): ?>
                 <tr><td colspan="6">No promo codes yet.</td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <h1>Shop Trials</h1>
+    <div class="card">
+        <p class="hint">Give one store its own trial length instead of the standard 7 days, without a promo code. It applies the next time the store picks a paid plan (monthly or yearly). A promo code the store redeems can only make it longer. Set 0 to remove it. For a store already in a trial, use Extend a Current Trial below.</p>
+        <form method="POST">
+            <input type="hidden" name="action" value="shop_trial">
+            <label>Store</label>
+            <input type="text" name="shop" placeholder="e.g. 1fd597-3 or 1fd597-3.myshopify.com" required>
+            <label>Trial days</label>
+            <input type="number" name="trial_days" min="0" max="<?= MAX_SHOP_TRIAL_DAYS ?>" value="14" required>
+            <button type="submit">Save shop trial</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr><th>Store</th><th>Trial</th><th>Plan</th><th>Updated</th><th></th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($shopTrials as $s): ?>
+                <tr>
+                    <td><?= htmlspecialchars($s['shop_domain']) ?></td>
+                    <td><?= (int) $s['trial_days_override'] ?> days</td>
+                    <td><?= htmlspecialchars($s['plan_key'] ?? '') ?></td>
+                    <td><?= htmlspecialchars($s['updated_at'] ?? '') ?></td>
+                    <td class="row-actions">
+                        <form method="POST">
+                            <input type="hidden" name="action" value="shop_trial">
+                            <input type="hidden" name="shop" value="<?= htmlspecialchars($s['shop_domain']) ?>">
+                            <input type="hidden" name="trial_days" value="0">
+                            <button type="submit" class="secondary">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            <?php if (!$shopTrials): ?>
+                <tr><td colspan="5">No shop trials yet.</td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <h1>Extend a Current Trial</h1>
+    <div class="card">
+        <p class="hint">For a store already in its free trial on a paid plan. Adds days to that trial in Shopify, so the merchant is billed later. Shopify only allows this while the trial is still running.</p>
+        <form method="POST">
+            <input type="hidden" name="action" value="extend_trial">
+            <label>Store</label>
+            <input type="text" name="shop" placeholder="e.g. 1fd597-3 or 1fd597-3.myshopify.com" required>
+            <label>Extra days</label>
+            <input type="number" name="extra_days" min="1" max="<?= MAX_SHOP_TRIAL_DAYS ?>" value="7" required>
+            <button type="submit">Extend trial</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr><th>Store in trial</th><th>Plan</th><th>Trial ends</th><th></th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($inTrial as $t): ?>
+                <tr>
+                    <td><?= htmlspecialchars($t['shop_domain']) ?></td>
+                    <td><?= htmlspecialchars($t['plan_key'] ?? '') ?></td>
+                    <td><?= htmlspecialchars($t['trial_ends_on'] ?? '') ?></td>
+                    <td class="row-actions">
+                        <form method="POST">
+                            <input type="hidden" name="action" value="extend_trial">
+                            <input type="hidden" name="shop" value="<?= htmlspecialchars($t['shop_domain']) ?>">
+                            <input type="number" name="extra_days" min="1" max="<?= MAX_SHOP_TRIAL_DAYS ?>" value="7" style="width:70px;margin:0 6px 0 0;" required>
+                            <button type="submit" class="secondary">Extend</button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            <?php if (!$inTrial): ?>
+                <tr><td colspan="4">No store is in a trial right now.</td></tr>
             <?php endif; ?>
             </tbody>
         </table>

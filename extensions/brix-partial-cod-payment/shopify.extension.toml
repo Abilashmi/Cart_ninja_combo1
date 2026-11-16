@@ -1,0 +1,17 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "BRIX Partial COD payment"
+handle = "brix-partial-cod-payment"
+uid = "2348b201-c1c6-abf1-888e-40f190428739d542dff8"
+type = "function"
+description = "Hides Cash on Delivery in the Shopify checkout of a BRIX Partial COD order, so its advance is always paid online."
+
+  [[extensions.targeting]]
+  target = "cart.payment-methods.transform.run"
+  input_query = "src/cart_payment_methods_transform_run.graphql"
+  export = "cart-payment-methods-transform-run"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

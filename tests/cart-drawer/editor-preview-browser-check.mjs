@@ -229,6 +229,123 @@ for (const behavior of ['replace', 'hide']) {
   await up.close();
 }
 
+// ── Vertical upsell: Carousel = tall cards sliding sideways with arrows,
+// Grid = one column of cards (the storefront's two looks); it used to be a
+// plain stacked list whatever the Layout said ──
+for (const layout of ['carousel', 'grid']) {
+  data.cartRecord = { cartStatus: 1, upsell_status: 1, upsell_data: JSON.stringify({
+    enabled: true, useAI: false, direction: 'vertical', layout, title: 'You may also like', buttonText: 'Add',
+    manualRules: [{ id: 'r1', triggerType: 'all', triggerProductIds: [], upsellProductIds: ['gid://shopify/Product/101', 'gid://shopify/Product/103', 'gid://shopify/Product/101'] }],
+  }) };
+  const vp = await ctx.newPage();
+  vp.on('pageerror', (e) => errors.push(e.message));
+  await vp.goto('https://admin.test/app/cartdrawer');
+  await vp.waitForSelector('.cart-preview-upsell-section', { timeout: 8000 }).catch(() => {});
+  const m = await vp.evaluate(() => {
+    const sec = document.querySelector('.cart-preview-upsell-section');
+    const cards = [...sec.querySelectorAll('[data-upsell-card]')].map((c) => ({ kind: c.dataset.upsellCard, r: c.getBoundingClientRect() }));
+    const slider = sec.querySelector('[data-upsell-slider="vertical"]');
+    return { kinds: [...new Set(cards.map((c) => c.kind))], n: cards.length,
+      oneRow: cards.length > 1 && cards.every((c) => Math.abs(c.r.top - cards[0].r.top) < 1),
+      oneColumn: cards.length > 1 && cards.every((c) => Math.abs(c.r.left - cards[0].r.left) < 1),
+      slides: !!slider && slider.scrollWidth > slider.clientWidth,
+      arrows: [...sec.querySelectorAll('button[aria-label^="Scroll"]')].length };
+  });
+  if (layout === 'carousel') {
+    check('preview: vertical + carousel = tall cards in one row that slides, with arrows', m.kinds.join() === 'vertical' && m.oneRow && m.slides && m.arrows === 2, JSON.stringify(m));
+    await vp.locator('.cart-preview-upsell-section').screenshot({ path: path.join(shotDir, 'upsell-vertical-carousel.png') }).catch(() => {});
+  } else {
+    check('preview: vertical + grid = one column of cards, no arrows', m.kinds.join() === 'grid' && m.oneColumn && m.arrows === 0, JSON.stringify(m));
+  }
+  await vp.close();
+}
+
+// ── Slider (one product at a time): picked in the Layout dropdown = one
+// full-width row per slide in the preview, saved as carousel + listSlider ──
+{
+  data.cartRecord = { cartStatus: 1, upsell_status: 1, upsell_data: JSON.stringify({
+    enabled: true, useAI: false, direction: 'vertical', layout: 'carousel', title: 'You may also like', buttonText: 'Add',
+    manualRules: [{ id: 'r1', triggerType: 'all', triggerProductIds: [], upsellProductIds: ['gid://shopify/Product/101', 'gid://shopify/Product/103', 'gid://shopify/Product/101'] }],
+  }) };
+  const sp = await ctx.newPage();
+  sp.on('pageerror', (e) => errors.push(e.message));
+  await sp.goto('https://admin.test/app/cartdrawer');
+  await sp.waitForSelector('.cart-preview-upsell-section', { timeout: 8000 }).catch(() => {});
+  await sp.locator('[data-section="upsellProducts"] button, [data-section="upsellProducts"] [role="button"]').first().click().catch(() => {});
+  const layoutSelect = sp.getByLabel('Layout', { exact: true });
+  await layoutSelect.selectOption('slider').catch(() => {});
+  await sp.waitForTimeout(250);
+  const m = await sp.evaluate(() => {
+    const sec = document.querySelector('.cart-preview-upsell-section');
+    const slider = sec.querySelector('[data-upsell-slider="list"]');
+    const rows = [...sec.querySelectorAll('[data-upsell-card="row"]')];
+    const lr = slider && slider.getBoundingClientRect();
+    return { n: rows.length, fill: !!lr && rows.length > 0 && Math.abs(rows[0].getBoundingClientRect().width - lr.width) < 1,
+      slides: !!slider && slider.scrollWidth > slider.clientWidth, arrows: sec.querySelectorAll('button[aria-label^="Scroll"]').length };
+  });
+  check('preview: Layout "Slider (one product at a time)" = one full-width row per slide, with arrows', (await layoutSelect.inputValue().catch(() => '')) === 'slider' && m.n === 3 && m.fill && m.slides && m.arrows === 2, JSON.stringify(m));
+  await sp.locator('.cart-preview-upsell-section').screenshot({ path: path.join(shotDir, 'upsell-list-slider.png') }).catch(() => {});
+  // Mobile view: no arrows, full width, moves on its own like the storefront.
+  await sp.getByRole('button', { name: 'Mobile' }).click();
+  await sp.waitForTimeout(300);
+  const shown = () => sp.evaluate(() => {
+    const el = document.querySelector('[data-upsell-slider="list"]'); const lr = el.getBoundingClientRect();
+    return [...el.querySelectorAll('[data-upsell-card="row"]')].findIndex((r) => Math.abs(r.getBoundingClientRect().left - lr.left) < 2);
+  });
+  const mob = await sp.evaluate(() => {
+    const sec = document.querySelector('.cart-preview-upsell-section');
+    const el = sec.querySelector('[data-upsell-slider="list"]');
+    return { arrows: sec.querySelectorAll('button[aria-label^="Scroll"]').length, inset: Math.round(el.getBoundingClientRect().left - el.parentElement.getBoundingClientRect().left) };
+  });
+  const first = await shown();
+  await sp.waitForTimeout(3800);
+  const next = await shown();
+  check('preview (Mobile): slider has no arrows, full width, and moves on its own', mob.arrows === 0 && mob.inset === 0 && first === 0 && next === 1, JSON.stringify({ ...mob, first, next }));
+  await sp.locator('.cart-preview-upsell-section').screenshot({ path: path.join(shotDir, 'upsell-list-slider-mobile.png') }).catch(() => {});
+  await sp.close();
+}
+
+// ── Sticky upsell at the bottom: sits right on the footer in the preview
+// too (the free space above it), like the storefront ──
+{
+  data.cartRecord = { cartStatus: 1, upsell_status: 1, upsell_data: JSON.stringify({
+    enabled: true, useAI: false, direction: 'vertical', layout: 'carousel', listSlider: true, sticky: true, position: 'bottom', title: 'You may also like', buttonText: 'Add',
+    manualRules: [{ id: 'r1', triggerType: 'all', triggerProductIds: [], upsellProductIds: ['gid://shopify/Product/103'] }],
+  }) };
+  const sp = await ctx.newPage();
+  sp.on('pageerror', (e) => errors.push(e.message));
+  await sp.goto('https://admin.test/app/cartdrawer');
+  await sp.waitForSelector('.cart-preview-upsell-section', { timeout: 8000 }).catch(() => {});
+  await sp.waitForTimeout(300);
+  const m = await sp.evaluate(() => {
+    let z = document.querySelector('.cart-preview-upsell-section');
+    while (z && getComputedStyle(z).position !== 'sticky') z = z.parentElement;
+    if (!z) return { sticky: false };
+    const body = z.parentElement.getBoundingClientRect(), r = z.getBoundingClientRect();
+    const prev = z.previousElementSibling && z.previousElementSibling.getBoundingClientRect();
+    return { sticky: true, gap: Math.round(body.bottom - r.bottom), spaceAbove: prev ? Math.round(r.top - prev.bottom) : null };
+  });
+  check('preview: sticky bottom upsell sits right on the footer, the free space above it', m.sticky && Math.abs(m.gap) <= 1 && m.spaceAbove > 20, JSON.stringify(m));
+  await sp.screenshot({ path: path.join(shotDir, 'upsell-sticky-bottom.png') }).catch(() => {});
+  await sp.close();
+}
+
+// ── "Checkout opens" loads the store's Shiprocket switch ──
+{
+  data.cartRecord = { cartStatus: 1 };
+  data.shiprocketEnabled = true;
+  const cp = await ctx.newPage();
+  cp.on('pageerror', (e) => errors.push(e.message));
+  await cp.goto('https://admin.test/app/cartdrawer');
+  await cp.waitForSelector('text=Checkout Button');
+  await cp.getByText('Checkout Button', { exact: true }).click();
+  await cp.waitForTimeout(300);
+  check('Checkout Button: "Checkout opens" shows Shiprocket checkout for a store with it on', (await cp.getByLabel('Checkout opens').inputValue()) === 'shiprocket');
+  check('Checkout Button: loading it leaves nothing unsaved', await cp.evaluate(() => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Save')?.getAttribute('aria-disabled') === 'true'));
+  await cp.close();
+  data.shiprocketEnabled = false;
+}
+
 // ── Coupon slider: the drawer's own saved title wins over the shared row
 // (which the Coupon Banner page writes); text cards ──
 {
@@ -397,6 +514,18 @@ for (const behavior of ['replace', 'hide']) {
     JSON.stringify({ m: c.announcement_messages, t: c.announcement_text, bg: c.announcement_bg_color }));
   const pb = body('/api/progress-bar');
   check('save: tier variant and badge go to /api/progress-bar', pb.tiers?.[0]?.reward_variants?.[P] === 'gid://shopify/ProductVariant/3' && pb.tiers?.[0]?.reward_badge_label === 'VIP BONUS', JSON.stringify(pb.tiers?.[0]));
+  // "Checkout opens" (Shopify / Shiprocket): only written when changed, so a
+  // normal save never flips the store's Shiprocket switch.
+  check('save: an untouched "Checkout opens" is not written', !saves.some((x) => x.path === '/api/checkout-via'));
+  await ed.getByLabel('Checkout opens').selectOption('shiprocket');
+  await ed.getByRole('button', { name: 'Save', exact: true }).click();
+  await ed.waitForTimeout(800);
+  const via = saves.filter((x) => x.path === '/api/checkout-via');
+  check('save: "Checkout opens: Shiprocket checkout" goes to /api/checkout-via once', via.length === 1 && via[0].body.via === 'shiprocket', JSON.stringify(via));
+  await ed.getByLabel('Checkout Button Text').fill('Pay {prepaid_price}');
+  await ed.getByRole('button', { name: 'Save', exact: true }).click();
+  await ed.waitForTimeout(800);
+  check('save: saving again without changing it does not write it again', saves.filter((x) => x.path === '/api/checkout-via').length === 1);
   const us = body('/api/upsell-settings');
   check('save: upsell colours go to /api/upsell-settings', us.button_follow_checkout === 0 && us.button_bg_color === '#008060' && us.price_color === '#ff5733', JSON.stringify(us));
   const legacy = await ed.evaluate(() => window.__LEGACY__);

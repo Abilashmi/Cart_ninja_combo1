@@ -97,6 +97,18 @@ To check a Pack on the storefront before it's live, add `?brix_packs_preview=1` 
 - `all`: every variant of the product, read from Shopify each time, so newly added variants are covered automatically.
 - `selected`: only the variants in `allowed_variant_ids_json`. The list is checked against the product's real variants on save.
 
+**Other products in a Mix & Match Pack** (optional): the main product (`product_id` / `variant_id` / `variant_scope`, unchanged) plus up to 6 `extraProducts`
+(`[{ productId, handle, title, image, variantScope: all | selected, allowedVariantIds }]`), and `showOn` (extra product pages the Pack is also shown on; it always shows on the main product's page).
+The shopper fills each slot from any of these products; the tier counts every item and the discount covers all of them.
+
+- Storage: `migrations/alter_brix_packs_extra_products.sql` adds `extra_products_json`, `show_on_json`, `show_on_ids` (`",101,102,"`, matched with `LIKE`) and `product_handle`. Run it once; a Pack that doesn't use the feature never writes these columns, so it keeps saving before the migration.
+- Save (`api.packs.jsx` → `verifyExtraProducts`): every extra product is re-read from Shopify and must be ACTIVE, on the Online Store (the widget loads `/products/<handle>.js`) and have its picked variants. Only for Mix & Match. A fixed discount is checked against the cheapest eligible variant of ANY product.
+- Checkout and COD: `buildFunctionConfig` writes `extraProducts: { "<productId>": { scope, allowedVariantIds } }` only when set, and `packDiscountsFor` accepts a line when `packCoversLine` says it is the main product (its scope) or a listed extra product (its scope); anything else, whatever its line properties say, is not the Pack's. The Function imports that file, so it needs `npm run deploy`. COD uses the same function, so no COD change was needed.
+- Config size: Packs with extra products are kept under `PACKS_CONFIG_BYTE_LIMIT` (9,000 bytes, `fitPacksConfig`); one that doesn't fit is left out of the config, so it is not offered (the storefront only offers a Pack the config holds at its current version) and the merchant gets a `config_too_large` warning. Packs without extra products are never dropped.
+- Storefront: `packs_storefront.php` also returns a Pack on its `show_on_ids` pages, with `productId`, `productHandle` and `extraProducts`. `packs_widget.js` `priceOnPage` loads the products it doesn't have from `/products/<handle>.js` (the page's own product comes from Liquid) and flattens them (`flattenPackProducts`, mirrored in `packs.shared.js`) into two synthetic options, **Product** and **Variant**, so the existing slot pickers work unchanged. A product that fails to load is left out; if the main product can't be loaded on an extra page the Pack isn't shown. On an extra page the theme's buttons stay (the Pack is an extra block); only on the Pack's own page are they replaced.
+- Cart lines of all products share one `_brix_pack_id / _quantity / _version / _group`, so the drawer, Shopify checkout (Shiprocket / GoKwik still go to Shopify checkout for Pack carts) and COD treat them as one Pack.
+- Tests: `tests/packs/extra-products.test.mjs`, `packs-server.test.mjs`, `php-storefront.test.mjs` (real PHP on a throwaway MariaDB), the multi-product scenarios of `php-endpoint-browser-check.mjs`, `extra-products-admin-check.mjs`, and a `pack:` case in `tests/cod/cod-server.test.mjs`. Not yet seen at a real checkout or on a store.
+
 **Layouts** (`customization.design.preset`), all drawn by `packs_widget.js`:
 
 | Id | Name | How items are picked |

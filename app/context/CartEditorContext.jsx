@@ -5,6 +5,7 @@ import { withoutLegacyBarColors } from '../utils/progress-bar-colors.shared.js';
 import { footerExtras } from '../utils/cart-footer-extras.shared.js';
 import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
+import { drawerCouponTemplate } from '../utils/coupon-style.shared.js';
 
 function parseJSONSafe(v) {
   if (!v) return {};
@@ -29,7 +30,9 @@ function hydrateFromRecord(record, base) {
     body: {
       ...base.body,
       progressBar: { ...base.body.progressBar, ...pb, enabled: dbFlag(record.progress_status) },
-      couponSlider: { ...base.body.couponSlider, ...cs, enabled: dbFlag(record.coupon_status), ...(cs.position != null ? { position: normalizeCouponPosition(cs.position, base.body.couponSlider.position) } : {}) },
+      // template: the design the storefront really draws for this saved data
+      // (an old 'template1' from the Coupon Banner = Minimal Card there).
+      couponSlider: { ...base.body.couponSlider, ...cs, enabled: dbFlag(record.coupon_status), ...(cs.position != null ? { position: normalizeCouponPosition(cs.position, base.body.couponSlider.position) } : {}), ...(Object.keys(cs).length ? { template: drawerCouponTemplate(cs) } : {}) },
       upsellProducts: { ...base.body.upsellProducts, ...up, enabled: dbFlag(record.upsell_status) },
     },
     footer: {
@@ -237,13 +240,12 @@ function hydrateFromCouponSlider(cs, base, own = {}) {
       couponSlider: {
         ...base.body.couponSlider,
         ...(own.__hasStatus ? {} : { enabled: dbFlag(cs.is_enabled) }),
-        ...(has('template') ? {} : { template: cs.selected_template ?? base.body.couponSlider.template }),
+        // Never the row's template / position / layout: those are the Coupon
+        // Banner's (template1-3, above_cart, list) and leaked into drawers.
         ...(has('sectionTitle') ? {} : { sectionTitle: cs.title_text ?? base.body.couponSlider.sectionTitle }),
         ...(has('titleColor') ? {} : { titleColor: cs.title_color ?? base.body.couponSlider.titleColor }),
         ...(has('titleFontSize') ? {} : { titleFontSize: Number(cs.title_font_size ?? base.body.couponSlider.titleFontSize) }),
         ...(has('titleTextAlign') ? {} : { titleTextAlign: cs.title_alignment ?? base.body.couponSlider.titleTextAlign }),
-        ...(has('position') ? {} : { position: normalizeCouponPosition(cs.position, base.body.couponSlider.position) }),
-        ...(has('layout') ? {} : { layout: cs.layout ?? base.body.couponSlider.layout }),
         // Only override selectedCoupons if the stored items are full coupon objects, not bare GIDs
         ...(hasFullObjects && !has('selectedCoupons') ? { selectedCoupons: rawSelected } : {}),
       },
@@ -328,7 +330,7 @@ function mergeConfigIntoState(base, cfg) {
 
 const CartEditorContext = createContext();
 
-export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord, initialConfigRecord, initialPbRecord, initialCsRecord, initialUpsellRecord }) {
+export function CartEditorProvider({ children, availableCoupons = [], allProducts = [], initialStatus, initialRecord, initialConfigRecord, initialPbRecord, initialCsRecord, initialUpsellRecord, initialShiprocket = false }) {
   const [state, setState] = useState(() => {
     const base        = initialStatus ? { ...defaultCartEditorState, status: initialStatus } : { ...defaultCartEditorState };
     const fromRecord  = initialRecord       ? hydrateFromRecord(initialRecord, base)          : base;
@@ -336,7 +338,8 @@ export function CartEditorProvider({ children, availableCoupons = [], allProduct
     const fromPb      = initialPbRecord     ? hydrateFromProgressBar(initialPbRecord, fromConfig) : fromConfig;
     const ownCoupon   = initialRecord ? { ...parseJSONSafe(initialRecord.coupon_data), __hasStatus: initialRecord.coupon_status != null } : {};
     const fromCs      = initialCsRecord     ? hydrateFromCouponSlider(initialCsRecord, fromPb, ownCoupon) : fromPb;
-    const fromUpsell  = initialUpsellRecord ? hydrateFromUpsell(initialUpsellRecord, fromCs)      : fromCs;
+    const fromUpsellRaw = initialUpsellRecord ? hydrateFromUpsell(initialUpsellRecord, fromCs)    : fromCs;
+    const fromUpsell  = { ...fromUpsellRaw, footer: { ...fromUpsellRaw.footer, checkoutButton: { ...fromUpsellRaw.footer.checkoutButton, checkoutVia: initialShiprocket ? 'shiprocket' : 'shopify' } } };
 
     console.log('[Context init] initialCsRecord:', JSON.stringify(initialCsRecord));
     console.log('[Context init] couponSlider.enabled after hydration:', fromUpsell.body.couponSlider.enabled);

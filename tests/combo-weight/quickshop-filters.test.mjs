@@ -445,3 +445,69 @@ test('box list: line prices shown by default, hidden with qs_sheet_show_price of
   assert.match(hidden, /class="bxq-line-name">Product 1</, 'the line is still there');
   assert.doesNotMatch(hidden, /bxq-line-price/);
 });
+
+test('Type / Brand / own tag / Sort as rows of chips (qs_filter_dd_style)', () => {
+  const typed = [
+    product(11, { productType: 'Rings', vendor: 'Silverline', tags: ['Oxidised'] }),
+    product(12, { productType: 'Chains', vendor: 'Gopi', tags: ['Plain'] }),
+    product(13, { productType: 'Rings', vendor: 'Gopi', tags: ['Plain'] }),
+  ];
+  const build = (config, ui = {}) => kit.buildModel({
+    config: { layout: 'layout6', tab_count: 1, col_1: 'jewels', qs_filter_custom: true, qs_filter_custom_label: 'Finish', qs_filter_custom_tags: 'Oxidised, Plain', ...config },
+    productsByHandle: { jewels: typed }, handles: ['jewels'], ui: { chip: 'all', dd: {}, ...ui }, pricing: { tiers: [], enabled: false },
+  });
+  // Default: dropdowns, as before.
+  const drop = build({});
+  assert.deepEqual(drop.row.menus.map((m) => m.id), ['type', 'brand', 'custom', 'sort']);
+  assert.equal((drop.row.groups || []).length, 0);
+  // Chips: each its own labelled row, no dropdowns; the picked value is on.
+  const chips = build({ qs_filter_dd_style: 'chips' }, { dd: { type: 'Rings', sort: 'price_asc' } });
+  assert.equal(chips.row.menus.length, 0);
+  assert.deepEqual(chips.row.groups.map((g) => [g.id, g.label]), [['type', 'Type'], ['brand', 'Brand'], ['custom', 'Finish'], ['sort', 'Sort By']]);
+  const type = chips.row.groups[0];
+  assert.deepEqual(type.options.map((o) => [o.label, o.on]), [['Chains', false], ['Rings', true]], 'A to Z, like the dropdown');
+  assert.deepEqual(chips.row.groups[3].options.filter((o) => o.on).map((o) => o.value), ['price_asc']);
+  assert.deepEqual(build({ qs_filter_dd_style: 'chips' }).row.groups[3].options.filter((o) => o.on).map((o) => o.value), ['featured'], 'no sort picked = Featured on');
+  // The pick filters like the dropdown did.
+  assert.deepEqual(chips.cards.map((c) => c.id), [typed[0].id, typed[2].id]);
+  // Drawn as chip rows with qs-group, a tap on the picked chip clears it.
+  const html = kit.render(chips);
+  assert.match(html, /bxq-gchips[^>]*aria-label="Type"/);
+  assert.match(html, /data-combo-action="qs-group" data-menu="type" data-value="Rings"/);
+  assert.doesNotMatch(html, /data-combo-action="qs-menu" data-menu="type"/);
+  const ui = { dd: { type: 'Rings' } };
+  const el = (menu, value) => ({ getAttribute: (k) => ({ 'data-menu': menu, 'data-value': value }[k]) });
+  kit.applyUiAction(ui, 'qs-group', el('type', 'Rings'));
+  assert.equal(ui.dd.type, '');
+  kit.applyUiAction(ui, 'qs-group', el('sort', 'name'));
+  assert.equal(ui.dd.sort, 'name');
+});
+
+test('each filter has its own style: only Type as chips', () => {
+  const typed = [
+    product(21, { productType: 'Rings', vendor: 'Silverline' }),
+    product(22, { productType: 'Chains', vendor: 'Gopi' }),
+  ];
+  const build = (config) => kit.buildModel({
+    config: { layout: 'layout6', tab_count: 1, col_1: 'jewels', ...config },
+    productsByHandle: { jewels: typed }, handles: ['jewels'], ui: { chip: 'all', dd: {} }, pricing: { tiers: [], enabled: false },
+  });
+  const typeOnly = build({ qs_filter_type_style: 'chips' });
+  assert.deepEqual(typeOnly.row.groups.map((g) => g.id), ['type']);
+  assert.deepEqual(typeOnly.row.menus.map((m) => m.id), ['brand', 'sort']);
+  // A filter's own choice wins over the old all-in-one setting.
+  const mixed = build({ qs_filter_dd_style: 'chips', qs_filter_sort_style: 'dropdown' });
+  assert.deepEqual(mixed.row.groups.map((g) => g.id), ['type', 'brand']);
+  assert.deepEqual(mixed.row.menus.map((m) => m.id), ['sort']);
+});
+
+test('builder note: why Type / Brand / own tag filter is hidden on this page', async () => {
+  const { filterHiddenNote } = await import('../../app/utils/combo-filter-notes.shared.js');
+  assert.equal(filterHiddenNote('type', null), null, 'products not loaded yet');
+  assert.equal(filterHiddenNote('type', ['Saree', 'Kurta set']), null, 'two types: it shows');
+  assert.match(filterHiddenNote('type', []), /no product type/);
+  assert.match(filterHiddenNote('type', ['Saree']), /same product type \("Saree"\)/);
+  assert.match(filterHiddenNote('brand', ['Naanal']), /same vendor/);
+  assert.equal(filterHiddenNote('custom', [], ''), null, 'no tags typed yet');
+  assert.match(filterHiddenNote('custom', [], 'Silk, Cotton'), /none of these tags/);
+});

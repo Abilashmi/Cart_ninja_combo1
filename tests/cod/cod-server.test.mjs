@@ -54,6 +54,16 @@ const BOOKS = {
   'gid://shopify/ProductVariant/25': { price: 1000, title: 'Box set', tags: [], grams: 500, collections: ['gid://shopify/Collection/900'] },
 };
 
+// Pack 3 (product 1): Buy 2 = 10% off, Buy 3 = ₹150 off, Buy 4 = no discount.
+const PACKS_CONFIG = { version: 1, currency: 'INR', packs: { 3: {
+  id: 3, productId: '1', variantId: '11', variantScope: 'all', allowedVariantIds: [],
+  tiers: [
+    { quantity: 2, discountType: 'percentage', discountValue: 10 },
+    { quantity: 3, discountType: 'fixed', discountValue: 150 },
+    { quantity: 4, discountType: 'none', discountValue: 0 },
+  ],
+} } };
+
 function fakeAdmin(opts = {}) {
   const calls = [];
   const variants = opts.variants || {
@@ -117,9 +127,9 @@ function fakeAdmin(opts = {}) {
           shop: { metafield: opts.comboConfig === null ? null : { jsonValue: opts.comboConfig || COMBO_CONFIG } },
           discountNodes: { nodes: [{ discount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Combo Weight', status: opts.comboStatus || 'ACTIVE' } }] },
         };
-      } else if (op === 'CodPacksConfig') {
+      } else if (op === 'CodPacks') {
         data = {
-          shop: { metafield: opts.packsConfig ? { jsonValue: opts.packsConfig } : null },
+          shop: { metafield: opts.packsConfig === null ? null : { jsonValue: opts.packsConfig || PACKS_CONFIG } },
           discountNodes: { nodes: [{ discount: { __typename: 'DiscountAutomaticApp', title: 'BRIX Packs', status: opts.packsStatus || 'ACTIVE' } }] },
         };
       } else if (op === 'CodComboVariants') {
@@ -267,47 +277,9 @@ test('quote: priced by Shopify, COD fee added as the shipping line, rules applie
   );
 });
 
-// A Pack on product 1 (the fake store's product): Buy 1 no discount, Buy 2 10% off, Buy 3 ₹100 off.
-const PACKS_CONFIG = {
-  version: 1, currency: 'INR',
-  packs: { 3: { id: 3, version: 1, productId: '1', variantId: '11', template: 'same_variant', variantScope: 'all', allowedVariantIds: [], tiers: [
-    { quantity: 1, discountType: 'none', discountValue: 0 },
-    { quantity: 2, discountType: 'percentage', discountValue: 10 },
-    { quantity: 3, discountType: 'fixed', discountValue: 100 },
-  ] } },
-};
-const packLine = (quantity, packQuantity, over = {}) => ({ variantId: '11', quantity, properties: { _brix_pack_id: '3', _brix_pack_quantity: String(packQuantity), _brix_pack_version: '1', _brix_pack_group: 'g1', ...over } });
-
-test('Packs: COD prices the tier like checkout (percentage and fixed) and tags the order', async () => {
-  const percent = await cod.quoteCod(fakeAdmin({ packsConfig: PACKS_CONFIG }), { settings: settingsOn({ codFeeEnabled: false, shippingFee: 0 }), lines: [packLine(2, 2)], surface: 'product' });
-  assert.equal(percent.quote.comboDiscount, 179.8); // 10% of 2 x 899
-  assert.equal(percent.quote.comboDiscounts[0].kind, 'pack');
-  assert.equal(percent.quote.total, 1618.2);
-
-  const fixed = await cod.quoteCod(fakeAdmin({ packsConfig: PACKS_CONFIG }), { settings: settingsOn({ codFeeEnabled: false, shippingFee: 0 }), lines: [packLine(3, 3)], surface: 'product' });
-  assert.equal(fixed.quote.comboDiscount, 100);
-  assert.equal(fixed.quote.total, 2597); // 3 x 899 - 100
-
-  // Buy 1 has no discount but is still a verified Pack.
-  const single = await cod.quoteCod(fakeAdmin({ packsConfig: PACKS_CONFIG }), { settings: settingsOn({ codFeeEnabled: false, shippingFee: 0 }), lines: [packLine(1, 1)], surface: 'product' });
-  assert.equal(single.quote.comboDiscount, 0);
-  assert.equal(single.quote.total, 899);
-});
-
-test('Packs: COD refuses a Pack it cannot price exactly like checkout', async () => {
-  const refused = (admin, lines) => assert.rejects(cod.quoteCod(admin, { settings: settingsOn(), lines, surface: 'product' }), (e) => e.code === 'checkout_only');
-  await refused(fakeAdmin(), [packLine(2, 2)]); // no Packs config at all
-  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG, packsStatus: 'EXPIRED' }), [packLine(2, 2)]); // checkout discount not active
-  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG }), [packLine(3, 2)]); // 3 units are not whole packs of 2
-  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG }), [packLine(2, 5)]); // no tier of 5
-  await refused(fakeAdmin({ packsConfig: PACKS_CONFIG }), [packLine(2, 2, { _brix_pack_id: '99' })]); // unknown Pack
-  await refused(fakeAdmin({ packsConfig: { ...PACKS_CONFIG, currency: 'USD' } }), [packLine(3, 3)]); // fixed amount in another currency
-  await refused(fakeAdmin({ packsConfig: { ...PACKS_CONFIG, packs: { 3: { ...PACKS_CONFIG.packs[3], productId: '777' } } } }), [packLine(2, 2)]); // line is not that Pack's product
-});
-
-test('quote: Pack / free-gift lines and sold-out items are refused', async () => {
+test('quote: free-gift lines and sold-out items are refused', async () => {
   await assert.rejects(
-    cod.quoteCod(fakeAdmin(), { settings: settingsOn(), lines: [{ variantId: '11', quantity: 2, properties: { _brix_pack_id: '3' } }], surface: 'drawer' }),
+    cod.quoteCod(fakeAdmin(), { settings: settingsOn(), lines: [{ variantId: '11', quantity: 1, properties: { _brixReward: 'true' } }], surface: 'drawer' }),
     (e) => e.code === 'checkout_only',
   );
   const admin = fakeAdmin({ variants: { 'gid://shopify/ProductVariant/11': { price: 899, title: 'Kit', tags: [], soldOut: true } } });
@@ -315,6 +287,21 @@ test('quote: Pack / free-gift lines and sold-out items are refused', async () =>
     cod.quoteCod(admin, { settings: settingsOn(), lines: [{ variantId: '11', quantity: 1, properties: {} }], surface: 'drawer' }),
     (e) => e.code === 'item_sold_out' && /Kit is sold out/.test(e.message),
   );
+});
+
+test('quote: products with their own COD fee are charged it (only them), the higher fee when mixed', async () => {
+  const own = (products, fee = 40) => settingsOn({ codFeeProducts: { fee, products } });
+  const only = await cod.quoteCod(fakeAdmin(), { settings: own(['1']), lines, pincode: '560001', surface: 'drawer' });
+  assert.equal(only.quote.codFee, 40, 'every item is the picked product → ₹40, not ₹49');
+  assert.equal(only.input.shippingLine.priceWithCurrency.amount, '40.00');
+  const MIXED = {
+    'gid://shopify/ProductVariant/11': { price: 899, title: 'Luna', tags: [], product: 'gid://shopify/Product/1' },
+    'gid://shopify/ProductVariant/12': { price: 899, title: 'Steel Tumbler', tags: [], product: 'gid://shopify/Product/2' },
+  };
+  const mixed = await cod.quoteCod(fakeAdmin({ variants: MIXED }), { settings: own(['1']), lines, pincode: '560001', surface: 'drawer' });
+  assert.equal(mixed.quote.codFee, 49, 'mixed with another product → the higher fee');
+  const none = await cod.quoteCod(fakeAdmin(), { settings: own(['9']), lines, pincode: '560001', surface: 'drawer' });
+  assert.equal(none.quote.codFee, 49, 'not picked → the normal fee');
 });
 
 test('quote: unlisted products only when the merchant allows them (all, or picked products / collections)', async () => {
@@ -403,6 +390,16 @@ test('order: a repeated tap with the same key returns the first order, never a s
   assert.equal(again.orderName, first.orderName);
   assert.equal(again.repeated, true);
   assert.equal(admin.calls.filter((c) => c.op === 'CodComplete').length, 1);
+});
+
+test('order: "only part payment" refuses a full COD order where Partial COD is offered', async () => {
+  const admin = fakeAdmin();
+  const only = settingsOn({ partialCod: { enabled: true, amount: 50, only: true } });
+  await assert.rejects(place(admin, { settings: only, idemKey: 'idem-key-p001' }), (e) => e.code === 'partial_required');
+  assert.equal(admin.calls.filter((c) => c.op === 'CodComplete').length, 0, 'no order made');
+  // Outside the Partial COD range, or with "only" off: COD as usual.
+  await place(admin, { settings: settingsOn({ partialCod: { enabled: true, amount: 50, only: true, minOrder: 100000 } }), idemKey: 'idem-key-p002' });
+  await place(admin, { settings: settingsOn({ partialCod: { enabled: true, amount: 50 } }), idemKey: 'idem-key-p003' });
 });
 
 test('order: daily per-phone limit', async () => {
@@ -879,10 +876,15 @@ test('storefront config: drawer placement, button style, fee switch / title / vi
   assert.deepEqual(json.excludedProductTags, ['no-cod', 'pre-order']);
   assert.equal(json.buttons.style, 'minimal');
   assert.equal(json.buttons.radius, 4);
+  assert.equal(json.codFeeProducts, null, 'no products with their own fee');
+  await cod.saveCodSettings(SHOP, { codFeeProducts: { fee: 25, products: [{ id: 'gid://shopify/Product/77', title: 'Luna' }] } });
+  ({ json } = await storefront(`action=config&shop=${SHOP}`));
+  assert.deepEqual(json.codFeeProducts, { fee: 25, products: ['77'] }, 'products with their own fee: numeric ids for brix_cod.js');
 
   await cod.saveCodSettings(SHOP, { codFeeEnabled: false });
   ({ json } = await storefront(`action=config&shop=${SHOP}`));
   assert.equal(json.codFee, 0, 'fee switched off: nothing is charged or shown');
+  assert.equal(json.codFeeProducts, null, 'fee switched off: no product fees either');
   const stored = JSON.parse((await sql('SELECT settings_json FROM cod_settings WHERE shop = ?', [SHOP]))[0].settings_json);
   assert.equal(stored.codFee, 40, 'the amount is kept for when it is turned back on');
 
@@ -1384,4 +1386,70 @@ test('shipping order: the booked option on the order, its row, and the shipping 
   assert.equal(stats.shipping, 205);
   assert.deepEqual(stats.byOption.map((o) => [o.name, o.orders, o.shipping]).sort(), [['', 1, 60], ['Express delivery', 1, 145]]);
   assert.deepEqual(stats.byZone.find((z) => z.name === 'Metro'), { name: 'Metro', orders: 1, shipping: 145, free: 0 });
+});
+
+/* ── Packs: COD charges the Pack price Shopify checkout gives ──────────── */
+
+const packLine = (variantId, quantity, packQuantity, extra = {}) => ({ variantId, quantity, properties: { _brix_pack_id: '3', _brix_pack_quantity: String(packQuantity), _brix_pack_group: 'g1', _brix_pack_version: 'v1', ...extra } });
+const packQuote = (admin, lines) => cod.quoteCod(admin, { settings: settingsOn(), lines, surface: 'drawer' });
+
+test('pack: Buy 2 at 10% off is paid on delivery at the Pack price; markers never reach the draft', async () => {
+  const admin = fakeAdmin();
+  const { quote, input } = await packQuote(admin, [packLine('11', 2, 2)]);
+  assert.equal(quote.itemsTotal, 1798);
+  assert.equal(quote.packDiscount, 179.8);
+  assert.equal(quote.discounts, 0, 'not counted twice');
+  assert.equal(quote.total, 1798 - 179.8 + 49);
+  const [li] = input.lineItems;
+  assert.equal(li.appliedDiscount.description, 'BRIX Pack');
+  assert.equal(li.appliedDiscount.title, 'Pack: Buy 2');
+  assert.deepEqual(li.customAttributes, [{ key: '_brixCod', value: 'true' }]);
+});
+
+test('pack: a fixed ₹150 off Buy 3, and a Pack with no discount costs its plain price', async () => {
+  const fixed = await packQuote(fakeAdmin(), [packLine('11', 3, 3)]);
+  assert.equal(fixed.quote.packDiscount, 150);
+  assert.equal(fixed.quote.total, 899 * 3 - 150 + 49);
+
+  const plain = await packQuote(fakeAdmin(), [packLine('11', 4, 4)]);
+  assert.equal(plain.quote.packDiscount, 0);
+  assert.equal(plain.quote.total, 899 * 4 + 49);
+  assert.equal(plain.input.lineItems[0].appliedDiscount, undefined);
+});
+
+test('pack: two packs of a tier both get it; an edited quantity, another product, or BRIX Packs inactive gets none', async () => {
+  const two = await packQuote(fakeAdmin(), [packLine('11', 6, 3)]);
+  assert.equal(two.quote.packDiscount, 300, 'two Buy 3 packs = 2 × ₹150');
+
+  const edited = await packQuote(fakeAdmin(), [packLine('11', 3, 2)]);
+  assert.equal(edited.quote.packDiscount, 0, '3 is not a whole number of Buy 2 packs');
+
+  const other = fakeAdmin({ variants: { 'gid://shopify/ProductVariant/11': { price: 899, title: 'Kit', tags: [], product: 'gid://shopify/Product/9' } } });
+  assert.equal((await packQuote(other, [packLine('11', 2, 2)])).quote.packDiscount, 0, 'a forged pack id on another product');
+
+  const inactive = await packQuote(fakeAdmin({ packsStatus: 'EXPIRED' }), [packLine('11', 2, 2)]);
+  assert.equal(inactive.quote.packDiscount, 0, 'as in checkout: no active discount, no Pack price');
+});
+
+test('pack: COD is refused rather than charging a different Pack price', async () => {
+  await assert.rejects(packQuote(fakeAdmin({ lineDiscountPer: 'none' }), [packLine('11', 2, 2)]), (e) => e.code === 'combo_price_mismatch');
+});
+
+test('pack with extra products: one item of each product is paid on delivery at the Pack price; an unlisted product breaks it', async () => {
+  const variants = {
+    'gid://shopify/ProductVariant/11': { price: 899, title: 'Kit', tags: [], product: 'gid://shopify/Product/1' },
+    'gid://shopify/ProductVariant/12': { price: 899, title: 'Tumbler', tags: [], product: 'gid://shopify/Product/2' },
+  };
+  const withExtras = (extraProducts) => ({ ...PACKS_CONFIG, packs: { 3: { ...PACKS_CONFIG.packs[3], extraProducts } } });
+  const mixed = [packLine('11', 1, 2), packLine('12', 1, 2)];
+
+  const ok = await packQuote(fakeAdmin({ variants, packsConfig: withExtras({ 2: { scope: 'all', allowedVariantIds: [] } }) }), mixed);
+  assert.equal(ok.quote.packDiscount, 179.8, 'Buy 2 = 10% off across both products');
+  assert.equal(ok.quote.total, 1798 - 179.8 + 49);
+
+  const unlisted = await packQuote(fakeAdmin({ variants, packsConfig: PACKS_CONFIG }), mixed);
+  assert.equal(unlisted.quote.packDiscount, 0, 'a pack that does not list product 2 gives it nothing, as in checkout');
+
+  const wrongVariant = await packQuote(fakeAdmin({ variants, packsConfig: withExtras({ 2: { scope: 'selected', allowedVariantIds: ['99'] } }) }), mixed);
+  assert.equal(wrongVariant.quote.packDiscount, 0, 'a variant the merchant did not pick for product 2');
 });

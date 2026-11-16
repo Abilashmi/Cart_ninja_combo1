@@ -1183,6 +1183,19 @@ export async function ensureFbtInteractionColumn(db) {
   if (rows?.[0] && /^enum/i.test(String(rows[0].COLUMN_TYPE ?? rows[0].column_type ?? ''))) {
     await db.execute("ALTER TABLE `fbt_widget_settings` MODIFY `interaction_type` VARCHAR(20) NOT NULL DEFAULT 'classic'");
   }
+  // Same for widget_placement: an old ENUM would refuse 'selector' (FBT →
+  // Widget Placement → Custom selector). Never let this block a save.
+  try {
+    const [pRows] = await db.execute(
+      'SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+      ['fbt_widget_settings', 'widget_placement']
+    );
+    if (pRows?.[0] && /^enum/i.test(String(pRows[0].COLUMN_TYPE ?? pRows[0].column_type ?? ''))) {
+      await db.execute('ALTER TABLE `fbt_widget_settings` MODIFY `widget_placement` VARCHAR(40) NULL');
+    }
+  } catch (e) {
+    console.error('[FBT] widget_placement column check:', e.message);
+  }
   fbtInteractionWidened = true;
 }
 

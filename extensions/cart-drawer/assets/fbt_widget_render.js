@@ -323,6 +323,36 @@
 
   function dedupe(products){var map=new Map();products.forEach(function(p){map.set(p.id,p);});return Array.from(map.values());}
 
+  /* AI mode, a product the AI made no suggestions for (no orders, product
+     type or shared collection to go on, past the products one run covers,
+     added since the last run) or whose suggestions are all sold out:
+     Shopify's own recommendations for it instead (Search & Discovery's
+     complementary picks first, then related), in the rule products' shape.
+     The current product is never one; stock and prices are checked after,
+     like any suggestion (filterAvailableFbtProducts). */
+  async function shopifyRecommendations(productNumId,count){
+    if(!productNumId)return[];
+    var want=Math.max(1,Math.min(6,Number(count)||3));
+    var root=(window.Shopify&&window.Shopify.routes&&window.Shopify.routes.root)||'/';
+    var out=[];var seen={};seen[String(productNumId)]=true;
+    var intents=['complementary','related'];
+    for(var i=0;i<intents.length&&out.length<want+3;i++){
+      var json=null;
+      try{json=await cachedJson(root+'recommendations/products.json?product_id='+encodeURIComponent(productNumId)+'&limit='+(want+3)+'&intent='+intents[i],300000);}catch(e){json=null;}
+      var list=Array.isArray(json&&json.products)?json.products:[];
+      for(var j=0;j<list.length;j++){
+        var p=list[j];var id=String(p&&p.id||'');
+        if(!id||seen[id]||p.available===false)continue;
+        seen[id]=true;
+        var img=p.featured_image||(Array.isArray(p.images)?p.images[0]:'')||'';
+        if(img&&typeof img==='object')img=img.src||'';
+        img=String(img||'');if(img.indexOf('//')===0)img='https:'+img;
+        out.push({id:'gid://shopify/Product/'+id,title:String(p.title||''),handle:String(p.handle||''),image:img,price:toPriceNumber(p.price)/100,shopifyRecommended:true});
+      }
+    }
+    return out.slice(0,want+3);
+  }
+
   function openCartDrawerFast(detail){
     var payload=detail||{};
     try{if(window.__CC_DRAWER_API&&typeof window.__CC_DRAWER_API.openNow==='function'){window.__CC_DRAWER_API.openNow(payload);return;}}catch(e){}
@@ -561,7 +591,52 @@
         return null;
       }
 
+      /* Widget Placement "Custom selector": the theme element the merchant's
+         CSS selector finds (a visible one first), never the widget itself or
+         the page shell. Bad selector / no match = null. */
+      function findSelectorTarget(){
+        var sel=el.__psSelector;
+        if(!sel)return null;
+        var list;
+        try{list=document.querySelectorAll(sel);}catch(e){return null;}
+        var first=null;
+        for(var i=0;i<list.length;i++){
+          var n=list[i];
+          if(n===el||el.contains(n)||n===document.body||n===document.documentElement||!n.parentNode)continue;
+          if(n.offsetParent!==null)return n;
+          if(!first)first=n;
+        }
+        return first;
+      }
+
+      /* The spot right after `node`, past a BRIX COD button that sits there
+         (brix_cod.js [data-brix-cod-slot]): COD stays with the buy buttons
+         whichever script placed itself first (Silverline: FBT after
+         Shiprocket's Buy Now landed between it and COD). */
+      function afterButtons(node){
+        var next=node.nextSibling;
+        while(next&&next.nodeType===1&&next.hasAttribute('data-brix-cod-slot'))next=next.nextSibling;
+        return next;
+      }
+
       function doPlace(apiPlacement){
+        if(apiPlacement==='selector'){
+          var target=findSelectorTarget();
+          if(target){
+            el.__psWaiting=false;
+            el.style.display='block';
+            el.style.width='100%';
+            el.style.margin=el.__psMargin||'16px 0';
+            el.style.boxSizing='border-box';
+            target.parentNode.insertBefore(el,el.__psSelectorPos==='before'?target:afterButtons(target));
+            return true;
+          }
+          /* Not on the page (yet): stay hidden while placeWidget waits; once it
+             gives up, fall back to below the Add to Cart button. */
+          if(!el.__psSelectorGaveUp){el.__psWaiting=true;el.style.display='none';return false;}
+          el.__psWaiting=false;
+          apiPlacement='below_cart';
+        }
         var atcBtn=findAtcBtn();
         el.style.display='block';
         el.style.width='100%';
@@ -581,7 +656,7 @@
         if(apiPlacement==='above_cart'){
           anchor.parentNode.insertBefore(el,anchor);
         } else {
-          anchor.parentNode.insertBefore(el,anchor.nextSibling);
+          anchor.parentNode.insertBefore(el,afterButtons(anchor));
         }
         return true;
       }
@@ -592,11 +667,11 @@
         var done=false;
         var obs=new MutationObserver(function(){
           if(done)return;
-          if(findAtcBtn()){done=true;obs.disconnect();doPlace(apiPlacement);}
+          if(apiPlacement==='selector'?findSelectorTarget():findAtcBtn()){done=true;obs.disconnect();doPlace(apiPlacement);}
         });
         obs.observe(document.body,{childList:true,subtree:true});
         /* Safety: stop observing after 6s and place wherever we can */
-        setTimeout(function(){if(!done){done=true;obs.disconnect();doPlace(apiPlacement);}},6000);
+        setTimeout(function(){if(!done){done=true;obs.disconnect();el.__psSelectorGaveUp=true;doPlace(apiPlacement);}},6000);
       }
 
       if(!shop){el.style.display='none';return;}
@@ -630,6 +705,11 @@
           var config=normalizeConfig(templateMap[selectedTemplate],currencySymbol);
           if(!config)return;
           var apiPlacement=(templateMap[selectedTemplate]&&templateMap[selectedTemplate].widgetPlacement)||data.widgetPlacement||'below_cart';
+          /* "Custom selector" placement keys ride in the template JSON (fbt-style.shared.js pickFbtLayout). */
+          var activeTpl=templateMap[selectedTemplate]||{};
+          el.__psSelector=typeof activeTpl.widgetSelector==='string'?activeTpl.widgetSelector.trim().slice(0,200):'';
+          el.__psSelectorPos=activeTpl.widgetSelectorPosition==='before'?'before':'after';
+          if(apiPlacement==='selector'&&!el.__psSelector)apiPlacement='below_cart';
           var rules=normalizeRules(data.condition||data.manualRules||data.manualConfiguration||[]);
           var currentNumId=extractNumericId(productId);
           var matchedProducts=[];
@@ -644,6 +724,10 @@
             var match=triggerCandidates.some(function(p){return extractNumericId(p.id)===currentNumId;});
             if(match){matchedProducts=matchedProducts.concat(rule.fbtProducts);matchedSpares=matchedSpares.concat(rule.backupProducts);if(rule.offer&&(!offerRule||offerRule.displayScope==='all'))offerRule=rule;}
           });
+          var aiMode=String(data.selectedMode||'').toLowerCase()==='ai';
+          var aiCount=Number(data.aiProductCount)||3;
+          var usedRecommendations=false;
+          if(!matchedProducts.length&&aiMode){matchedProducts=await shopifyRecommendations(currentNumId,aiCount);usedRecommendations=matchedProducts.length>0;}
           if(!matchedProducts.length)return;
           matchedProducts=dedupe(matchedProducts);
           var placed=false,drawToken=0;
@@ -660,6 +744,12 @@
           renderSkeleton(el,config,matchedProducts.length,config.interactionType==='checkboxQty'||config.layout==='vertical');
           placeOnce();
           var liveProducts=await filterAvailableFbtProducts(matchedProducts);
+          /* AI picks all sold out: Shopify's recommendations instead (AI mode only). */
+          if(!liveProducts.length&&aiMode&&!usedRecommendations){
+            usedRecommendations=true;
+            liveProducts=await filterAvailableFbtProducts(await shopifyRecommendations(currentNumId,aiCount));
+          }
+          if(usedRecommendations)liveProducts=liveProducts.slice(0,Math.max(1,Math.min(6,aiCount)));
           if(!liveProducts.length){el.style.display='none';el.innerHTML='';return;}
           config.currentProductId=currentNumId;
           /* The viewed product's price (cents, from Liquid): it's part of the offer's set. */
@@ -704,7 +794,8 @@
             var keepHeight=el.offsetHeight;
             if(keepHeight)el.style.minHeight=keepHeight+'px';
             renderFBT(el,config,products,currencySymbol,templateStyle,buildVariantLookup,openCartDrawerFast,toPriceNumber,escapeHtml,normalizeVariantId,extractNumericId);
-            el.style.display='block';
+            /* Custom selector still waiting for its element: stay hidden (doPlace shows it). */
+            if(!el.__psWaiting)el.style.display='block';
             placeOnce();
             if(keepHeight)requestAnimationFrame(function(){el.style.minHeight='';});
           }

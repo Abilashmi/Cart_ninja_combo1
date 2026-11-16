@@ -22,6 +22,18 @@ export function CheckoutSection() {
       </Text>
       <Card>
         <FormLayout>
+          <Select
+            label="Checkout opens"
+            options={[
+              { label: 'Shopify checkout', value: 'shopify' },
+              { label: 'Shiprocket checkout', value: 'shiprocket' },
+            ]}
+            value={checkoutButton.checkoutVia === 'shiprocket' ? 'shiprocket' : 'shopify'}
+            onChange={(v) => updateCheckoutButton({ checkoutVia: v })}
+            helpText={checkoutButton.checkoutVia === 'shiprocket'
+              ? "The cart's Checkout opens Shiprocket Checkout, with the prepaid discount and free gifts as a one-time code. Needs the Shiprocket Checkout app on your store (else Shopify checkout opens). Pay online on product pages follows it too, and combo pages get their own Shiprocket option."
+              : "The cart's Checkout opens Shopify checkout. Stores with GoKwik get GoKwik's checkout automatically."}
+          />
           <TextField
             label="Checkout Button Text"
             value={checkoutButton.text}

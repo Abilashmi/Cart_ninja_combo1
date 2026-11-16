@@ -173,6 +173,12 @@ export function pickFbtLayout(tpl) {
   out.sizeMatch = tpl?.sizeMatch === true;
   out.sizeMatchMissing = ['hide', 'note'].includes(tpl?.sizeMatchMissing) ? tpl.sizeMatchMissing : 'replace';
   out.sizeMatchOption = typeof tpl?.sizeMatchOption === 'string' ? tpl.sizeMatchOption.trim().slice(0, 40) : '';
+  // Widget Placement "Custom selector" (widgetPlacement 'selector'): the
+  // storefront puts the widget next to the theme element this CSS selector
+  // finds (fbt_widget_render.js doPlace), for themes whose product section
+  // takes no app blocks. Position: after = below it, before = above it.
+  out.widgetSelector = typeof tpl?.widgetSelector === 'string' ? tpl.widgetSelector.trim().slice(0, 200) : '';
+  out.widgetSelectorPosition = tpl?.widgetSelectorPosition === 'before' ? 'before' : 'after';
   // The offer text's look rides along (loaded and saved with the layout).
   return { ...out, ...pickFbtOfferStyle(tpl) };
 }

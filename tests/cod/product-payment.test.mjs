@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_PRODUCT_PAYMENT, sanitizeProductPayment, parsePrepaidPercent, parseMinSubtotal, productPaymentPricing,
-  fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, prepaidDiscountLive, PAY_TEXT_LIMITS, excludedCollectionIds,
+  fillPaymentText, onlineButtonLabel, visiblePaymentMethods, initialPaymentMethod, prepaidDiscountLive, PAY_TEXT_LIMITS, excludedCollectionIds, excludedProductIds,
 } from '../../app/utils/product-payment.shared.js';
 import { sanitizeCodSettings, DEFAULT_COD_SETTINGS } from '../../app/utils/cod.shared.js';
 import { cartLinesDiscountsGenerateRun as run } from '../../extensions/brix-prepaid-discount/src/cart_lines_discounts_generate_run.js';
@@ -202,11 +202,11 @@ test('merchant text: {percent} {amount} {min} {price} filled in', () => {
 /* ── the Discount Function (logic only) ───────────────────────────────────── */
 
 const cfg = (patch = {}) => ({ version: 1, enabled: true, percent: 10, minSubtotal: 0, currency: 'INR', title: 'Prepaid discount', ...patch });
-const line = (id, amount, { cod = null, reward = null, currency = 'INR', excluded = null, combo = null } = {}) => ({
+const line = (id, amount, { cod = null, reward = null, currency = 'INR', excluded = null, combo = null, product = null } = {}) => ({
   id, cod: cod == null ? null : { value: cod }, reward: reward == null ? null : { value: reward }, combo: combo == null ? null : { value: combo },
   cost: { subtotalAmount: { amount: String(amount), currencyCode: currency } },
   // Shopify answers inCollections for the excluded collections ($collectionIds).
-  merchandise: { __typename: 'ProductVariant', product: { inCollections: excluded == null ? [] : [{ isMember: excluded }] } },
+  merchandise: { __typename: 'ProductVariant', product: { ...(product ? { id: `gid://shopify/Product/${product}` } : {}), inCollections: excluded == null ? [] : [{ isMember: excluded }] } },
 });
 const fnInput = (lines, config, { cartCod = null, classes = ['ORDER'], codes = [] } = {}) => ({
   enteredDiscountCodes: codes.map((code) => ({ code, rejectable: true })),
@@ -258,6 +258,29 @@ test('Function: products in an excluded collection are left out of the discount 
   assert.equal(order(run(fnInput([old], cfg()))).candidates.length, 1, 'no collection data (no exclusions) → as before');
 });
 
+test('Function: products left out one by one are left out of the discount and the minimum', () => {
+  const op = order(run(fnInput([line('L1', 1100, { product: '5' }), line('X1', 500, { product: '9' })], cfg({ excludedProducts: ['9'] }))));
+  assert.deepEqual(op.candidates[0].targets[0].orderSubtotal.excludedCartLineIds, ['X1']);
+  assert.deepEqual(run(fnInput([line('X1', 500, { product: '9' })], cfg({ excludedProducts: ['9'] }))), { operations: [] }, 'only excluded products → nothing');
+  assert.deepEqual(run(fnInput([line('L1', 800, { product: '5' }), line('X1', 500, { product: '9' })], cfg({ excludedProducts: ['9'], minSubtotal: 999 }))), { operations: [] }, 'they do not help reach the minimum');
+  const both = order(run(fnInput([line('L1', 1100, { product: '5' }), line('X1', 500, { product: '9', excluded: true })], cfg({ excludedProducts: ['9'] }))));
+  assert.deepEqual(both.candidates[0].targets[0].orderSubtotal.excludedCartLineIds, ['X1'], 'excluded both ways: listed once');
+  assert.deepEqual(order(run(fnInput([line('L1', 1100, { product: '5' })], cfg()))).candidates[0].targets[0].orderSubtotal.excludedCartLineIds, [], 'no list → as before');
+});
+
+test('settings: excluded products are cleaned (product ids only, unique, at most 50), and reach the Function only when set', () => {
+  const pp = sanitizeProductPayment({ prepaid: { excludedProducts: [{ id: 'gid://shopify/Product/12', title: 'Gift card' }, '34', { id: 'gid://shopify/Collection/1' }, { id: 'gid://shopify/Product/12' }] } });
+  assert.deepEqual(pp.prepaid.excludedProducts, [{ id: 'gid://shopify/Product/12', title: 'Gift card' }, { id: 'gid://shopify/Product/34', title: '' }]);
+  assert.deepEqual(excludedProductIds(pp.prepaid), ['12', '34']);
+  assert.deepEqual(sanitizeProductPayment({}).prepaid.excludedProducts, [], 'none by default');
+  assert.deepEqual(sanitizeProductPayment({ prepaid: { percent: 12 } }, pp).prepaid.excludedProducts, pp.prepaid.excludedProducts, 'kept when not in the patch');
+  const many = Array.from({ length: 60 }, (_, i) => `gid://shopify/Product/${i + 1}`);
+  assert.equal(sanitizeProductPayment({ prepaid: { excludedProducts: many } }).prepaid.excludedProducts.length, 50);
+  const on = (prepaid) => settingsWith({ prepaid: { enabled: true, percent: 10, ...prepaid } });
+  assert.deepEqual(buildPrepaidConfig(on({ excludedProducts: ['12'] }), { currencyCode: 'INR', planLive: true }).excludedProducts, ['12']);
+  assert.equal('excludedProducts' in buildPrepaidConfig(on({}), { currencyCode: 'INR', planLive: true }), false, 'none: the config is exactly as before');
+});
+
 test('settings: excluded collections are cleaned (collection ids only, unique, at most 50)', () => {
   const pp = sanitizeProductPayment({ prepaid: { excludedCollections: [{ id: 'gid://shopify/Collection/12', title: 'Toys' }, '34', { id: 'gid://shopify/Product/1' }, { id: 'gid://shopify/Collection/12' }] } });
   assert.deepEqual(pp.prepaid.excludedCollections, [{ id: 'gid://shopify/Collection/12', title: 'Toys' }, { id: 'gid://shopify/Collection/34', title: '' }]);
@@ -280,7 +303,7 @@ test('Function: off, missing, or tampered config → nothing; never a shopper-ch
 
 /* ── Shopify sync (fake Admin API) ────────────────────────────────────────── */
 
-function fakeShopify({ existing = null, createErrors = [], status = 'ACTIVE' } = {}) {
+function fakeShopify({ existing = null, createErrors = [], status = 'ACTIVE', deleteErrors = [], activateErrors = [] } = {}) {
   const calls = [];
   return {
     calls,
@@ -292,6 +315,8 @@ function fakeShopify({ existing = null, createErrors = [], status = 'ACTIVE' } =
       else if (op === 'PrepaidConfig') data = { metafieldsSet: { metafields: [{ id: 'm1' }], userErrors: [] } };
       else if (op === 'PrepaidDiscounts') data = { discountNodes: { nodes: existing ? [{ id: 'd1', discount: { __typename: 'DiscountAutomaticApp', title: PREPAID_DISCOUNT_TITLE, status: existing } }] : [] } };
       else if (op === 'PrepaidDiscountVars') data = { metafieldsSet: { metafields: [{ id: 'm2' }], userErrors: [] } };
+      else if (op === 'PrepaidDiscountDelete') data = { discountAutomaticDelete: { deletedAutomaticDiscountId: deleteErrors.length ? null : variables.id, userErrors: deleteErrors } };
+      else if (op === 'PrepaidDiscountActivate') data = { discountAutomaticActivate: { automaticDiscountNode: activateErrors.length ? null : { id: variables.id, automaticDiscount: { status: 'ACTIVE' } }, userErrors: activateErrors } };
       else if (op === 'PrepaidDiscountCreate') data = { discountAutomaticAppCreate: { automaticAppDiscount: createErrors.length ? null : { discountId: 'd1', status }, userErrors: createErrors } };
       else throw new Error(`unhandled ${op}`);
       return new Response(JSON.stringify({ data }));
@@ -342,13 +367,26 @@ test('sync: writes the metafield, creates the automatic ORDER discount once, ver
   assert.equal(vars.ownerId, 'd1');
   assert.deepEqual(JSON.parse(vars.value), { collectionIds: ['gid://shopify/Collection/77'] }, 'the existing discount gets the excluded collections');
   assert.deepEqual(prepaidRuntime(r2, r2.config).excludedCollections, ['77'], 'the storefront and Shiprocket code get the verified numeric ids');
+  const r3 = await syncPrepaidDiscount(fakeShopify({ existing: 'ACTIVE' }), settingsWith({ prepaid: { enabled: true, percent: 10, excludedProducts: [{ id: 'gid://shopify/Product/88', title: 'Gift card' }] } }), { currencyCode: 'INR', planLive: true });
+  assert.deepEqual(prepaidRuntime(r3, r3.config).excludedProducts, ['88'], 'excluded products reach the storefront and Shiprocket code too');
+  assert.match(r3.message, /Not on 1 excluded product\./);
 });
 
 test('sync: honest states — not deployed, inactive, plan locked, off; never throws', async () => {
   const notDeployed = await syncPrepaidDiscount(fakeShopify({ createErrors: [{ field: ['functionHandle'], message: 'Function not found', code: 'INVALID' }] }), settingsWith({}), { planLive: true });
   assert.deepEqual([notDeployed.verified, notDeployed.state], [false, 'not_deployed']);
-  const inactive = await syncPrepaidDiscount(fakeShopify({ existing: 'EXPIRED' }), settingsWith({}), { planLive: true });
+  // Deactivated in Shopify → Discounts: switching on in BRIX reactivates it.
+  const deactivated = fakeShopify({ existing: 'EXPIRED' });
+  const reactivated = await syncPrepaidDiscount(deactivated, settingsWith({}), { planLive: true });
+  assert.deepEqual([reactivated.verified, reactivated.state], [true, 'active']);
+  assert.equal(deactivated.calls.find((c) => c.op === 'PrepaidDiscountActivate').variables.id, 'd1');
+  assert.equal(deactivated.calls.some((c) => c.op === 'PrepaidDiscountCreate'), false, 'no second discount');
+  // Shopify refuses: honestly not active, nothing promised.
+  const inactive = await syncPrepaidDiscount(fakeShopify({ existing: 'EXPIRED', activateErrors: [{ field: ['id'], message: 'nope' }] }), settingsWith({}), { planLive: true });
   assert.deepEqual([inactive.verified, inactive.state], [false, 'inactive']);
+  const active = fakeShopify({ existing: 'ACTIVE' });
+  await syncPrepaidDiscount(active, settingsWith({}), { planLive: true });
+  assert.equal(active.calls.some((c) => c.op === 'PrepaidDiscountActivate'), false, 'already active: left alone');
   const locked = await syncPrepaidDiscount(fakeShopify(), settingsWith({}), { planLive: false });
   assert.deepEqual([locked.verified, locked.state], [false, 'plan_locked']);
   const offAdmin = fakeShopify();
@@ -431,4 +469,40 @@ test('show only: no discount of BRIX\'s (config off), the price details kept for
   assert.deepEqual([rt.showOnly, rt.verified, rt.percent, rt.maxDiscount, rt.currency], [true, false, 5, 100, 'INR']);
   const planOff = await syncPrepaidDiscount(fakeShopify(), showOnly, { currencyCode: 'INR', planLive: false });
   assert.notEqual(planOff.state, 'show_only', 'still needs the plan');
+});
+
+test('sync: switching prepaid off deletes BRIX\'s discount from Shopify, before the config write', async () => {
+  const admin = fakeShopify({ existing: 'ACTIVE' });
+  const off = await syncPrepaidDiscount(admin, settingsWith({ prepaid: { enabled: false } }), { currencyCode: 'INR', planLive: true });
+  assert.deepEqual([off.ok, off.state], [true, 'not_needed']);
+  const ops = admin.calls.map((c) => c.op);
+  assert.equal(admin.calls.find((c) => c.op === 'PrepaidDiscountDelete').variables.id, 'd1');
+  assert.ok(ops.indexOf('PrepaidDiscountDelete') < ops.indexOf('PrepaidConfig'), 'deleted first');
+  assert.match(off.message, /removed from Shopify/);
+
+  // Show only and plan locked: no BRIX discount either.
+  const showOnly = fakeShopify({ existing: 'ACTIVE' });
+  await syncPrepaidDiscount(showOnly, settingsWith({ prepaid: { enabled: true, percent: 10, createDiscount: false } }), { currencyCode: 'INR', planLive: true });
+  assert.ok(showOnly.calls.some((c) => c.op === 'PrepaidDiscountDelete'));
+  const locked = fakeShopify({ existing: 'ACTIVE' });
+  await syncPrepaidDiscount(locked, settingsWith({}), { currencyCode: 'INR', planLive: false });
+  assert.ok(locked.calls.some((c) => c.op === 'PrepaidDiscountDelete'));
+
+  // Nothing to delete: no delete call.
+  const none = fakeShopify();
+  await syncPrepaidDiscount(none, settingsWith({ prepaid: { enabled: false } }), { planLive: true });
+  assert.equal(none.calls.some((c) => c.op === 'PrepaidDiscountDelete'), false);
+
+  // Delete refused: the config still switches it off, and the merchant is told.
+  const refused = fakeShopify({ existing: 'ACTIVE', deleteErrors: [{ field: ['id'], message: 'nope' }] });
+  const r = await syncPrepaidDiscount(refused, settingsWith({ prepaid: { enabled: false } }), { planLive: true });
+  assert.equal(r.state, 'not_needed');
+  assert.equal(JSON.parse(refused.calls.find((c) => c.op === 'PrepaidConfig').variables.metafields[0].value).enabled, false);
+  assert.match(r.message, /could not be deleted/);
+
+  // Switched back on: created again.
+  const back = fakeShopify();
+  const on = await syncPrepaidDiscount(back, settingsWith({}), { currencyCode: 'INR', planLive: true });
+  assert.equal(on.state, 'active');
+  assert.ok(back.calls.some((c) => c.op === 'PrepaidDiscountCreate'));
 });

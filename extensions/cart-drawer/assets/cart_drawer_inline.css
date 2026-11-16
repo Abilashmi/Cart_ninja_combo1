@@ -423,6 +423,20 @@
   cursor: pointer;
   text-overflow: ellipsis;
 }
+/* Slider on phones: full width, no arrows; it slides on its own
+   (cart_drawer_inline.js ccAutoSlideUpsell) and by swipe. */
+@media (max-width: 480px) {
+  #cc-drawer .cc-upsell-track--slider { padding: 0 !important; }
+  #cc-drawer .cc-upsell-track--slider .cc-nav-btn { display: none !important; }
+}
+/* Slider (one product at a time) row: a smaller size picker that doesn't
+   stretch across the middle column. */
+.cc-upsell-card--row .cc-upsell-variant {
+  height: 26px !important;
+  max-width: 180px !important;
+  margin-top: 4px !important;
+  font-size: 11px !important;
+}
 .cc-upsell-variant:focus-visible {
   outline: 2px solid #2563eb !important;
   outline-offset: 1px;

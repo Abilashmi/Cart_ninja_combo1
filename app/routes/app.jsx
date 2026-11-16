@@ -12,6 +12,7 @@ import { getShopPlan } from "../services/plan-permissions.server";
 import { getFeatureState } from "../config/plans";
 import { adminMessages, getAdminLanguage, resolveAdminLocale, shopifyLocaleFor } from "../i18n/admin.server";
 import { I18nProvider, useT } from "../i18n/admin";
+import SupportChat from "../components/support/SupportChat";
 
 // Polaris's own texts (date pickers, pagination, …) where Polaris has the language.
 const POLARIS_TEXTS = { en: enTranslations, es: esTranslations };
@@ -78,12 +79,12 @@ function AppNav({ planKey }) { // eslint-disable-line react/prop-types
         <s-app-nav>
             <s-link href="/app">{t("admin.nav.home")}</s-link>
             <s-link href="/app/brix-ai">{t("admin.nav.brix_ai")}</s-link>
-            <s-link href="/app/cartdrawer">{t("admin.nav.cart_editor")}</s-link>
-            <s-link href="/app/bundles">{t("admin.nav.build_combo")} {navBadge('build_a_combo', planKey)}</s-link>
-            <s-link href="/app/packs">{t("admin.nav.packs")}</s-link>
             {/* Every store sees COD Checkout; it stays off on the storefront
                 until the merchant turns it on (DEFAULT_COD_SETTINGS.enabled). */}
             <s-link href="/app/cod">{t("admin.nav.cod")}</s-link>
+            <s-link href="/app/cartdrawer">{t("admin.nav.cart_editor")}</s-link>
+            <s-link href="/app/bundles">{t("admin.nav.build_combo")} {navBadge('build_a_combo', planKey)}</s-link>
+            <s-link href="/app/packs">{t("admin.nav.packs")}</s-link>
             <s-link href="/app/fbt">{t("admin.nav.fbt")}</s-link>
             <s-link href="/app/productwidget">{t("admin.nav.coupon_banner")}</s-link>
             <s-link href="/app/coupons">{t("admin.nav.discount_creator")}</s-link>
@@ -114,6 +115,8 @@ export default function App() {
                         )}
                         <AppNav planKey={planKey} />
                         <Outlet context={{ currencySymbol, currencyCode, shop }} />
+                        {/* "Need help setting up?" chat, BRIX AI first then the team (/internal/chat) */}
+                        <SupportChat />
                     </PlanProvider>
                 </CurrencyProvider>
                 </I18nProvider>

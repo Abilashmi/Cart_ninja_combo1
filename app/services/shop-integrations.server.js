@@ -20,3 +20,23 @@ export async function isShiprocketEnabled(shop) {
     return false;
   }
 }
+
+// The merchant's own choice (Cart Editor → Checkout Button → "Checkout
+// opens"): the same switch the internal integrations_admin.php page flips.
+// Creates the table like shop_integrations.php does. Throws on a DB error so
+// the editor can say the save failed.
+export async function setShiprocketEnabled(shop, enabled) {
+  const db = getDb();
+  await db.execute(`CREATE TABLE IF NOT EXISTS shop_integrations (
+    shop VARCHAR(255) NOT NULL,
+    shiprocket_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (shop)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  await db.execute(
+    'INSERT INTO shop_integrations (shop, shiprocket_enabled) VALUES (?, ?) ON DUPLICATE KEY UPDATE shiprocket_enabled = VALUES(shiprocket_enabled)',
+    [String(shop).toLowerCase(), enabled ? 1 : 0],
+  );
+  return enabled;
+}

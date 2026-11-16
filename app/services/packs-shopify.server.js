@@ -6,7 +6,7 @@
  *   - verifying that the checkout discount is really installed and active
  */
 import { PackError, saveStorefrontDiscountState } from './packs.server';
-import { calculateTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage } from '../utils/packs.shared.js';
+import { calculateTier, calculateComboTier, currencyDecimals, normalizeTiers, toGid, toNumericId, validateVariantCoverage, validateExtraProducts, sanitizeExtraProducts, normalizeVariantIds, sanitizeComboItems, comboTierQuantity, validateComboTiers } from '../utils/packs.shared.js';
 
 export const PACKS_FUNCTION_HANDLE = 'brix-packs-discount';
 export const PACKS_DISCOUNT_TITLE = 'BRIX Packs';
@@ -53,6 +53,11 @@ function optionNamesOf(nodes) {
   return (nodes[0]?.selectedOptions || []).map((option) => option.name);
 }
 
+// On sale: ACTIVE, or UNLISTED (API 2025-10+: on the Online Store by direct link only, left out of
+// search and collections; Shopify checkout sells it like an active one).
+export const SELLABLE_STATUSES = ['ACTIVE', 'UNLISTED'];
+export const isSellableStatus = (status) => SELLABLE_STATUSES.includes(status);
+
 /** A product and all (up to 100) of its variants, straight from Shopify. */
 export async function fetchProduct(admin, productId) {
   const gid = toGid('Product', productId);
@@ -60,7 +65,7 @@ export async function fetchProduct(admin, productId) {
   const data = await gql(admin, `#graphql
     query PackProduct($id: ID!) {
       product(id: $id) {
-        id title handle status featuredImage { url }
+        id title handle status onlineStoreUrl featuredImage { url }
         variants(first: 100) { nodes { id title price availableForSale inventoryQuantity inventoryPolicy image { url } selectedOptions { name value } } }
       }
     }`, { id: gid });
@@ -71,6 +76,10 @@ export async function fetchProduct(admin, productId) {
     title: product.title,
     handle: product.handle,
     status: product.status,
+    // A product with an Online Store page: the storefront widget reads /products/<handle>.js. An
+    // unlisted product's page is reached by direct link (onlineStoreUrl isn't documented for it, so it
+    // isn't required); if its page can't be loaded, the widget simply doesn't offer that Pack.
+    published: Boolean(product.onlineStoreUrl) || product.status === 'UNLISTED',
     image: product.featuredImage?.url || '',
     options: optionNamesOf(product.variants.nodes),
     variants: product.variants.nodes.map(shapeVariant),
@@ -102,7 +111,7 @@ export async function verifyProductVariant(admin, productId, variantId, { requir
   if (!variant) throw new PackError('variant_not_found', 'The selected variant no longer exists on this product.', { status: 404 });
   if (variant.price === null || variant.price < 0) throw new PackError('price_unverified', 'Could not verify the current variant price with Shopify.', { status: 502 });
   if (requireAvailable && !variant.availableForSale) throw new PackError('variant_unavailable', 'The selected variant is out of stock, so this Pack cannot be activated.', { status: 409 });
-  if (requireAvailable && product.status !== 'ACTIVE') throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
+  if (requireAvailable && !isSellableStatus(product.status)) throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
   return { product, variant };
 }
 
@@ -126,7 +135,7 @@ export async function verifyPackCoverage(admin, productId, { packType, variantSc
     throw new PackError('price_unverified', 'Could not verify the current price of one of this Pack’s variants.', { status: 502 });
   }
   if (requireAvailable) {
-    if (product.status !== 'ACTIVE') throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
+    if (!isSellableStatus(product.status)) throw new PackError('product_inactive', 'The selected product is not active in Shopify, so this Pack cannot be activated.', { status: 409 });
     if (!applicableVariants.some((variant) => variant.availableForSale)) throw new PackError('variant_unavailable', 'None of this Pack’s variants are in stock, so it cannot be activated.', { status: 409 });
   }
 
@@ -134,6 +143,76 @@ export async function verifyPackCoverage(admin, productId, { packType, variantSc
   // never block the Pack — shoppers simply can't choose those.
   const anchorVariant = applicableVariants.find((variant) => variant.availableForSale) || applicableVariants[0];
   return { product, applicableVariants, allowedVariantIds: check.allowedVariantIds, anchorVariant };
+}
+
+/**
+ * Verify the extra products of a Mix & Match Pack against Shopify (never the browser's own data):
+ * each must exist, be ACTIVE or UNLISTED and on the Online Store (the widget loads /products/<handle>.js),
+ * and have the variants the merchant picked. Returns the clean list to store, with live
+ * titles / handles / images, plus every eligible variant's price (for the tier-price floor).
+ */
+export async function verifyExtraProducts(admin, { packType, productId, extraProducts }, { requireAvailable = false } = {}) {
+  const wanted = sanitizeExtraProducts(extraProducts);
+  const rules = validateExtraProducts({ packType, productId, extraProducts: wanted });
+  if (!rules.valid) throw new PackError('invalid_extra_products', rules.errors[0].message, { status: 422, details: { errors: rules.errors } });
+  const verified = [];
+  const prices = [];
+  for (const item of wanted) {
+    const product = await fetchProduct(admin, item.productId);
+    if (!isSellableStatus(product.status)) throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
+    if (!product.published) throw new PackError('product_unpublished', `${product.title} is not available on your Online Store, so shoppers can't pick it. Publish it first.`, { status: 409 });
+    const check = validateVariantCoverage({ packType, variantScope: item.variantScope, allowedVariantIds: item.allowedVariantIds }, product.variants.map((variant) => variant.id));
+    if (!check.valid) throw new PackError('invalid_extra_products', `${product.title}: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
+    const applicable = item.variantScope === 'all' ? product.variants : product.variants.filter((variant) => check.allowedVariantIds.includes(variant.id));
+    if (applicable.some((variant) => variant.price === null || variant.price < 0)) {
+      throw new PackError('price_unverified', `Could not verify the current price of one of ${product.title}'s variants.`, { status: 502 });
+    }
+    if (requireAvailable && !applicable.some((variant) => variant.availableForSale)) {
+      throw new PackError('variant_unavailable', `None of ${product.title}'s chosen variants are in stock.`, { status: 409 });
+    }
+    prices.push(...applicable.map((variant) => variant.price));
+    verified.push({
+      productId: product.id, handle: product.handle, title: product.title, image: product.image,
+      variantScope: item.variantScope, allowedVariantIds: item.variantScope === 'all' ? [] : check.allowedVariantIds,
+    });
+  }
+  return { extraProducts: verified, prices };
+}
+
+/**
+ * Fixed Combo: every tier's items re-read from Shopify (never what the browser
+ * sent): the product must be ACTIVE or UNLISTED and on the Online Store (the widget loads
+ * /products/<handle>.js), the variant must be the product's. Fills in handle,
+ * titles and image. Returns { tiers, subtotals } where subtotals[i] = the
+ * tier's price before its discount (`mainPrice` for this product + its items).
+ */
+export async function verifyComboTiers(admin, { productId, tiers, mainPrice }, { requireAvailable = false } = {}) {
+  const rules = validateComboTiers(tiers, productId);
+  if (!rules.valid) throw new PackError('invalid_tiers', rules.errors[0].message, { status: 422, details: { errors: rules.errors } });
+  const products = new Map();
+  const out = [];
+  const subtotals = [];
+  const itemPrices = {};
+  for (const tier of tiers) {
+    const items = [];
+    let subtotal = Number(mainPrice) || 0;
+    for (const item of sanitizeComboItems(tier.items)) {
+      if (!products.has(item.productId)) products.set(item.productId, await fetchProduct(admin, item.productId));
+      const product = products.get(item.productId);
+      if (!isSellableStatus(product.status)) throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
+      if (!product.published) throw new PackError('product_unpublished', `${product.title} is not available on your Online Store, so shoppers can't buy it in a Pack. Publish it first.`, { status: 409 });
+      const variant = product.variants.find((v) => String(v.id) === String(item.variantId));
+      if (!variant) throw new PackError('invalid_tiers', `The chosen variant of ${product.title} no longer exists. Pick it again.`, { status: 422 });
+      if (variant.price === null || variant.price < 0) throw new PackError('price_unverified', `Could not verify the current price of ${product.title}.`, { status: 502 });
+      if (requireAvailable && !variant.availableForSale) throw new PackError('variant_unavailable', `${product.title}${variant.title && variant.title !== 'Default Title' ? ` (${variant.title})` : ''} is sold out, so a pack with it can't go live.`, { status: 409 });
+      subtotal += variant.price * item.quantity;
+      itemPrices[String(variant.id)] = variant.price;
+      items.push({ productId: product.id, variantId: variant.id, quantity: item.quantity, handle: product.handle, title: product.title, variantTitle: variant.title === 'Default Title' ? '' : (variant.title || ''), image: variant.image || product.image || '' });
+    }
+    out.push({ ...tier, items, quantity: comboTierQuantity({ items }) });
+    subtotals.push(Math.round(subtotal * 100) / 100);
+  }
+  return { tiers: out, subtotals, itemPrices };
 }
 
 /**
@@ -147,7 +226,8 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
   let live = new Map();
   let lookupFailed = null;
   try {
-    live = await fetchVariants(admin, packs.map((pack) => pack.variantId));
+    // Fixed Combo items are priced live too (their variants join the same lookup).
+    live = await fetchVariants(admin, packs.flatMap((pack) => [pack.variantId, ...(pack.packType === 'combo' ? (pack.tiers || []).flatMap((tier) => (tier.items || []).map((item) => item.variantId)) : [])]));
   } catch (error) {
     lookupFailed = error instanceof PackError ? error.message : 'Could not verify prices with Shopify.';
   }
@@ -158,13 +238,15 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
   // distinct product, only when the caller actually needs it.
   const variantsByProduct = new Map();
   const optionsByProduct = new Map();
+  const extraByProduct = new Map();
   if (includeVariants) {
-    const productIds = [...new Set(packs.map((pack) => pack.productId))];
+    const productIds = [...new Set(packs.flatMap((pack) => [pack.productId, ...(pack.extraProducts || []).map((item) => item.productId)]))];
     await Promise.all(productIds.map(async (productId) => {
       try {
         const product = await fetchProduct(admin, productId);
         variantsByProduct.set(productId, product.variants);
         optionsByProduct.set(productId, product.options);
+        extraByProduct.set(productId, product);
       } catch {
         // Leave unset — the pack simply won't get an expanded variant list;
         // its own issue/priceVerified flag (from the anchor lookup) still applies.
@@ -180,7 +262,24 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
     else if (!issue && variant.price === null) issue = 'The current variant price could not be verified.';
     const priceVerified = !issue;
     const basePrice = priceVerified ? variant.price : pack.basePrice;
-    const tiers = normalizeTiers(pack.tiers).map((tier) => ({ ...tier, ...calculateTier(basePrice, tier, { currencyCode: currency?.code, locale: currency?.locale }) }));
+    const money = { currencyCode: currency?.code, locale: currency?.locale };
+    const itemPrices = {};
+    if (pack.packType === 'combo') {
+      for (const tier of pack.tiers || []) for (const item of tier.items || []) {
+        const found = live.get(String(toNumericId(item.variantId)));
+        itemPrices[String(toNumericId(item.variantId))] = found && found.price !== null ? found.price : null;
+      }
+    }
+    // Fixed Combo: this product + the tier's own items; an item that can't be priced = the tier's
+    // stored figures only (comboIssue), never a guess.
+    let comboIssue = null;
+    const tiers = normalizeTiers(pack.tiers).map((tier) => {
+      if (pack.packType !== 'combo') return { ...tier, ...calculateTier(basePrice, tier, money) };
+      const priced = calculateComboTier(basePrice, tier, itemPrices, money);
+      if (!priced) { comboIssue = 'A product in one of this Pack\'s combos could not be found in Shopify. Edit the Pack and pick it again.'; return { ...tier }; }
+      return { ...tier, ...priced };
+    });
+    if (!issue && comboIssue) issue = comboIssue;
 
     let variants;
     const productVariants = variantsByProduct.get(pack.productId);
@@ -203,6 +302,27 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
       productHandle: variant?.productHandle || '',
       variants,
       productOptions: optionsByProduct.get(pack.productId),
+      // Extra products with their live variants / options (only when the caller asked for variants).
+      extraProducts: includeVariants
+        ? (pack.extraProducts || []).map((item) => {
+          const product = extraByProduct.get(item.productId);
+          const all = product?.variants || [];
+          const applicable = item.variantScope === 'all' ? all : all.filter((variant) => (item.allowedVariantIds || []).includes(variant.id));
+          let issue = null;
+          if (!product) issue = 'This product could not be loaded from Shopify.';
+          else if (!isSellableStatus(product.status)) issue = 'This product is no longer active.';
+          else if (!product.published) issue = 'This product is no longer on your Online Store.';
+          return {
+            ...item,
+            title: product?.title || item.title,
+            handle: product?.handle || item.handle,
+            image: product?.image || item.image,
+            variants: applicable.filter((variant) => variant.price !== null),
+            productOptions: product?.options,
+            issue,
+          };
+        })
+        : pack.extraProducts,
       displayStatus: issue && pack.status === 'active' ? 'configuration_error' : pack.status,
       currency: currency ? { code: currency.code, locale: currency.locale } : null,
     };
@@ -232,10 +352,53 @@ export function buildFunctionConfig(activePacks, currencyCode = null) {
       // every variant of the product just because the list came in empty.
       variantScope: pack.variantScope,
       allowedVariantIds: pack.variantScope === 'all' ? [] : (Array.isArray(pack.allowedVariantIds) && pack.allowedVariantIds.length ? pack.allowedVariantIds : [pack.variantId]),
-      tiers: normalizeTiers(pack.tiers).map((tier) => ({ quantity: tier.quantity, discountType: tier.discountType, discountValue: tier.discountValue })),
+      tiers: normalizeTiers(pack.tiers).map((tier) => ({
+        quantity: tier.quantity, discountType: tier.discountType, discountValue: tier.discountValue,
+        // Fixed Combo: the tier's exact items ({ p: productId, v: variantId, q: quantity }).
+        ...(pack.packType === 'combo' ? { items: (tier.items || []).map((item) => ({ p: item.productId, v: item.variantId, q: item.quantity })) } : {}),
+      })),
+      // Written only for Fixed Combo packs, so every other pack stays byte-for-byte what it was.
+      ...(pack.packType === 'combo' ? { packType: 'combo' } : {}),
+      // Other products a Mix & Match pack draws from, keyed by product id. Written only when set,
+      // so a pack that doesn't use the feature stays byte-for-byte what it was.
+      ...(Array.isArray(pack.extraProducts) && pack.extraProducts.length ? {
+        extraProducts: Object.fromEntries(sanitizeExtraProducts(pack.extraProducts).map((item) => [item.productId, {
+          scope: item.variantScope,
+          allowedVariantIds: item.variantScope === 'all' ? [] : normalizeVariantIds(item.allowedVariantIds),
+        }])),
+      } : {}),
     };
   }
   return { version: 1, currency: currencyCode, packs };
+}
+
+// Shopify drops a metafield value over 10 KB, so a config with extra products is kept under this.
+export const PACKS_CONFIG_BYTE_LIMIT = 9000;
+const byteLength = (value) => new TextEncoder().encode(JSON.stringify(value)).length;
+
+/**
+ * Keep the config under the metafield limit without changing any pack that doesn't use extra
+ * products (those are always kept, exactly as before). Packs with extra products are added in id
+ * order while they fit; one that doesn't is left out, and since the storefront only offers a pack
+ * the config really holds at its current version, it is simply not offered (never mispriced).
+ * Returns { config, skipped: [pack ids] }.
+ */
+export function fitPacksConfig(config, limit = PACKS_CONFIG_BYTE_LIMIT) {
+  if (byteLength(config) <= limit) return { config, skipped: [] };
+  const entries = Object.entries(config.packs);
+  // Packs with extra products or Fixed Combo items are the ones that can grow; the rest always stay.
+  const grows = (pack) => Boolean(pack.extraProducts) || pack.packType === 'combo';
+  const fixed = entries.filter(([, pack]) => !grows(pack));
+  const variable = entries.filter(([, pack]) => grows(pack)).sort((a, b) => Number(a[0]) - Number(b[0]));
+  const kept = Object.fromEntries(fixed);
+  const skipped = [];
+  for (const [id, pack] of variable) {
+    const trial = { ...config, packs: { ...kept, [id]: pack } };
+    if (byteLength(trial) <= limit) kept[id] = pack; else skipped.push(id);
+  }
+  // Keep the original (id) order of the packs that stay.
+  const ordered = Object.fromEntries(entries.filter(([id]) => id in kept));
+  return { config: { ...config, packs: ordered }, skipped };
 }
 
 async function getShopGid(admin) {
@@ -245,7 +408,7 @@ async function getShopGid(admin) {
 
 /** Write the shop-level app-owned metafield the discount function reads. */
 export async function writeFunctionConfig(admin, activePacks, currencyCode) {
-  const config = buildFunctionConfig(activePacks, currencyCode);
+  const { config, skipped } = fitPacksConfig(buildFunctionConfig(activePacks, currencyCode));
   const ownerId = await getShopGid(admin);
   const data = await gql(admin, `#graphql
     mutation PackConfig($metafields: [MetafieldsSetInput!]!) {
@@ -256,6 +419,7 @@ export async function writeFunctionConfig(admin, activePacks, currencyCode) {
     console.error('[packs-shopify] metafieldsSet userErrors:', JSON.stringify(errors).slice(0, 300));
     throw new PackError('config_sync_failed', 'Could not sync Pack configuration to Shopify.', { status: 502 });
   }
+  Object.defineProperty(config, 'skipped', { value: skipped, enumerable: false });
   return config;
 }
 
@@ -353,8 +517,11 @@ async function readCheckoutDiscountStatus(admin, activePacks) {
  */
 export async function syncCheckoutDiscount(admin, activePacks, { install = true, currencyCode = null } = {}) {
   try {
-    await writeFunctionConfig(admin, activePacks, currencyCode);
+    const written = await writeFunctionConfig(admin, activePacks, currencyCode);
     if (install && activePacks.length) await ensurePacksDiscount(admin);
+    if (written.skipped?.length) {
+      return { ok: false, warning: { code: 'config_too_large', message: 'Too many Packs with extra products to sync to checkout at once, so some are not live. Remove extra products from a Pack or turn one off.' } };
+    }
     return { ok: true, warning: null };
   } catch (error) {
     const warning = error instanceof PackError ? { code: error.code, message: error.message } : { code: 'sync_failed', message: 'Could not sync the checkout discount.' };

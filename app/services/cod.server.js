@@ -19,12 +19,14 @@ import { BASE_PHP_URL } from '../utils/api-helpers';
 import { sendOtpSms, smsProviderStatus } from './cod-sms.server';
 import { sendCodPurchaseEvents, sendCodRefundEvent } from './cod-tracking.server';
 import {
-  DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isRewardGiftLine,
+  DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
   maskPhone, splitName, provinceCodeFor, moneyFormatter, codRuleCollections, codShownOnProduct, unlistedCodAllowed,
 } from '../utils/cod.shared.js';
+import { partialCodSplit } from '../utils/partial-cod.shared.js';
 import { computeBox, decimalsFor, formatWeight, tierLabel, toGrams, toMinor } from '../utils/combo-weight.shared.js';
 import { COMBO_WEIGHT_CONFIG_KEY, COMBO_WEIGHT_DISCOUNT_TITLE } from './combo-weight-shopify.server';
 import { PACKS_CONFIG_KEY, PACKS_DISCOUNT_TITLE } from './packs-shopify.server';
+import { packDiscountsFor } from '../utils/packs-discount.shared.js';
 import {
   sanitizeShipping, quoteShipping, deliveryForShopper, deliverySummary, referencedCollections, dateLabel, slotLabel,
 } from '../utils/shipping.shared.js';
@@ -568,6 +570,51 @@ function shippingLines(calc, info) {
 }
 
 /** The shopper's pick of delivery option / date / slot from the popup (untrusted). */
+/**
+ * The address Shopify prices shipping for: always the PIN code; with Shopify
+ * rates also the city and state (zones by state need it).
+ */
+export function rateAddress(where, full = false) {
+  const provinceCode = full ? provinceCodeFor(where.state) : null;
+  return {
+    countryCode: 'IN',
+    zip: String(where.pincode),
+    ...(full && where.city ? { city: String(where.city) } : {}),
+    ...(provinceCode ? { provinceCode } : {}),
+  };
+}
+
+/**
+ * The store's Shopify rates (availableShippingRates) as COD delivery options,
+ * cheapest first (one per name, its lowest price): id = the name made safe
+ * for cleanDeliveryChoice, kind 'shopify'. `choice` = the shopper's pick
+ * ({ option }); none or gone = the cheapest (choiceError 'option' when gone).
+ */
+export function shopifyShipping(rates, choice = null) {
+  const byName = new Map();
+  for (const r of Array.isArray(rates) ? rates : []) {
+    const name = String(r?.title || '').trim().slice(0, 80);
+    const price = Math.round(Number(r?.price?.amount) * 100) / 100;
+    if (!name || !Number.isFinite(price) || price < 0) continue;
+    if (!byName.has(name) || byName.get(name).price > price) byName.set(name, { name, price });
+  }
+  const used = new Set();
+  const options = [...byName.values()].sort((a, b) => a.price - b.price || a.name.localeCompare(b.name)).map((r) => {
+    const base = `s-${r.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'rate'}`;
+    let id = base;
+    for (let n = 2; used.has(id); n += 1) id = `${base}-${n}`;
+    used.add(id);
+    return { id, kind: 'shopify', name: r.name, price: r.price, free: r.price === 0 };
+  });
+  const wanted = choice?.option ? options.find((o) => o.id === choice.option) : null;
+  return {
+    options,
+    selected: wanted || options[0] || null,
+    choiceError: choice?.option && !wanted ? 'option' : null,
+    zone: null, date: null, slot: null, noShipping: false,
+  };
+}
+
 export function cleanDeliveryChoice(value) {
   const v = value && typeof value === 'object' ? value : {};
   const pick = (x, re) => (typeof x === 'string' && re.test(x) ? x : null);
@@ -657,124 +704,6 @@ async function loadComboVariants(admin, variantIds, collectionIds = []) {
   return result;
 }
 
-/* ───────────────────────── Packs (tier offers) ───────────────────────── */
-
-// A Pack's price in Shopify checkout comes from the BRIX Packs Function, which
-// reads only the app-owned shop metafield `$app:packs_config` and the lines'
-// _brix_pack_* properties (extensions/brix-packs-discount). Draft orders don't
-// run it (the _brix* markers are stripped), so COD applies the same tier
-// discount itself, from the same trusted config and the same rules, as line
-// discounts on the draft. A Pack line COD can't verify (config missing, the
-// checkout discount not ACTIVE, another product or variant, a quantity that is
-// no tier, a fixed amount in another currency) makes `unverified` true and the
-// quote refuses: COD never charges a price checkout wouldn't.
-
-async function loadPacksContext(admin) {
-  const data = await gql(admin, `#graphql
-    query CodPacksConfig {
-      shop { metafield(namespace: "$app", key: "${PACKS_CONFIG_KEY}") { jsonValue } }
-      discountNodes(first: 100, query: "type:app") {
-        nodes { discount { __typename ... on DiscountAutomaticApp { title status } } }
-      }
-    }`);
-  const active = (data?.discountNodes?.nodes || []).some((n) => n.discount?.__typename === 'DiscountAutomaticApp'
-    && n.discount.title === PACKS_DISCOUNT_TITLE && n.discount.status === 'ACTIVE');
-  const config = data?.shop?.metafield?.jsonValue;
-  return { active, config: config && typeof config === 'object' && config.packs && typeof config.packs === 'object' ? config : null };
-}
-
-const positiveInt = (value) => {
-  const n = Number.parseInt(String(value ?? ''), 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
-};
-
-/**
- * Pack tier discounts for the Pack lines of a COD order, shaped like
- * comboWeightAdjustments' result so both feed the same draft-order pricing:
- * { byLine: Map<lineIndex, amountMinor>, titles, descriptions, boxes, decimals, unverified }.
- */
-export async function packAdjustments(admin, { lines, currencyCode = 'INR' }) {
-  const result = { byLine: new Map(), titles: new Map(), descriptions: new Map(), boxes: [], decimals: decimalsFor(currencyCode), unverified: false };
-  const marked = lines.map((line, index) => ({ line, index })).filter(({ line }) => line.properties?._brix_pack_id);
-  if (!marked.length) return result;
-  const { active, config } = await loadPacksContext(admin);
-  if (!active || !config) { result.unverified = true; return result; }
-  const variants = await loadComboVariants(admin, marked.map(({ line }) => line.variantId));
-  const { decimals } = result;
-  const factor = 10 ** decimals;
-
-  // Group the marked lines into packs (one add-to-cart = one group token), like the Function.
-  const groups = new Map();
-  for (const entry of marked) {
-    const props = entry.line.properties;
-    const packQuantity = positiveInt(props._brix_pack_quantity);
-    const pack = Object.values(config.packs).find((item) => String(item?.id) === String(props._brix_pack_id));
-    const variant = variants.get(String(entry.line.variantId));
-    if (!packQuantity || !pack || !Array.isArray(pack.tiers) || !variant || variant.productId !== String(pack.productId)) { result.unverified = true; continue; }
-    if (pack.variantScope !== 'all') {
-      const allowed = Array.isArray(pack.allowedVariantIds) && pack.allowedVariantIds.length ? pack.allowedVariantIds : [String(pack.variantId)];
-      if (!allowed.some((id) => String(id) === String(entry.line.variantId))) { result.unverified = true; continue; }
-    }
-    const key = `${pack.id}:${packQuantity}:${props._brix_pack_group || entry.index}`;
-    if (!groups.has(key)) groups.set(key, { pack, packQuantity, entries: [] });
-    groups.get(key).entries.push({ ...entry, subtotalMinor: toMinor(variant.price, decimals) * entry.line.quantity });
-  }
-
-  for (const { pack, packQuantity, entries } of groups.values()) {
-    const tier = pack.tiers.find((item) => Number(item.quantity) === packQuantity);
-    const total = entries.reduce((sum, e) => sum + e.line.quantity, 0);
-    // No such tier, or a quantity that isn't a whole number of packs: checkout gives no
-    // discount here while the shopper was shown a Pack price, so COD refuses instead.
-    if (!tier || total <= 0 || total % packQuantity !== 0) { result.unverified = true; continue; }
-    if (tier.discountType === 'none') continue;
-    const value = Number(tier.discountValue);
-    if (!Number.isFinite(value) || value <= 0) { result.unverified = true; continue; }
-    const packCount = total / packQuantity;
-    const groupSubtotal = entries.reduce((sum, e) => sum + e.subtotalMinor, 0);
-    if (!(groupSubtotal > 0)) { result.unverified = true; continue; }
-
-    const shares = new Map();
-    if (tier.discountType === 'percentage') {
-      if (value > 100) { result.unverified = true; continue; }
-      for (const e of entries) shares.set(e.index, Math.round((e.subtotalMinor * value) / 100));
-    } else if (tier.discountType === 'fixed') {
-      // Fixed amounts are in the shop currency; checkout applies them only in that currency.
-      if (!config.currency || config.currency !== currencyCode) { result.unverified = true; continue; }
-      const totalDiscount = Math.min(Math.round(value * factor) * packCount, groupSubtotal);
-      let remaining = totalDiscount;
-      entries.forEach((e, i) => {
-        const share = i === entries.length - 1 ? remaining : Math.min(remaining, Math.floor((totalDiscount * e.subtotalMinor) / groupSubtotal));
-        remaining -= share;
-        shares.set(e.index, share);
-      });
-    } else { result.unverified = true; continue; }
-
-    const title = `Pack: Buy ${packQuantity}`;
-    let groupDiscount = 0;
-    for (const [index, amountMinor] of shares) {
-      if (amountMinor <= 0) continue;
-      result.byLine.set(index, amountMinor);
-      result.titles.set(index, title);
-      result.descriptions.set(index, 'BRIX Pack');
-      groupDiscount += amountMinor;
-    }
-    if (groupDiscount > 0) {
-      result.boxes.push({ templateId: `pack:${pack.id}`, kind: 'pack', title, weight: '', amountMinor: groupDiscount, subtotalMinor: groupSubtotal, lineKeys: entries.map((e) => e.index) });
-    }
-  }
-  return result;
-}
-
-function mergeAdjustments(first, second) {
-  return {
-    byLine: new Map([...first.byLine, ...second.byLine]),
-    titles: new Map([...first.titles, ...second.titles]),
-    descriptions: new Map([...(first.descriptions || []), ...(second.descriptions || [])]),
-    boxes: [...first.boxes, ...second.boxes],
-    decimals: first.decimals,
-  };
-}
-
 function comboQualifies(template, variant) {
   if (!variant?.productId) return false;
   // Same rule as the checkout Function: "not part of the box offer" never counts.
@@ -848,6 +777,69 @@ export async function comboWeightAdjustments(admin, { lines, comboWeightLive = f
   return result;
 }
 
+/* ───────────────────────── Packs ───────────────────────── */
+
+// A Pack (Buy 2 / Buy 3 ...) gets its price in Shopify checkout from the BRIX
+// Packs Function, which draft orders never run (and the _brix_pack_* markers
+// are stripped from the draft's lines). COD gives the same price itself: the
+// same trusted $app:packs_config and the same rule (packs-discount.shared.js),
+// as line discounts like the combo boxes. Only while BRIX Packs is ACTIVE in
+// Shopify, as in checkout. A Pack with no discount simply costs its price.
+async function loadPacksContext(admin) {
+  const data = await gql(admin, `#graphql
+    query CodPacks {
+      shop { metafield(namespace: "$app", key: "${PACKS_CONFIG_KEY}") { jsonValue } }
+      discountNodes(first: 100, query: "type:app") {
+        nodes { discount { __typename ... on DiscountAutomaticApp { title status } } }
+      }
+    }`);
+  const active = (data?.discountNodes?.nodes || []).some((n) => n.discount?.__typename === 'DiscountAutomaticApp'
+    && n.discount.title === PACKS_DISCOUNT_TITLE && n.discount.status === 'ACTIVE');
+  const config = data?.shop?.metafield?.jsonValue;
+  return { active, config: config && typeof config === 'object' && config.packs && typeof config.packs === 'object' ? config : null };
+}
+
+/**
+ * Pack discounts for the Pack lines of a COD order (lines already priced as a
+ * combo box are left alone). Returns { byLine: Map<lineIndex, amountMinor>,
+ * titles: Map<lineIndex, title>, amountMinor }.
+ */
+export async function packAdjustments(admin, { lines, currencyCode = 'INR', skip = new Map() }) {
+  const result = { byLine: new Map(), titles: new Map(), amountMinor: 0 };
+  const marked = lines.map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => line.properties?._brix_pack_id && !skip.has(index));
+  if (!marked.length) return result;
+  const { active, config } = await loadPacksContext(admin);
+  if (!active || !config) return result;
+  const variants = await loadComboVariants(admin, marked.map(({ line }) => line.variantId));
+  const decimals = decimalsFor(currencyCode);
+  const minorOf = new Map();
+  const plain = marked.map(({ line, index }) => {
+    const variant = variants.get(String(line.variantId));
+    const subtotalMinor = variant ? toMinor(variant.price, decimals) * line.quantity : 0;
+    minorOf.set(String(index), subtotalMinor);
+    return {
+      id: String(index),
+      quantity: line.quantity,
+      packId: line.properties._brix_pack_id,
+      packQuantity: line.properties._brix_pack_quantity,
+      packGroup: line.properties._brix_pack_group,
+      productId: variant?.productId || null,
+      variantId: String(line.variantId),
+      subtotalAmount: subtotalMinor / 10 ** decimals,
+      currencyCode,
+    };
+  });
+  for (const d of packDiscountsFor(config, plain)) {
+    const amount = d.percent != null ? Math.round((minorOf.get(d.id) * d.percent) / 100) : d.amount;
+    if (!(amount > 0)) continue;
+    result.byLine.set(Number(d.id), amount);
+    result.titles.set(Number(d.id), d.message);
+    result.amountMinor += amount;
+  }
+  return result;
+}
+
 // How Shopify reads a FIXED_AMOUNT line discount on a draft order (per unit or
 // per line) has not been confirmed on a store yet, so the first combo quote
 // checks what Shopify actually did and remembers the mode that matched.
@@ -861,7 +853,7 @@ function comboLineItems(lines, combo, mode) {
     const amountMinor = combo.byLine.get(index);
     if (!amountMinor) { out.push(item); return; }
     const title = combo.titles.get(index);
-    const description = combo.descriptions?.get(index) || 'BRIX combo box';
+    const description = combo.packLines?.has(index) ? 'BRIX Pack' : 'BRIX combo box';
     const discount = (minor) => ({ valueType: 'FIXED_AMOUNT', value: minor / factor, title, description });
     if (mode === 'line' || item.quantity === 1) {
       out.push({ ...item, appliedDiscount: discount(amountMinor) });
@@ -886,7 +878,7 @@ const lineDiscountMinor = (calc, decimals) => (calc?.lineItems || [])
  * Refuses COD (never charges a different price) when neither mode matches.
  */
 async function comboPricedLineItems(admin, lines, combo) {
-  const expected = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0);
+  const expected = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0) + (combo.packMinor || 0);
   const modes = comboLineDiscountMode === 'unit' ? ['unit', 'line'] : ['line', 'unit'];
   for (const mode of modes) {
     const lineItems = comboLineItems(lines, combo, mode);
@@ -896,7 +888,7 @@ async function comboPricedLineItems(admin, lines, combo) {
       return lineItems;
     }
   }
-  console.error('[cod] combo box discount did not price as expected; refusing COD for this box.');
+  console.error('[cod] combo box / Pack discount did not price as expected; refusing COD for this cart.');
   throw new CodError('combo_price_mismatch', "Cash on Delivery can't be used for this box right now. Please pay online.", { status: 422 });
 }
 
@@ -927,7 +919,7 @@ function boxLinesStacked(calc, lines, combo) {
 // Function and code ones) with its title and amount, so the popup can name
 // them. Validated against the 2026-01 schema; if the store's API version
 // rejects it, calculate() falls back to CALCULATE_BASIC for good.
-const CALCULATE_FIELDS = (withPlatform) => `#graphql
+const CALCULATE_FIELDS = (withPlatform, withRates = false) => `#graphql
   mutation CodCalculate($input: DraftOrderInput!) {
     draftOrderCalculate(input: $input) {
       calculatedDraftOrder {
@@ -935,6 +927,7 @@ const CALCULATE_FIELDS = (withPlatform) => `#graphql
         taxesIncluded
         discountCodes
         ${withPlatform ? 'platformDiscounts { title code automaticDiscount totalAmountPriceSet { shopMoney { amount } } }' : ''}
+        ${withRates ? 'availableShippingRates { handle title price { amount } }' : ''}
         lineItems {
           name title variantTitle quantity sku
           variant { id }
@@ -955,17 +948,20 @@ const CALCULATE_FIELDS = (withPlatform) => `#graphql
   }`;
 const CALCULATE = CALCULATE_FIELDS(true);
 const CALCULATE_BASIC = CALCULATE_FIELDS(false);
+// Shipping from Shopify (settings.shippingMode 'shopify'): the same, plus the store's rates.
+const CALCULATE_RATES = CALCULATE_FIELDS(true, true);
+const CALCULATE_BASIC_RATES = CALCULATE_FIELDS(false, true);
 let platformDiscountsSupported = true;
 
-async function calculate(admin, input) {
+async function calculate(admin, input, { rates = false } = {}) {
   let data;
   try {
-    data = await gql(admin, platformDiscountsSupported ? CALCULATE : CALCULATE_BASIC, { input });
+    data = await gql(admin, platformDiscountsSupported ? (rates ? CALCULATE_RATES : CALCULATE) : (rates ? CALCULATE_BASIC_RATES : CALCULATE_BASIC), { input });
   } catch (error) {
     if (!platformDiscountsSupported || !(error instanceof CodError) || error.code !== 'shopify_error') throw error;
     console.warn('[cod] draftOrderCalculate without platformDiscounts from now on');
     platformDiscountsSupported = false;
-    data = await gql(admin, CALCULATE_BASIC, { input });
+    data = await gql(admin, rates ? CALCULATE_BASIC_RATES : CALCULATE_BASIC, { input });
   }
   const result = data?.draftOrderCalculate;
   if (result?.userErrors?.length) {
@@ -986,10 +982,21 @@ function shippingLine(settings, charges, currencyCode, option = null) {
 
 // Codes from the shopper's cart (cart.js discount_codes / the BRIX drawer).
 const MAX_DISCOUNT_CODES = 5;
+// BRIX's own one-time codes (newBoxCode: 2 letters + 10 of its alphabet):
+// PC = Partial COD (partial-cod.server.js), PP = prepaid on Shiprocket
+// (prepaid-code.server.js), BX = a combo box (combo-box-code.server.js).
+// Each is worth everything but what that one checkout charges, so one left on
+// the shopper's cart (they went to that checkout and came back) must never
+// count as a discount in a COD quote: a Partial COD started again priced the
+// cart with the old code and booked a ₹461-short balance (14 Nov 2026), and a
+// plain COD order would have taken it off too.
+export const BRIX_ONE_TIME_CODE = /^(PC|PP|BX)[A-HJ-NP-Z2-9]{10}$/i;
+
 function cleanCartCodes(list) {
   const out = [];
   for (const raw of Array.isArray(list) ? list : []) {
     const c = typeof raw === 'string' ? raw.trim() : '';
+    if (BRIX_ONE_TIME_CODE.test(c)) continue;
     if (/^[^\s<>"'`\\]{1,60}$/.test(c) && !out.some((x) => x.toLowerCase() === c.toLowerCase())) out.push(c);
     if (out.length >= MAX_DISCOUNT_CODES) break;
   }
@@ -1088,24 +1095,30 @@ export async function quoteCod(admin, {
   settings, lines, coupon, pincode, surface, currencyCode = 'INR', comboWeightLive = false, cartCodes = [], cartAttributes = {},
   shipping = null, destination = null, delivery = null, strictDelivery = false, now = new Date(),
 }) {
-  if (lines.some((l) => isRewardGiftLine(l.properties))) {
-    throw new CodError('checkout_only', 'This cart has a Pack or free gift that is only available with online payment.', { status: 422 });
+  if (lines.some((l) => isCheckoutOnlyLine(l.properties))) {
+    throw new CodError('checkout_only', 'This cart has a free gift that is only available with online payment.', { status: 422 });
   }
   const advanced = settings.shippingMode === 'advanced' && shipping ? shipping : null;
+  // Shipping from the store's own Shopify rates (Settings > Shipping and delivery).
+  const fromShopify = settings.shippingMode === 'shopify';
   const where = destination || (pincode ? { pincode } : null);
   const { tags, info } = await loadVariants(admin, lines, { shipping: advanced, collections: codRuleCollections(settings, surface) });
   const productError = productRuleError(settings, info, surface);
   if (productError) throw new CodError(productError.code, productError.message, { status: 422 });
   const format = moneyFormatter(currencyCode);
-  const packs = await packAdjustments(admin, { lines, currencyCode });
-  // A Pack COD can't price exactly like checkout does is refused, never charged differently.
-  if (packs.unverified) {
-    throw new CodError('checkout_only', 'This Pack can only be bought with online payment right now.', { status: 422 });
+  const combo = await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode });
+  // Packs: their price as line discounts too, priced and checked the same way.
+  const packs = await packAdjustments(admin, { lines, currencyCode, skip: combo.byLine });
+  for (const [index, amount] of packs.byLine) {
+    combo.byLine.set(index, amount);
+    combo.titles.set(index, packs.titles.get(index));
   }
-  const combo = mergeAdjustments(await comboWeightAdjustments(admin, { lines, comboWeightLive, currencyCode }), packs);
-  const hasBoxes = combo.boxes.length > 0;
+  combo.packLines = packs.byLine;
+  combo.packMinor = packs.amountMinor;
+  const hasBoxes = combo.boxes.length > 0 || packs.amountMinor > 0;
 
-  const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) ? coupon.trim() : null;
+  // A typed coupon that is one of BRIX's own one-time codes is ignored too (BRIX_ONE_TIME_CODE).
+  const code = settings.allowCoupons && typeof coupon === 'string' && /^[\w-]{1,60}$/.test(coupon.trim()) && !BRIX_ONE_TIME_CODE.test(coupon.trim()) ? coupon.trim() : null;
   // The cart's own discounts (settings.cartDiscounts, default on): Shopify's
   // automatic discounts, including app / Function ones, and the codes already
   // on the shopper's cart, as in Shopify checkout. Off: none of them.
@@ -1123,13 +1136,13 @@ export async function quoteCod(admin, {
     // that here, COD leaves automatic discounts off for this order instead.
     acceptAutomaticDiscounts: withCartDiscounts,
     ...(codes.length ? { discountCodes: codes } : {}),
-    ...(where?.pincode ? { shippingAddress: { countryCode: 'IN', zip: String(where.pincode) } } : {}),
+    ...(where?.pincode ? { shippingAddress: rateAddress(where, fromShopify) } : {}),
   };
 
-  let calc = await calculate(admin, base);
+  let calc = await calculate(admin, base, { rates: fromShopify && Boolean(where?.pincode) });
   if (hasBoxes && boxLinesStacked(calc, lines, combo)) {
     base = { ...base, acceptAutomaticDiscounts: false };
-    calc = await calculate(admin, base);
+    calc = await calculate(admin, base, { rates: fromShopify && Boolean(where?.pincode) });
   }
   // The most a typed code may take off (settings.couponMaxDiscount).
   const capped = code ? await capCoupon(admin, { settings, code, base, calc, format }) : null;
@@ -1140,6 +1153,16 @@ export async function quoteCod(admin, {
 
   // Advanced shipping: the delivery option's price for this address and cart.
   let ship = null;
+  if (fromShopify && where?.pincode) {
+    const rated = calc.availableShippingRates ? calc : await calculate(admin, base, { rates: true });
+    ship = shopifyShipping(rated.availableShippingRates, delivery);
+    if (!ship.options.length) {
+      throw new CodError('no_delivery_option', 'No delivery option is available for this address and cart right now. Please try another address, or pay online.', { status: 422 });
+    }
+    if (strictDelivery && ship.choiceError) {
+      throw new CodError('delivery_changed', 'That delivery option is no longer available. Please check your order again.', { status: 409 });
+    }
+  }
   if (advanced) {
     ship = quoteShipping(advanced, { destination: where, subtotal, lines: shippingLines(calc, info), now, choice: delivery || {}, fmt: format });
     if (ship.blocked) throw new CodError('not_deliverable', ship.blocked.message, { status: 422 });
@@ -1152,7 +1175,9 @@ export async function quoteCod(admin, {
         : 'That delivery day or time is no longer available. Please pick another.', { status: 409 });
     }
   }
-  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : null);
+  // The order's products: some may have their own COD fee (codFeeProducts).
+  // Shopify rates before the address is known: no shipping yet (never the one-price setting).
+  const charges = codCharges(settings, subtotal, ship ? (ship.selected?.price ?? 0) : fromShopify ? 0 : null, [...info.values()].map((v) => v.productId));
   const input = { ...base };
   input.shippingLine = shippingLine(settings, charges, calc.currencyCode || currencyCode, ship?.selected?.name || null);
   if (charges.total > 0) calc = await calculate(admin, input);
@@ -1162,9 +1187,10 @@ export async function quoteCod(admin, {
   // from Shopify's own total, so the rows always add up to what is charged).
   const factor = 10 ** combo.decimals;
   const comboDiscount = combo.boxes.reduce((sum, b) => sum + b.amountMinor, 0) / factor;
+  const packDiscount = packs.amountMinor / factor;
   const itemsOriginal = (calc.lineItems || []).reduce((sum, li) => sum + amountOf(li.originalTotalSet), 0);
   const otherDiscounts = hasBoxes
-    ? Math.max(0, Math.round((itemsOriginal - comboDiscount + charges.total + (calc.taxesIncluded ? 0 : amountOf(calc.totalTaxSet)) - amountOf(calc.totalPriceSet)) * factor) / factor)
+    ? Math.max(0, Math.round((itemsOriginal - comboDiscount - packDiscount + charges.total + (calc.taxesIncluded ? 0 : amountOf(calc.totalTaxSet)) - amountOf(calc.totalPriceSet)) * factor) / factor)
     : amountOf(calc.totalDiscountsSet);
 
   // Which codes Shopify really used: by platformDiscounts when the API gives
@@ -1195,7 +1221,9 @@ export async function quoteCod(admin, {
     subtotal: amountOf(calc.subtotalPriceSet),
     discounts: otherDiscounts,
     comboDiscount,
-    comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor, ...(b.kind ? { kind: b.kind } : {}) })),
+    // Pack price (Buy 2 / Buy 3 ...): the same discount Shopify checkout gives.
+    packDiscount,
+    comboDiscounts: combo.boxes.map((b) => ({ templateId: b.templateId, title: b.title, weight: b.weight, amount: b.amountMinor / factor })),
     shipping: charges.shipping,
     // Advanced shipping: the delivery options for this address and cart, and
     // which one is picked (null under simple shipping).
@@ -1326,6 +1354,12 @@ export async function placeCodOrder(admin, {
     shipping, destination: { pincode: address.pincode, city: address.city, state: address.state }, delivery, strictDelivery: true,
   });
   const option = ship?.selected || null;
+  // Partial COD set to "only part payment": where it's offered, the whole amount
+  // can't be paid on delivery (the popup shows only Part payment).
+  const quoteCharges = (Number(quote.shipping) || 0) + (Number(quote.codFee) || 0);
+  if (settings.partialCod?.only && partialCodSplit(settings.partialCod, quote.total, quoteCharges)) {
+    throw new CodError('partial_required', 'This order needs a part payment online. Please choose Part payment.', { status: 422 });
+  }
 
   try {
     await php('cod_orders.php', {
@@ -1340,11 +1374,9 @@ export async function placeCodOrder(admin, {
 
   const clearAttempt = () => php('cod_orders.php', { action: 'abandon', shop, idem_key: idemKey }).catch(() => {});
 
-  const allBoxes = quote.comboDiscounts || [];
-  const boxes = allBoxes.filter((b) => b.kind !== 'pack');
-  const packTiers = allBoxes.filter((b) => b.kind === 'pack');
+  const boxes = quote.comboDiscounts || [];
   const tags = [...new Set([
-    'COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []), ...(packTiers.length ? ['brix-pack'] : []),
+    'COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []),
     ...(option ? [`brix-ship-${option.kind.replace(/_/g, '-')}`] : []), ...settings.orderTags,
   ])];
   // Advanced shipping: what was booked, for the merchant and their courier.
@@ -1355,7 +1387,7 @@ export async function placeCodOrder(admin, {
     ...(ship.slot ? [{ key: 'brix_delivery_slot', value: slotLabel(ship.slot) }] : []),
     ...(!ship.date && option.eta ? [{ key: 'brix_delivery_eta', value: option.eta.from === option.eta.to ? option.eta.from : `${option.eta.from} to ${option.eta.to}` }] : []),
   ] : [];
-  const reserved = new Set(['brix_combo_weight', 'brix_pack', ...deliveryAttributes.map((a) => a.key)]);
+  const reserved = new Set(['brix_combo_weight', ...deliveryAttributes.map((a) => a.key)]);
   const customAttributes = [
     { ...COD_MARKER },
     { key: 'payment_method', value: 'Cash on Delivery' },
@@ -1364,10 +1396,6 @@ export async function placeCodOrder(admin, {
     ...(boxes.length ? [{
       key: 'brix_combo_weight',
       value: boxes.map((b) => `combo ${b.templateId}: ${b.title}, ${b.weight}, -${b.amount.toFixed(2)}`).join('; ').slice(0, 250),
-    }] : []),
-    ...(packTiers.length ? [{
-      key: 'brix_pack',
-      value: packTiers.map((b) => `${b.templateId}: ${b.title}, -${b.amount.toFixed(2)}`).join('; ').slice(0, 250),
     }] : []),
     ...deliveryAttributes,
     ...Object.entries(attributes || {})
@@ -1584,7 +1612,9 @@ export function summarizeCodOrders(orders) {
   const cancelled = orders.filter((o) => o.status === 'cancelled');
   return {
     count: orders.length,
-    toCollect: sum(pending),
+    // Partial COD: only the balance is still to collect (the advance was paid online).
+    toCollect: pending.reduce((a, o) => a + (o.partial ? o.partial.balance : o.total), 0),
+    partialCount: orders.filter((o) => o.partial).length,
     collected: sum(paid),
     paidCount: paid.length,
     cancelledCount: cancelled.length,

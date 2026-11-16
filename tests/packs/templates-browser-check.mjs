@@ -242,6 +242,52 @@ await check('offer band: "selected" follows the chosen pack, reduced motion keep
   await context.close();
 });
 
+// Fixed Combo: this product (picked) + fixed products per tier.
+const cream = { variant: { id: '501', title: 'Default Title', price: 349, availableForSale: true, maxQuantity: null, image: PX2 }, quantity: 1, title: 'Night Cream', variantTitle: '' };
+const sunscreen = { variant: { id: '502', title: 'SPF 50', price: 299, availableForSale: true, maxQuantity: null, image: PX }, quantity: 1, title: 'Sunscreen', variantTitle: 'SPF 50' };
+const comboPack = (preset) => pack(preset, {
+  template: 'fixed_combo', packType: 'combo',
+  tiers: [
+    { quantity: 2, name: 'Duo', badge: '', discountType: 'percentage', discountValue: 10, items: [{ productId: '601', variantId: '501', quantity: 1 }], comboItems: [cream] },
+    { quantity: 3, name: 'Trio', badge: 'Most popular', discountType: 'percentage', discountValue: 20, items: [{ productId: '601', variantId: '501', quantity: 1 }, { productId: '602', variantId: '502', quantity: 1 }], comboItems: [cream, sunscreen] },
+  ],
+});
+
+await check('Fixed Combo in the new templates: one item to pick, the fixed products listed and added; the Ladder shows as a Price List', async () => {
+  for (const preset of ['rail', 'list', 'offer_rows', 'stack', 'ladder']) {
+    const { page, context, cartCalls, errors } = await open({ packs: [comboPack(preset)] });
+    const text = await page.locator('.brix-packs-widget').textContent();
+    assert.match(text, preset === 'rail' ? /Night Cream/ : /Crew Tee \+ Night Cream/, `${preset}: combo text`);
+    if (preset === 'ladder') assert.equal(await page.locator('.brix-packs-ladder').count(), 0, 'no ladder for a combo');
+    if (preset === 'stack') {
+      assert.equal(await page.locator('.brix-packs-card').nth(1).locator('.brix-packs-sphotos > *').count(), 3, 'tee + cream + sunscreen photos');
+      await page.locator('.brix-packs-card').nth(1).click();
+    } else if (preset === 'rail') {
+      await page.locator('.brix-packs-rail button').nth(1).click();
+      assert.equal(await page.locator('.brix-packs-circle').count(), 1, 'one item to pick');
+      assert.match(await page.locator('.brix-packs-includes').textContent(), /Sunscreen/);
+    } else {
+      await page.locator('.brix-packs-lrow').nth(1).click();
+      assert.equal(await page.locator('.brix-packs-lline').count(), 1, `${preset}: one item to pick`);
+      assert.match(await page.locator('.brix-packs-includes').textContent(), /Sunscreen/);
+    }
+    if (preset !== 'stack') {
+      await page.getByRole('button', { name: 'Size S' }).first().click();
+      await page.getByRole('button', { name: 'Color Black' }).first().click();
+    } else {
+      await page.getByLabel(/Size/).first().selectOption('S');
+      await page.getByLabel(/Color/).first().selectOption('Black');
+    }
+    await page.locator('.brix-packs-add').click();
+    await page.waitForFunction(() => document.querySelector('.brix-packs-msg'));
+    const ids = cartCalls[0].items.map((line) => line.id).sort();
+    assert.deepEqual(ids, [301, 501, 502], `${preset}: cart lines`);
+    if (preset === 'offer_rows') await shot(page, 'combo-offer-rows');
+    assert.deepEqual(errors, [], preset);
+    await context.close();
+  }
+});
+
 await check('every new template fits a 360px phone without sideways scroll', async () => {
   for (const preset of ['rail', 'list', 'ladder', 'stack', 'offer_rows']) {
     const { page, context, errors } = await open({ packs: [pack(preset, { customization: customization(preset, { band: { enabled: true, target: 'all' } }) })], viewport: { width: 360, height: 900 } });

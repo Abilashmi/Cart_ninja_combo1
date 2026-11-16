@@ -217,8 +217,40 @@ function cods_tracking($tracking) {
     ];
 }
 
+// Partial COD for the popup (mirrors sanitizePartialCod in
+// app/utils/partial-cod.shared.js); null = off. The popup shows the split, the
+// app server (api/cod/partial-cod) works out and checks the real amounts.
+function cods_partial_cod($value) {
+    $p = is_array($value) ? $value : [];
+    if (empty($p['enabled'])) return null;
+    $amount = is_numeric($p['amount'] ?? null) ? max(1, min(100000, round((float)$p['amount'], 2))) : 50;
+    $percent = is_numeric($p['percent'] ?? null) ? max(1, min(90, round((float)$p['percent'], 2))) : 10;
+    return [
+        // charges = the order's shipping + COD fee is the advance.
+        'mode' => in_array($p['mode'] ?? '', ['percent', 'charges'], true) ? $p['mode'] : 'fixed',
+        'amount' => $amount,
+        'percent' => $percent,
+        'minOrder' => cods_num($p['minOrder'] ?? 0),
+        'maxOrder' => cods_num($p['maxOrder'] ?? 0),
+        // Only part payment: no full Cash on Delivery where Partial COD is offered.
+        'only' => !empty($p['only']),
+    ];
+}
+
 function cods_collection_ids($list) {
     return cods_id_list($list, 50);
+}
+
+// { fee, products: [numeric id] } from the saved [{ id: gid, title }], or null.
+function cods_fee_products($value) {
+    if (!is_array($value)) return null;
+    $ids = [];
+    foreach (($value['products'] ?? []) as $p) {
+        $raw = is_array($p) ? ($p['id'] ?? '') : $p;
+        if (preg_match('/(\d{1,20})$/', (string)$raw, $m)) $ids[] = $m[1];
+    }
+    $ids = cods_id_list($ids, 50);
+    return $ids ? ['fee' => cods_num($value['fee'] ?? 0), 'products' => $ids] : null;
 }
 
 // Numeric ids, unique, at most $max.
@@ -321,6 +353,8 @@ function cods_product_payment($s, $codLive) {
             // Collections left out of it (numeric ids, as Shopify verified on
             // save): product pages in them show no prepaid offer.
             'excludedCollections' => cods_collection_ids($rt['excludedCollections'] ?? []),
+            // Products left out one by one (numeric ids): no offer on their pages.
+            'excludedProducts' => cods_id_list($rt['excludedProducts'] ?? [], 50),
             'minSubtotal' => cods_num($rt['minSubtotal'] ?? 0),
             // The most it takes off (0 = no cap), as Shopify verified on save.
             'maxDiscount' => cods_num($rt['maxDiscount'] ?? 0),
@@ -437,10 +471,14 @@ if ($action === 'config') {
         // instead (cod.shared.js codFeeOf). 0 = always codFee.
         'codFeePercent' => $feeOn ? min(50, cods_num($s['codFeePercent'] ?? 0)) : 0,
         'codFeePercentFrom' => cods_num($s['codFeePercentFrom'] ?? 0),
+        // Products with their own COD fee (cod.shared.js codProductFee): only
+        // them = that fee; mixed with other products = the higher one.
+        'codFeeProducts' => $feeOn ? cods_fee_products($s['codFeeProducts'] ?? null) : null,
         'showCodFee' => ($s['showCodFee'] ?? true) !== false,
         'codFeeLabel' => $feeLabel !== '' ? $feeLabel : 'Cash on Delivery Fee',
-        'shippingFee' => cods_num($s['shippingFee'] ?? 0),
-        'freeShippingAbove' => cods_num($s['freeShippingAbove'] ?? 0),
+        // Shipping from the store's Shopify rates: known only at review (the app server prices it).
+        'shippingFee' => ($s['shippingMode'] ?? '') === 'shopify' ? 0 : cods_num($s['shippingFee'] ?? 0),
+        'freeShippingAbove' => ($s['shippingMode'] ?? '') === 'shopify' ? 0 : cods_num($s['freeShippingAbove'] ?? 0),
         'blockedPincodes' => cods_str_list($s['blockedPincodes'] ?? []),
         'excludedProductTags' => cods_str_list($s['excludedProductTags'] ?? []),
         'excludedBehavior' => cods_enum($s['excludedBehavior'] ?? '', ['unavailable', 'hide'], 'unavailable'),
@@ -465,6 +503,9 @@ if ($action === 'config') {
         'sheet' => cods_sheet($s['sheet'] ?? null),
         'tracking' => cods_tracking($s['tracking'] ?? null),
         'productPayment' => $payment,
+        // Partial COD (app/utils/partial-cod.shared.js): null = off. The popup
+        // only shows the split; the app server works out the real amounts.
+        'partialCod' => cods_partial_cod($s['partialCod'] ?? null),
     ], 30);
 }
 

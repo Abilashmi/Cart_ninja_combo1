@@ -20,6 +20,11 @@ export async function ensurePromoTables(db) {
   if (!existing.includes('promo_trial_days')) {
     alterations.push('ADD COLUMN `promo_trial_days` INT NULL DEFAULT NULL');
   }
+  // A trial length set for this one shop by the BRIX team (promo_admin.php
+  // "Shop trials"), used instead of the standard 7 days. NULL = standard.
+  if (!existing.includes('trial_days_override')) {
+    alterations.push('ADD COLUMN `trial_days_override` INT NULL DEFAULT NULL');
+  }
   if (alterations.length > 0) {
     await db.execute(`ALTER TABLE shops ${alterations.join(', ')}`);
   }

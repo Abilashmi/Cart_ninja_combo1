@@ -246,7 +246,7 @@ if (scenario === 'live') {
     }));
     const num = (x) => Number(String(x).replace(/[^\d.]/g, ''));
     const m = /^Buy it for (.+) COD$/.exec(t.label);
-    check('Price tags: {price} shows the cart total, and the fee line stays', Boolean(m) && num(m[1]) === num(t.subtotal) && /49/.test(t.sub), JSON.stringify(t));
+    check('Price tags: {price} shows the cart total, no fee line under the button', Boolean(m) && num(m[1]) === num(t.subtotal) && t.sub === '', JSON.stringify(t));
   }
   await page.getByLabel('Button text', { exact: true }).fill('Pay cash on delivery');
   await page.waitForTimeout(200);
@@ -554,6 +554,33 @@ if (scenario === 'live') {
   check('Unlisted, only these: the chosen collection is listed, error gone', await page.locator('.Polaris-Tag', { hasText: 'Gift boxes' }).count() === 1 && await page.getByText('Choose at least one product or collection.').count() === 0);
   await shot('eligibility');
 
+  // Partial COD: off by default; advance as a fixed amount or a percentage, with a worked example.
+  await openSec('Partial COD');
+  check('Partial COD: off by default', !(await page.getByLabel('Offer Partial COD').isChecked()) && await badge('Partial COD') === 'Off');
+  await page.getByLabel('Offer Partial COD').check();
+  await page.getByLabel('Advance amount').fill('75');
+  await page.waitForTimeout(100);
+  check('Partial COD: fixed advance, example worked out', await page.getByText('Example: on a ₹1,599 order, the shopper pays ₹75 now and ₹1,524 on delivery.').count() === 1);
+  await page.getByText('A percentage of the order', { exact: true }).click();
+  await page.getByLabel('Advance percentage').fill('10');
+  await page.waitForTimeout(100);
+  check('Partial COD: percentage rounds the advance up (₹160 on ₹1,599)', await page.getByText('Example: on a ₹1,599 order, the shopper pays ₹160 now and ₹1,439 on delivery.').count() === 1);
+  // Shipping + COD fee: no amount box; the example uses the store's one-price shipping and fee.
+  await page.getByText('Shipping + COD fee', { exact: true }).click();
+  await page.waitForTimeout(100);
+  const chargesText = (await page.getByText(/^(Example: on a ₹1,599 order \(|Not offered on a ₹1,599 order: it has no shipping)/).first().textContent().catch(() => '')) || '';
+  check('Partial COD: Shipping + COD fee shows no amount box and a worked example',
+    await page.getByLabel('Advance amount').count() === 0 && await page.getByLabel('Advance percentage').count() === 0
+      && /^Example: on a ₹1,599 order \(₹[\d,]+ shipping \+ ₹[\d,]+ COD fee\), the shopper pays ₹([\d,]+) now and ₹[\d,]+ on delivery\.$/.test(chargesText),
+    chargesText);
+  await page.getByText('A fixed amount', { exact: true }).click();
+  check('Partial COD: "Only offer part payment" off by default', !(await page.getByLabel('Only offer part payment').isChecked()));
+  await page.getByLabel('Only offer part payment').check();
+  await page.getByLabel('Offer from order value').fill('500');
+  await page.waitForTimeout(100);
+  check('Partial COD: badge On once switched on', await badge('Partial COD') === 'On');
+  await shot('partial-cod');
+
   // Popup + coupons + tracking
   await openSec('Popup design');
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="90"><circle cx="45" cy="45" r="36" fill="#e11d48"/><text x="96" y="58" font-family="Arial" font-weight="700" font-size="40" fill="#111827">Acme Store</text></svg>';
@@ -626,6 +653,9 @@ if (scenario === 'live') {
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   const submitted = await page.evaluate(() => JSON.parse(window.__SUBMITTED__ || '{}'));
   const saved = submitted.settings || {};
+  check('Save: Partial COD settings are sent',
+    saved.partialCod?.enabled === true && saved.partialCod?.mode === 'fixed' && saved.partialCod?.amount === 75 && saved.partialCod?.percent === 10 && saved.partialCod?.minOrder === 500 && saved.partialCod?.only === true,
+    JSON.stringify(saved.partialCod));
   check('Save: the MSG91 keys go as write-only secrets, not in the settings',
     submitted.secrets?.msg91AuthKey === 'authKEY12345' && submitted.secrets?.msg91TemplateId === 'tmpl6789' && !JSON.stringify(saved).includes('authKEY'), JSON.stringify(submitted.secrets));
   check('Save: Buy it now text, Replace off and the Terms link are sent',
@@ -657,6 +687,12 @@ if (width > 900) {
   await page.evaluate(() => { window.__SUBMITTED__ = null; });
   await openSec('Shipping charges');
   check('Shipping: one price by default; zones, rules and the rest hidden', await page.getByLabel('One price').isChecked() && (await row('Zones').count()) === 0);
+  // My Shopify shipping rates: no price fields of its own, says where the rates come from.
+  await page.getByLabel('My Shopify shipping rates').check({ force: true });
+  await page.waitForTimeout(150);
+  check('Shipping: "My Shopify shipping rates" hides the one-price fields and explains', (await page.getByLabel('Free shipping from').count()) === 0
+    && (await page.getByText('the same zones, prices, free-shipping thresholds', { exact: false }).count()) === 1
+    && (await page.getByText('Open Shipping and delivery in Shopify').count()) === 1);
   await page.getByLabel('Dynamic shipping').check({ force: true }); // Polaris draws its own radio over the input
   await page.waitForTimeout(150);
   const std = await page.locator('.shp-card').first().textContent();

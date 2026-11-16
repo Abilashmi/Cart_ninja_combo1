@@ -104,14 +104,16 @@
   // Shiprocket would charge those lines at full price. A cart holding any of
   // them stays on Shopify checkout, except free gifts the one-time code
   // already covers (giftsCovered, brix_cod.js prepaidCartCode). If the cart
-  // can't be read, stay on Shopify too.
-  function cartNeedsShopifyCheckout(giftsCovered) {
+  // can't be read, stay on Shopify too. allowPacks: Pack lines may go to
+  // Shiprocket (the Pack widget's tap on Shiprocket's own Buy Now: the
+  // merchant has Shiprocket apply the Pack's automatic discount).
+  function cartNeedsShopifyCheckout(giftsCovered, allowPacks) {
     return window.fetch(rootUrl() + 'cart.js', { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
       .then(function (response) { return response.json(); })
       .then(function (cart) {
         return (cart.items || []).some(function (item) {
           var properties = item.properties || {};
-          if (properties._brix_pack_id || properties._brix_combo_id) return true;
+          if (properties._brix_combo_id || (properties._brix_pack_id && !allowPacks)) return true;
           return !giftsCovered && properties._brixReward === 'true' && Number(item.final_line_price) === 0;
         });
       })
@@ -139,7 +141,7 @@
   }
 
   // Checks out the whole current cart (the cart drawer's checkout button).
-  // options: { coupon, giftsCovered, fallbackUrl, onOpen }
+  // options: { coupon, giftsCovered, allowPacks, fallbackUrl, onOpen }
   function checkoutCart(options) {
     var fallbackUrl = (options && options.fallbackUrl) || rootUrl() + 'checkout';
     if (busy) return;
@@ -149,7 +151,7 @@
         if (!events) { go(fallbackUrl); return null; }
         // giftsCovered only counts with the code that covers them.
         var giftsCovered = Boolean(options && options.giftsCovered && options.coupon);
-        return Promise.all([cartNeedsShopifyCheckout(giftsCovered), syncCoupon(options && options.coupon)]).then(function (results) {
+        return Promise.all([cartNeedsShopifyCheckout(giftsCovered, Boolean(options && options.allowPacks)), syncCoupon(options && options.coupon)]).then(function (results) {
           if (results[0]) { go(fallbackUrl); return; }
           launch(function () { events.buyCart(null); }, fallbackUrl, options && options.onOpen);
         });

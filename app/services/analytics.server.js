@@ -208,6 +208,7 @@ export async function getAnalyticsData(shop, startDate, endDate) {
           cartdrawer_total_revenue: orderStats.total_revenue,
           avg_order_value: orderStats.avg_order_value,
           conversion_rate: orderStats.conversion_rate,
+          order_count: orderStats.order_count,
         },
       };
     } catch (error) {
@@ -226,6 +227,7 @@ export async function getAnalyticsData(shop, startDate, endDate) {
       cartdrawer_total_revenue: orderStats.total_revenue,
       avg_order_value: orderStats.avg_order_value,
       conversion_rate: orderStats.conversion_rate,
+      order_count: orderStats.order_count,
     },
   };
 }

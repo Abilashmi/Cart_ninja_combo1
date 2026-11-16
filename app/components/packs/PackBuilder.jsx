@@ -2,13 +2,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAppBridge } from '@shopify/app-bridge-react';
-import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup, TextField, Banner, Tabs, Divider, Badge, Box, Thumbnail, SkeletonBodyText, Spinner, Icon, RangeSlider } from '@shopify/polaris';
+import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup, TextField, Select, InlineError, Banner, Tabs, Divider, Badge, Box, Thumbnail, SkeletonBodyText, Spinner, Icon, RangeSlider } from '@shopify/polaris';
 import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon, StarIcon, CashDollarIcon, MegaphoneIcon } from '@shopify/polaris-icons';
 import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
 import {
-  CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, applyDesign, calculateTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage,
+  CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, MAX_EXTRA_PRODUCTS, COMBO_MAX_ITEMS, COMBO_MAX_ITEM_QUANTITY, validateExtraProducts, validateComboTiers, comboTierQuantity, applyDesign, calculateTier, calculateComboTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage,
 } from '../../utils/packs.shared.js';
 
 const PREVIEW_ZOOM = 0.8;
@@ -36,10 +36,15 @@ const SAMPLE_VARIANTS = [
 
 const blankTier = (quantity, discountType = 'none', discountValue = '') => ({ name: '', quantity: String(quantity), discountType, discountValue: String(discountValue), badge: '' });
 const DEFAULT_TIERS = [blankTier(1), blankTier(2, 'percentage', 5), blankTier(3, 'percentage', 10)];
+// Fixed Combo: a pack = this product + `items` (other products' exact variants); quantity follows them.
+const comboTier = (discountType = 'none', discountValue = '') => ({ ...blankTier(1, discountType, discountValue), items: [] });
+const comboFormItem = (item) => ({ productId: String(item.productId), variantId: String(item.variantId), quantity: Number(item.quantity) || 1, handle: item.handle || '', title: item.title || '', variantTitle: item.variantTitle || '', image: item.image || '' });
 
 function emptyForm() {
   return {
     productId: '', productTitle: '', productImage: '', template: 'same_variant', packType: 'same_variant', variantScope: 'all', allowedVariantIds: [],
+    // Other products a Mix & Match Pack draws from, and the extra product pages it is shown on.
+    extraProducts: [], showOn: [], showOnTitles: {},
     tiers: DEFAULT_TIERS.map((tier) => ({ ...tier })), customization: defaultCustomization(),
   };
 }
@@ -50,7 +55,13 @@ function packToForm(pack) {
     packType: pack.packType || (pack.template === 'choose_each_item' ? 'mix_match' : 'same_variant'),
     variantScope: pack.variantScope || 'selected',
     allowedVariantIds: pack.variantScope === 'all' ? [] : pack.allowedVariantIds || [pack.variantId],
-    tiers: pack.tiers.map((tier) => ({ name: tier.name || '', quantity: String(tier.quantity), discountType: tier.discountType || 'none', discountValue: tier.discountType === 'none' ? '' : String(tier.discountValue ?? ''), badge: tier.badge || '' })),
+    extraProducts: (pack.extraProducts || []).map((item) => ({ productId: item.productId, handle: item.handle || '', title: item.title || '', image: item.image || '', variantScope: item.variantScope === 'all' ? 'all' : 'selected', allowedVariantIds: item.variantScope === 'all' ? [] : item.allowedVariantIds || [] })),
+    showOn: pack.showOn || [],
+    showOnTitles: {},
+    tiers: pack.tiers.map((tier) => ({
+      name: tier.name || '', quantity: String(tier.quantity), discountType: tier.discountType || 'none', discountValue: tier.discountType === 'none' ? '' : String(tier.discountValue ?? ''), badge: tier.badge || '',
+      ...(pack.packType === 'combo' ? { items: (tier.items || []).map(comboFormItem) } : {}),
+    })),
     customization: mergeCustomization(pack.customization),
   };
 }
@@ -171,6 +182,40 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     return () => { cancelled = true; };
   }, [form.productId, reloadKey]);
 
+  // ── extra products (Mix & Match): live variants for each, fetched fresh like the main product ──
+  const [extraData, setExtraData] = useState({}); // productId -> { status, product, error }
+  // Fixed Combo: every product in any pack is loaded the same way (live prices, variants, stock).
+  const extraKey = [...new Set([
+    ...form.extraProducts.map((item) => item.productId),
+    ...(form.packType === 'combo' ? form.tiers.flatMap((tier) => (tier.items || []).map((item) => item.productId)) : []),
+  ])].join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const ids = extraKey ? extraKey.split(',') : [];
+    ids.forEach((id) => {
+      setExtraData((current) => (current[id]?.status === 'ready' || current[id]?.status === 'loading' ? current : { ...current, [id]: { status: 'loading', product: null, error: '' } }));
+      api(`/api/packs?product=${encodeURIComponent(id)}`)
+        .then((data) => { if (!cancelled) setExtraData((current) => ({ ...current, [id]: { status: 'ready', product: data.product, error: '' } })); })
+        .catch((loadError) => { if (!cancelled) setExtraData((current) => ({ ...current, [id]: { status: 'error', product: null, error: loadError.message } })); });
+    });
+    return () => { cancelled = true; };
+  }, [extraKey, reloadKey]);
+
+  // Titles of the pages the Pack is shown on, for a Pack loaded from the server (a fresh pick brings its own).
+  const showOnKey = form.showOn.filter((id) => !form.showOnTitles[id]).join(',');
+  useEffect(() => {
+    if (!showOnKey) return undefined;
+    let cancelled = false;
+    fetch(`/api/product-search?ids=${encodeURIComponent(showOnKey.split(',').map((id) => `gid://shopify/Product/${id}`).join(','))}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (cancelled || !Array.isArray(data?.products)) return;
+        setForm((current) => ({ ...current, showOnTitles: { ...current.showOnTitles, ...Object.fromEntries(data.products.map((item) => [String(item.id).split('/').pop(), item.title])) } }));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showOnKey]);
+
   const variants = productData.product?.variants || [];
   // The variants this Pack actually applies to: every variant ('all'), or the
   // merchant-curated subset ('selected'). Base pricing previews off the first
@@ -188,14 +233,80 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [productData.status, form.packType, form.variantScope, form.allowedVariantIds, variants.length]
   );
-  const tierCheck = useMemo(() => validateTiers(form.tiers, { basePrice, currencyCode: currency.code }), [form.tiers, basePrice, currency.code]);
+  // Extra products the Pack really draws from (Mix & Match only), with the variants picked for each.
+  const extraEnabled = form.packType === 'mix_match' && form.extraProducts.length > 0;
+  const extraEntries = form.packType === 'mix_match' ? form.extraProducts.map((item) => {
+    const data = extraData[item.productId];
+    const all = data?.product?.variants || [];
+    const applicable = item.variantScope === 'all' ? all : all.filter((variant) => item.allowedVariantIds.includes(variant.id));
+    return { ...item, status: data?.status || 'loading', error: data?.error || '', allVariants: all, applicable, options: data?.product?.options, handle: data?.product?.handle || item.handle };
+  }) : [];
+  // A fixed discount is checked against the cheapest variant of ANY product the Pack can be filled with.
+  const priceFloor = extraEnabled ? Math.min(...[...applicableVariants, ...extraEntries.flatMap((item) => item.applicable)].map((variant) => variant.price).filter((price) => price !== null && price !== undefined), basePrice ?? Infinity) : basePrice;
+  // Fixed Combo: each item's live variant (price, stock), from the product loaded for it.
+  const isCombo = form.packType === 'combo';
+  const comboVariant = (item) => (extraData[item.productId]?.product?.variants || []).find((variant) => String(variant.id) === String(item.variantId)) || null;
+  const comboItemPrices = {};
+  if (isCombo) form.tiers.forEach((tier) => (tier.items || []).forEach((item) => { const live = comboVariant(item); comboItemPrices[String(item.variantId)] = live && live.price !== null ? live.price : null; }));
+  const comboPricesKey = JSON.stringify(comboItemPrices);
+  // A fixed discount must fit even with this product's cheapest covered variant (as the server checks).
+  const comboMainFloor = applicableVariants.map((variant) => variant.price).filter((price) => Number.isFinite(price));
+  const comboMainPrice = comboMainFloor.length ? Math.min(...comboMainFloor) : null;
+  const tierCheck = useMemo(() => {
+    if (!isCombo) return validateTiers(form.tiers, { basePrice: Number.isFinite(priceFloor) ? priceFloor : null, currencyCode: currency.code });
+    const prices = JSON.parse(comboPricesKey);
+    const subtotals = form.tiers.map((tier) => {
+      if (comboMainPrice === null) return null;
+      let sum = comboMainPrice;
+      for (const item of tier.items || []) {
+        const price = prices[String(item.variantId)];
+        if (price === null || price === undefined) return null;
+        sum += price * (Number(item.quantity) || 1);
+      }
+      return sum;
+    });
+    const base = validateTiers(form.tiers.map((tier) => ({ ...tier, quantity: String(comboTierQuantity(tier)) })), { currencyCode: currency.code, packType: 'combo', tierSubtotals: subtotals });
+    const errors = [...base.errors, ...validateComboTiers(form.tiers, form.productId).errors];
+    // An item whose product loaded but whose variant is gone (deleted in Shopify since it was picked).
+    form.tiers.forEach((tier, index) => (tier.items || []).forEach((item) => {
+      const data = extraData[item.productId];
+      if (data?.status === 'error' || (data?.status === 'ready' && !(data.product?.variants || []).some((variant) => String(variant.id) === String(item.variantId)))) {
+        errors.push({ index, field: 'items', message: `${item.title || 'A product'}${item.variantTitle ? ` (${item.variantTitle})` : ''} is no longer in Shopify. Remove it and pick it again.` });
+      }
+    }));
+    if (form.tiers.every((tier) => !(tier.items || []).length)) errors.push({ index: null, field: 'tiers', message: 'Add the other products to at least one pack.' });
+    return { valid: errors.length === 0, errors };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCombo, form.tiers, form.productId, priceFloor, currency.code, comboPricesKey, comboMainPrice, extraData]);
+  const extraCheck = useMemo(() => validateExtraProducts({ packType: form.packType, productId: form.productId, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [] }), [form.packType, form.productId, form.extraProducts]);
   const customCheck = useMemo(() => sanitizeCustomization(form.customization), [form.customization]);
   const tierErrors = (index, field) => tierCheck.errors.find((item) => item.index === index && item.field === field)?.message;
 
+  // Fixed Combo: what the storefront widget draws for a pack's items (packs_widget.js tier.comboItems).
+  const comboItemsFor = (tier) => (tier.items || []).map((item) => {
+    const live = comboVariant(item);
+    const product = extraData[item.productId]?.product;
+    return {
+      variant: { id: String(item.variantId), title: item.variantTitle, price: live?.price ?? 0, availableForSale: live ? live.availableForSale : true, maxQuantity: live?.maxQuantity ?? null, image: live?.image || item.image || product?.image || '', productTitle: product?.title || item.title, optionValues: [] },
+      quantity: Number(item.quantity) || 1,
+      title: product?.title || item.title,
+      variantTitle: item.variantTitle,
+    };
+  });
   const previewTiers = useMemo(() => {
     if (basePrice === null || !tierCheck.valid) return [];
-    return normalizeTiers(form.tiers).map((tier) => ({ ...tier, ...calculateTier(basePrice, tier, { currencyCode: currency.code, locale: currency.locale }) }));
-  }, [form.tiers, basePrice, tierCheck.valid, currency.code, currency.locale]);
+    const money = { currencyCode: currency.code, locale: currency.locale };
+    if (!isCombo) return normalizeTiers(form.tiers).map((tier) => ({ ...tier, ...calculateTier(basePrice, tier, money) }));
+    const prices = JSON.parse(comboPricesKey);
+    const priced = normalizeTiers(form.tiers).map((tier) => {
+      const calc = calculateComboTier(basePrice, tier, prices, money);
+      return calc ? { ...tier, ...calc, comboItems: comboItemsFor(tier) } : null;
+    });
+    return priced.every(Boolean) ? priced : [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.tiers, basePrice, tierCheck.valid, currency.code, currency.locale, isCombo, comboPricesKey, extraData]);
+  // "Kurta + Dupatta (Red) + 2 × Palazzo"
+  const comboContents = (tier) => [form.productTitle || 'This product', ...(tier.items || []).map((item) => `${Number(item.quantity) > 1 ? `${item.quantity} × ` : ''}${item.title}${item.variantTitle ? ` (${item.variantTitle})` : ''}`)].join(' + ');
 
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
   const updateTier = (index, patch) => setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i === index ? { ...tier, ...patch } : tier)) }));
@@ -207,6 +318,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const blocker = (target) => {
     if (target > 0 && !form.productId) return 'Choose a Shopify product first.';
     if (target > 2 && !coverageCheck.valid) return `Fix variant coverage first: ${coverageCheck.errors[0]?.message}`;
+    if (target > 2 && !extraCheck.valid) return `Fix the other products first: ${extraCheck.errors[0]?.message}`;
     if (target > 2 && !tierCheck.valid) return `Fix the Pack tiers first: ${tierCheck.errors[0]?.message}`;
     if (target > 4 && customCheck.errors.length > 0) return `Fix the customization first: ${customCheck.errors[0]}`;
     return null;
@@ -226,7 +338,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     if (step !== REVIEW_STEP || !form.productId || !anchorVariant) return undefined;
     let cancelled = false;
     setReview({ status: 'loading', data: null, error: '' });
-    api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'preview', productId: form.productId, variantId: anchorVariant.id, tiers: form.tiers }) })
+    api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'preview', productId: form.productId, variantId: anchorVariant.id, packType: form.packType, tiers: form.tiers }) })
       .then((data) => { if (!cancelled) setReview({ status: 'ready', data, error: '' }); })
       .catch((loadError) => { if (!cancelled) setReview({ status: 'error', data: null, error: loadError.message }); });
     return () => { cancelled = true; };
@@ -248,12 +360,52 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     }
   }
 
+  // Other products for a Mix & Match Pack. The picker returns the whole selection, so what was already
+  // chosen keeps its variant settings and anything un-ticked is removed.
+  async function addExtraProducts() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: MAX_EXTRA_PRODUCTS + 1, action: 'select', filter: { variants: false }, selectionIds: [form.productId, ...form.extraProducts.map((item) => item.productId)].filter(Boolean).map((id) => ({ id: `gid://shopify/Product/${id}` })) });
+      if (!result) return;
+      setForm((current) => {
+        const kept = new Map(current.extraProducts.map((item) => [item.productId, item]));
+        const next = [];
+        for (const picked of result) {
+          const id = String(picked.id).split('/').pop();
+          if (id === current.productId || next.some((item) => item.productId === id)) continue;
+          next.push(kept.get(id) || { productId: id, handle: picked.handle || '', title: picked.title || '', image: picked.images?.[0]?.originalSrc || '', variantScope: 'all', allowedVariantIds: [] });
+        }
+        return { ...current, extraProducts: next.slice(0, MAX_EXTRA_PRODUCTS) };
+      });
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  const updateExtra = (productId, patch) => setForm((current) => ({ ...current, extraProducts: current.extraProducts.map((item) => (item.productId === productId ? { ...item, ...patch } : item)) }));
+  const removeExtra = (productId) => setForm((current) => ({ ...current, extraProducts: current.extraProducts.filter((item) => item.productId !== productId) }));
+  const toggleExtraVariant = (productId, variantId) => setForm((current) => ({ ...current, extraProducts: current.extraProducts.map((item) => (item.productId !== productId ? item : { ...item, allowedVariantIds: item.allowedVariantIds.includes(variantId) ? item.allowedVariantIds.filter((id) => id !== variantId) : [...item.allowedVariantIds, variantId] })) }));
+  async function pickShowOn() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: true, action: 'select', filter: { variants: false }, selectionIds: form.showOn.map((id) => ({ id: `gid://shopify/Product/${id}` })) });
+      if (!result) return;
+      setForm((current) => {
+        const ids = result.map((picked) => String(picked.id).split('/').pop()).filter((id) => id !== current.productId);
+        const titles = { ...current.showOnTitles, ...Object.fromEntries(result.map((picked) => [String(picked.id).split('/').pop(), picked.title || ''])) };
+        return { ...current, showOn: [...new Set(ids)], showOnTitles: titles };
+      });
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  const removeShowOn = (productId) => setForm((current) => ({ ...current, showOn: current.showOn.filter((id) => id !== productId) }));
+
   async function save(status) {
     setError(null);
     setNotice('');
     setSaving(status);
     try {
-      const data = await api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', id: packId, productId: form.productId, packType: form.packType, variantScope: form.variantScope, allowedVariantIds: form.allowedVariantIds, template: form.template, tiers: form.tiers, customization: form.customization, status }) });
+      const data = await api('/api/packs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', id: packId, productId: form.productId, packType: form.packType, variantScope: form.variantScope, allowedVariantIds: form.allowedVariantIds, extraProducts: form.packType === 'mix_match' ? form.extraProducts : [], showOn: form.packType === 'mix_match' ? form.showOn : [], template: form.template, tiers: form.tiers, customization: form.customization, status }) });
       draft.clearKey(draftKey(shop, 'new'));
       draft.markSaved(form);
       setPackId(data.pack.id);
@@ -307,7 +459,8 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                     <BlockStack gap="100">
                       <Text as="span" variant="headingSm">{productData.product.title}</Text>
                       <Text as="span" tone="subdued" variant="bodySm">{variants.length} variant{variants.length === 1 ? '' : 's'}</Text>
-                      {productData.product.status !== 'ACTIVE' && <Badge tone="warning">{`Product is ${productData.product.status.toLowerCase()}`}</Badge>}
+                      {productData.product.status === 'UNLISTED' && <Badge tone="info">Unlisted: shoppers reach it by direct link</Badge>}
+                      {!['ACTIVE', 'UNLISTED'].includes(productData.product.status) && <Badge tone="warning">{`Product is ${productData.product.status.toLowerCase()}`}</Badge>}
                     </BlockStack>
                   </InlineStack>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -349,19 +502,27 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   );
 
   const currentType = PACK_TYPES.find((type) => type.id === form.packType) || PACK_TYPES[0];
+  const chooseType = (type) => setForm((current) => {
+    const toCombo = type.id === 'combo';
+    const wasCombo = current.packType === 'combo';
+    let tiers = current.tiers;
+    if (toCombo && !wasCombo) tiers = [comboTier(), comboTier('percentage', '10')];
+    else if (!toCombo && wasCombo) tiers = DEFAULT_TIERS.map((tier) => ({ ...tier }));
+    return { ...current, packType: type.id, template: type.defaultTemplate, tiers };
+  });
   const typeStep = (
     <Card>
       <BlockStack gap="500">
         <BlockStack gap="100">
           <Text as="h2" variant="headingMd">Pack type</Text>
-          <Text as="p" tone="subdued">Both types apply to variants of the same Shopify product. This only changes how shoppers build their Pack.</Text>
+          <Text as="p" tone="subdued">This changes how shoppers build their Pack. Same Variant and Mix &amp; Match use this product&apos;s variants; Fixed Combo adds other products you choose.</Text>
         </BlockStack>
         <div role="radiogroup" aria-label="Pack type" style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {PACK_TYPES.map((type) => {
             const selected = currentType.id === type.id;
-            const sample = type.id === 'same_variant' ? ['Black / M', 'Black / M', 'Black / M'] : ['Black / M', 'White / S', 'Grey / L'];
+            const sample = type.id === 'same_variant' ? ['Black / M', 'Black / M', 'Black / M'] : type.id === 'combo' ? ['Kurta / M', 'Dupatta / Red'] : ['Black / M', 'White / S', 'Grey / L'];
             return (
-              <button key={type.id} type="button" role="radio" aria-checked={selected} onClick={() => { if (!selected) update({ packType: type.id, template: type.defaultTemplate }); }}
+              <button key={type.id} type="button" role="radio" aria-checked={selected} onClick={() => { if (!selected) chooseType(type); }}
                 style={{ textAlign: 'left', font: 'inherit', cursor: 'pointer', background: selected ? '#f3f3f3' : '#fff', border: `2px solid ${selected ? '#111111' : '#e3e5e8'}`, borderRadius: 14, padding: 24 }}>
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center"><Text as="span" variant="headingMd">{type.name}</Text>{selected && <Badge>Selected</Badge>}</InlineStack>
@@ -451,6 +612,14 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 .pc-tier-num{width:30px;height:30px;border-radius:50%;background:#111111;color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .pc-tier-body{padding:16px;display:flex;flex-direction:column;gap:14px}
 .pc-row{display:grid;gap:12px;grid-template-columns:110px minmax(0,1fr) 150px;align-items:start}
+.pc-row--combo{grid-template-columns:minmax(0,1fr) 150px}
+.pc-combo{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;padding:12px;border:1px solid #e1e3e5;border-radius:12px;background:#fafafa}
+.pc-combo-row{display:grid;grid-template-columns:40px minmax(0,1fr) 92px 32px;gap:10px;align-items:center}
+.pc-combo-row--main{grid-template-columns:40px minmax(0,1fr) auto}
+.pc-combo-img{width:40px;height:40px;border-radius:8px;object-fit:cover;background:#eceef0;display:block}
+.pc-combo-name{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px}
+.pc-combo-name strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pc-combo-name>span{font-size:12px;color:#6d7175}
 .pc-row2{display:grid;gap:12px;grid-template-columns:1fr 1fr}
 .pc-seg{display:flex;border:1px solid #c9cccf;border-radius:8px;overflow:hidden;margin-top:4px;height:36px}
 .pc-seg button{flex:1;font:inherit;font-size:13px;font-weight:500;border:0;border-right:1px solid #e3e5e8;background:#fff;color:#3b3f45;cursor:pointer;padding:0 8px;white-space:nowrap;transition:background .15s ease,color .15s ease}
@@ -512,6 +681,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
 .pd-card--on .pd-stage{background:#efefef}
 .pd-tags{display:flex;flex-wrap:wrap;gap:4px}
 .pd-tag{padding:2px 8px;border-radius:999px;background:#f1f2f4;color:#4a4f55;font-size:11px;font-weight:600}
+.pc-extra{border:1px solid #e1e3e5;border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:12px}
 .pd-meta{display:flex;gap:12px;align-items:flex-start;padding:14px 16px}
 .pd-radio{width:20px;height:20px;border-radius:50%;border:2px solid #c9cccf;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center}
 .pd-radio--on{border-color:#111111;background:#111111}
@@ -580,7 +750,66 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     </Card>
   );
 
-  const addTier = () => { const last = Math.max(0, ...form.tiers.map((tier) => Number(tier.quantity) || 0)); setForm((current) => ({ ...current, tiers: [...current.tiers, blankTier(last + 1)] })); };
+  // Fixed Combo: pick products (and exact variants) for one pack. A product ticked whole adds its
+  // first in-stock variant only; open it in the picker to choose particular ones.
+  // The picker's selection as pack items added to `existing` (this product itself is never one).
+  const pickedComboItems = (result, existing, mainProductId) => {
+    const items = [...existing];
+    let skippedMain = false;
+    for (const product of result) {
+      const productId = String(product.id).split('/').pop();
+      if (productId === mainProductId) { skippedMain = true; continue; }
+      const chosen = Array.isArray(product.variants) ? product.variants.filter((variant) => variant?.id) : [];
+      const total = Number(product.totalVariants);
+      const some = Number.isFinite(total) && total > 0 && chosen.length < total;
+      const picks = some ? chosen : [chosen.find((variant) => variant.availableForSale !== false) || chosen[0]].filter(Boolean);
+      for (const variant of picks) {
+        const variantId = String(variant.id).split('/').pop();
+        if (items.length >= COMBO_MAX_ITEMS || items.some((item) => item.variantId === variantId)) continue;
+        items.push(comboFormItem({ productId, variantId, quantity: 1, handle: product.handle, title: product.title, variantTitle: variant.title && variant.title !== 'Default Title' ? variant.title : '', image: variant.image?.originalSrc || product.images?.[0]?.originalSrc || '' }));
+      }
+    }
+    return { items, skippedMain };
+  };
+  const SKIPPED_MAIN = 'This product is already in every pack (shoppers pick its variant), so it was not added again.';
+  async function addComboItems(index) {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: true, action: 'select' });
+      if (!result) return;
+      const picked = pickedComboItems(result, form.tiers[index]?.items || [], form.productId);
+      setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i !== index ? tier : { ...tier, items: picked.items })) }));
+      if (picked.skippedMain) setNotice(SKIPPED_MAIN);
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  // "Add pack" on a Fixed Combo: choose the new pack's products first; the pack is added with them
+  // (cancelled, or only this product picked = no new pack).
+  async function addComboPack() {
+    setError(null);
+    try {
+      const result = await shopify.resourcePicker({ type: 'product', multiple: true, action: 'select' });
+      if (!result) return;
+      const picked = pickedComboItems(result, [], form.productId);
+      if (picked.skippedMain) setNotice(SKIPPED_MAIN);
+      if (!picked.items.length) return;
+      setForm((current) => (current.tiers.length >= MAX_TIERS ? current : { ...current, tiers: [...current.tiers, { ...comboTier(), items: picked.items }] }));
+    } catch {
+      setError({ message: 'Could not open the Shopify product picker. Please try again.' });
+    }
+  }
+  const updateComboItem = (index, variantId, patch) => setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i !== index ? tier : { ...tier, items: (tier.items || []).map((item) => (item.variantId === variantId ? { ...item, ...patch } : item)) })) }));
+  const removeComboItem = (index, variantId) => setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i !== index ? tier : { ...tier, items: (tier.items || []).filter((item) => item.variantId !== variantId) })) }));
+  const changeComboVariant = (index, item, variantId) => {
+    const live = (extraData[item.productId]?.product?.variants || []).find((variant) => String(variant.id) === String(variantId));
+    if (!live) return;
+    const tier = form.tiers[index];
+    if ((tier.items || []).some((other) => other.variantId === String(variantId))) return;
+    updateComboItem(index, item.variantId, { variantId: String(live.id), variantTitle: live.title && live.title !== 'Default Title' ? live.title : '', image: live.image || item.image });
+  };
+
+  const addTier = () => { if (isCombo) { addComboPack(); return; } const last = Math.max(0, ...form.tiers.map((tier) => Number(tier.quantity) || 0)); setForm((current) => ({ ...current, tiers: [...current.tiers, blankTier(last + 1)] })); };
   const discountOptions = [['none', 'None'], ['percentage', '% off'], ['fixed', 'Amount off']];
   const savingsPercent = (calc) => (calc && calc.subtotal > 0 ? Math.round((calc.savings / calc.subtotal) * 100) : 0);
 
@@ -593,15 +822,21 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
             <Badge>{`${form.tiers.length} of ${MAX_TIERS}`}</Badge>
           </InlineStack>
           <Text as="p" tone="subdued">
-            {currentType.id === 'mix_match'
-              ? 'Each tier is a Pack size — shoppers combine that many variants from the list above (repeats allowed).'
-              : 'Each tier is a quantity of the selected variant sold at a set discount. Prices update automatically per variant on your storefront.'}
+            {currentType.id === 'combo'
+              ? 'Each pack is this product (shoppers pick its size or colour) plus the products you add to it. Shoppers choose a pack, and every item goes into the cart together at the pack price.'
+              : currentType.id === 'mix_match'
+                ? 'Each tier is a Pack size — shoppers combine that many variants from the list above (repeats allowed).'
+                : 'Each tier is a quantity of the selected variant sold at a set discount. Prices update automatically per variant on your storefront.'}
           </Text>
         </BlockStack>
         {tierCheck.errors.filter((item) => item.index === null).map((item) => <Banner key={item.message} tone="critical"><p>{item.message}</p></Banner>)}
         {form.tiers.map((tier, index) => {
           const valid = !tierCheck.errors.some((item) => item.index === index);
-          const calc = valid && basePrice !== null ? calculateTier(basePrice, { quantity: Number(tier.quantity), discountType: tier.discountType, discountValue: Number(tier.discountValue) }, { currencyCode: currency.code, locale: currency.locale }) : null;
+          const tierMoney = { currencyCode: currency.code, locale: currency.locale };
+          const tierCount = isCombo ? comboTierQuantity(tier) : Number(tier.quantity) || 0;
+          const calc = !valid || basePrice === null ? null : isCombo
+            ? calculateComboTier(basePrice, { items: tier.items, discountType: tier.discountType, discountValue: Number(tier.discountValue) }, comboItemPrices, tierMoney)
+            : calculateTier(basePrice, { quantity: Number(tier.quantity), discountType: tier.discountType, discountValue: Number(tier.discountValue) }, tierMoney);
           const pct = savingsPercent(calc);
           return (
             <div key={index} className={`pc-tier${valid ? '' : ' pc-tier--error'}`}>
@@ -609,16 +844,58 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                 <InlineStack gap="300" blockAlign="center" wrap={false}>
                   <span className="pc-tier-num" aria-hidden="true">{index + 1}</span>
                   <BlockStack gap="0">
-                    <Text as="h3" variant="headingSm">{tier.name.trim() || `Buy ${Number(tier.quantity) || '—'}`}</Text>
-                    <Text as="span" variant="bodySm" tone="subdued">Tier {index + 1} · {Number(tier.quantity) || 0} item{Number(tier.quantity) === 1 ? '' : 's'}</Text>
+                    <Text as="h3" variant="headingSm">{tier.name.trim() || `Buy ${(isCombo ? tierCount : Number(tier.quantity)) || '—'}`}</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">{isCombo ? `Pack ${index + 1}` : `Tier ${index + 1}`} · {tierCount} item{tierCount === 1 ? '' : 's'}</Text>
                   </BlockStack>
                   {tier.badge.trim() && <span className="pc-pill pc-pill--badge">{tier.badge.trim()}</span>}
                 </InlineStack>
                 <Button variant="tertiary" tone="critical" icon={DeleteIcon} disabled={form.tiers.length <= 1} onClick={() => setForm((current) => ({ ...current, tiers: current.tiers.filter((_, i) => i !== index) }))} accessibilityLabel={`Remove tier ${index + 1}`} />
               </div>
               <div className="pc-tier-body">
-                <div className="pc-row">
-                  <TextField label="Quantity" type="number" min={1} max={100} value={tier.quantity} onChange={(value) => updateTier(index, { quantity: value })} onBlur={sortTiers} autoComplete="off" error={tierErrors(index, 'quantity')} />
+                {isCombo && (
+                  <div className="pc-combo" role="group" aria-label={`Products in pack ${index + 1}`}>
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="span" variant="bodyMd" fontWeight="medium">Products in this pack</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">{`${(tier.items || []).length} of ${COMBO_MAX_ITEMS} added`}</Text>
+                    </InlineStack>
+                    <div className="pc-combo-row pc-combo-row--main">
+                      {form.productImage ? <img className="pc-combo-img" src={form.productImage} alt="" /> : <span className="pc-combo-img" />}
+                      <span className="pc-combo-name"><strong>{form.productTitle || 'This product'}</strong><span>Shoppers pick its variant</span></span>
+                      <span className="pc-pill pc-pill--muted">1 ×</span>
+                    </div>
+                    {(tier.items || []).map((item) => {
+                      const product = extraData[item.productId];
+                      const live = comboVariant(item);
+                      const productVariants = product?.product?.variants || [];
+                      return (
+                        <div key={item.variantId} className="pc-combo-row">
+                          {live?.image || item.image ? <img className="pc-combo-img" src={live?.image || item.image} alt="" /> : <span className="pc-combo-img" />}
+                          <span className="pc-combo-name">
+                            <strong>{product?.product?.title || item.title}</strong>
+                            {productVariants.length > 1 ? (
+                              <Select label="Variant" labelHidden value={String(item.variantId)} onChange={(value) => changeComboVariant(index, item, value)}
+                                options={productVariants.map((variant) => ({ value: String(variant.id), label: `${variant.title} — ${variant.price === null ? '—' : fmt(variant.price)}${variant.availableForSale ? '' : ' · sold out'}`, disabled: String(variant.id) !== String(item.variantId) && (tier.items || []).some((other) => other.variantId === String(variant.id)) }))} />
+                            ) : (
+                              <span>{product?.status === 'loading' ? 'Loading…' : live ? `${fmt(live.price)}${live.availableForSale ? '' : ' · sold out'}` : ''}</span>
+                            )}
+                          </span>
+                          <div className="pc-combo-qty">
+                            <TextField label="Quantity" labelHidden type="number" min={1} max={COMBO_MAX_ITEM_QUANTITY} value={String(item.quantity)} autoComplete="off"
+                              onChange={(value) => updateComboItem(index, item.variantId, { quantity: Math.min(COMBO_MAX_ITEM_QUANTITY, Math.max(1, Math.round(Number(value)) || 1)) })} prefix="×" />
+                          </div>
+                          <Button variant="tertiary" icon={DeleteIcon} onClick={() => removeComboItem(index, item.variantId)} accessibilityLabel={`Remove ${item.title} from pack ${index + 1}`} />
+                        </div>
+                      );
+                    })}
+                    <InlineStack gap="200" blockAlign="center">
+                      <Button icon={PlusIcon} disabled={(tier.items || []).length >= COMBO_MAX_ITEMS} onClick={() => addComboItems(index)}>Add products</Button>
+                      <Text as="span" variant="bodySm" tone="subdued">Open a product in the picker to choose one colour or size.</Text>
+                    </InlineStack>
+                    {tierCheck.errors.filter((item) => item.index === index && (item.field === 'items' || item.field === 'quantity')).map((item) => <InlineError key={item.message} message={item.message} fieldID={`pc-combo-${index}`} />)}
+                  </div>
+                )}
+                <div className={isCombo ? 'pc-row pc-row--combo' : 'pc-row'}>
+                  {!isCombo && <TextField label="Quantity" type="number" min={1} max={100} value={tier.quantity} onChange={(value) => updateTier(index, { quantity: value })} onBlur={sortTiers} autoComplete="off" error={tierErrors(index, 'quantity')} />}
                   <div>
                     <Text as="span" variant="bodyMd">Discount</Text>
                     <div className="pc-seg" role="group" aria-label={`Tier ${index + 1} discount type`}>
@@ -630,7 +907,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                   <TextField label="Value" type="number" min={0} disabled={tier.discountType === 'none'} value={tier.discountValue} onChange={(value) => updateTier(index, { discountValue: value })} suffix={tier.discountType === 'percentage' ? '%' : tier.discountType === 'fixed' ? currency.code : undefined} placeholder={tier.discountType === 'none' ? '—' : '0'} autoComplete="off" error={tierErrors(index, 'discountValue')} />
                 </div>
                 <div className="pc-row2">
-                  <TextField label="Display name" value={tier.name} maxLength={60} onChange={(value) => updateTier(index, { name: value })} placeholder={`Buy ${Number(tier.quantity) || ''}`.trim()} helpText="Optional" autoComplete="off" error={tierErrors(index, 'name')} />
+                  <TextField label="Display name" value={tier.name} maxLength={60} onChange={(value) => updateTier(index, { name: value })} placeholder={isCombo ? 'e.g. Kurta + Dupatta' : `Buy ${Number(tier.quantity) || ''}`.trim()} helpText="Optional" autoComplete="off" error={tierErrors(index, 'name')} />
                   <TextField label="Badge" value={tier.badge} maxLength={24} onChange={(value) => updateTier(index, { badge: value })} placeholder="e.g. Best value" helpText="Optional" autoComplete="off" error={tierErrors(index, 'badge')} />
                 </div>
                 {calc ? (
@@ -643,18 +920,18 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                       </InlineStack>
                     </BlockStack>
                     <InlineStack gap="200" blockAlign="center" wrap>
-                      <span className="pc-pill pc-pill--muted">{calc.formatted.effectiveUnitPrice} / item</span>
+                      {!isCombo && <span className="pc-pill pc-pill--muted">{calc.formatted.effectiveUnitPrice} / item</span>}
                       {calc.savings > 0 ? <span className="pc-pill pc-pill--save">Save {calc.formatted.savings}{pct > 0 ? ` (${pct}%)` : ''}</span> : <span className="pc-pill pc-pill--muted">Full price</span>}
                     </InlineStack>
                   </div>
-                ) : <Text as="p" tone="subdued" variant="bodySm">{basePrice === null ? 'Choose variant coverage above to preview prices.' : 'Fix the highlighted fields to preview this tier’s price.'}</Text>}
+                ) : <Text as="p" tone="subdued" variant="bodySm">{basePrice === null ? 'Choose variant coverage above to preview prices.' : valid && isCombo ? 'Loading prices from Shopify…' : isCombo ? 'Fix the highlighted fields above to see this pack’s price.' : 'Fix the highlighted fields to preview this tier’s price.'}</Text>}
               </div>
             </div>
           );
         })}
         <button type="button" className="pc-add" disabled={form.tiers.length >= MAX_TIERS} onClick={addTier}>
           <span style={{ width: 18, height: 18, display: 'inline-flex' }}><Icon source={PlusIcon} tone="inherit" /></span>
-          {form.tiers.length >= MAX_TIERS ? `Maximum of ${MAX_TIERS} tiers reached` : 'Add tier'}
+          {form.tiers.length >= MAX_TIERS ? `Maximum of ${MAX_TIERS} ${isCombo ? 'packs' : 'tiers'} reached` : isCombo ? 'Add pack' : 'Add tier'}
         </button>
       </BlockStack>
     </Card>
@@ -671,16 +948,16 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         </BlockStack>
         {previewTiers.length > 0 ? (
           <div className="pc-ladder">
-            {previewTiers.map((tier) => {
+            {previewTiers.map((tier, ladderIndex) => {
               const pct = savingsPercent(tier);
               return (
-                <div key={tier.quantity} className="pc-ladder-row">
+                <div key={ladderIndex} className="pc-ladder-row">
                   <BlockStack gap="0">
                     <InlineStack gap="150" blockAlign="center">
                       <Text as="span" fontWeight="semibold">{tier.name || `Buy ${tier.quantity}`}</Text>
                       {tier.badge && <span className="pc-pill pc-pill--badge" style={{ fontSize: 10, padding: '1px 7px' }}>{tier.badge}</span>}
                     </InlineStack>
-                    <Text as="span" variant="bodySm" tone="subdued">{tier.formatted.effectiveUnitPrice} / item</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">{isCombo ? comboContents(tier) : `${tier.formatted.effectiveUnitPrice} / item`}</Text>
                   </BlockStack>
                   <BlockStack gap="050" inlineAlign="end">
                     <Text as="span" fontWeight="bold">{tier.formatted.price}</Text>
@@ -701,11 +978,102 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     </Card>
   );
 
+  // ── Mix & Match only: more products in the Pack, and the pages it shows on ──
+  const extraProductsCard = form.packType === 'mix_match' && form.productId ? (
+    <Card>
+      <BlockStack gap="400">
+        <BlockStack gap="100">
+          <InlineStack gap="200" blockAlign="center">
+            <Text as="h2" variant="headingMd">Products in this Pack</Text>
+            <Badge>{`${1 + form.extraProducts.length} product${form.extraProducts.length ? 's' : ''}`}</Badge>
+          </InlineStack>
+          <Text as="p" tone="subdued">Optional. Let customers fill the Pack from other products as well, for example &ldquo;any 3 from these soaps&rdquo;. The discount applies to every item.</Text>
+        </BlockStack>
+        <InlineStack gap="300" blockAlign="center" wrap={false}>
+          <Thumbnail size="small" alt="" source={form.productImage || ImageIcon} />
+          <BlockStack gap="050">
+            <Text as="span" fontWeight="semibold">{form.productTitle || 'Main product'}</Text>
+            <Text as="span" variant="bodySm" tone="subdued">Main product · {form.variantScope === 'all' ? 'all variants' : `${form.allowedVariantIds.length} variants`}</Text>
+          </BlockStack>
+        </InlineStack>
+        {extraEntries.map((item) => (
+          <div key={item.productId} className="pc-extra">
+            <InlineStack align="space-between" blockAlign="center" wrap={false}>
+              <InlineStack gap="300" blockAlign="center" wrap={false}>
+                <Thumbnail size="small" alt="" source={item.image || ImageIcon} />
+                <BlockStack gap="050">
+                  <Text as="span" fontWeight="semibold">{item.title || `Product ${item.productId}`}</Text>
+                  <Text as="span" variant="bodySm" tone="subdued">
+                    {item.status === 'loading' ? 'Loading variants…' : item.status === 'error' ? item.error : `${item.variantScope === 'all' ? 'All' : item.allowedVariantIds.length} of ${item.allVariants.length} variants`}
+                  </Text>
+                </BlockStack>
+              </InlineStack>
+              <Button variant="tertiary" tone="critical" icon={DeleteIcon} accessibilityLabel={`Remove ${item.title || 'product'}`} onClick={() => removeExtra(item.productId)} />
+            </InlineStack>
+            {item.status === 'ready' && (
+              <BlockStack gap="200">
+                <InlineStack gap="200">
+                  <Button pressed={item.variantScope === 'all'} onClick={() => updateExtra(item.productId, { variantScope: 'all', allowedVariantIds: [] })}>All variants</Button>
+                  <Button pressed={item.variantScope === 'selected'} onClick={() => updateExtra(item.productId, { variantScope: 'selected', allowedVariantIds: item.allowedVariantIds.length ? item.allowedVariantIds : item.allVariants.map((variant) => variant.id) })}>Selected variants</Button>
+                </InlineStack>
+                {item.variantScope === 'selected' && (
+                  <div className="pc-variants">
+                    {item.allVariants.map((variant) => {
+                      const on = item.allowedVariantIds.includes(variant.id);
+                      return (
+                        <button key={variant.id} type="button" role="checkbox" aria-checked={on} className={`pc-variant${on ? ' pc-variant--on' : ''}`} onClick={() => toggleExtraVariant(item.productId, variant.id)}>
+                          <span className="pc-check" aria-hidden="true">{on && checkSvg(10)}</span>
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#303030', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{variant.title}</span>
+                            <span style={{ display: 'block', fontSize: 12, color: variant.availableForSale ? '#6d7175' : '#a11919' }}>{fmt(variant.price)}{variant.availableForSale ? '' : ' · out of stock'}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </BlockStack>
+            )}
+          </div>
+        ))}
+        {!extraCheck.valid && <Banner tone="critical"><p>{extraCheck.errors[0].message}</p></Banner>}
+        <InlineStack gap="200">
+          <Button icon={PlusIcon} onClick={addExtraProducts} disabled={form.extraProducts.length >= MAX_EXTRA_PRODUCTS}>{form.extraProducts.length ? 'Change products' : 'Add products'}</Button>
+          <Text as="span" variant="bodySm" tone="subdued">Up to {MAX_EXTRA_PRODUCTS} other products. They must be active and on your Online Store.</Text>
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  ) : null;
+
+  const showOnCard = form.packType === 'mix_match' && form.productId ? (
+    <Card>
+      <BlockStack gap="300">
+        <BlockStack gap="100">
+          <Text as="h2" variant="headingMd">Show this Pack on</Text>
+          <Text as="p" tone="subdued">It always shows on {form.productTitle || 'the main product'}&apos;s page. Optionally show it on other product pages too, such as the products you added.</Text>
+        </BlockStack>
+        {form.showOn.length > 0 && (
+          <BlockStack gap="150">
+            {form.showOn.map((id) => (
+              <InlineStack key={id} align="space-between" blockAlign="center">
+                <Text as="span">{form.showOnTitles[id] || `Product ${id}`}</Text>
+                <Button variant="tertiary" tone="critical" icon={DeleteIcon} accessibilityLabel={`Stop showing on ${form.showOnTitles[id] || id}`} onClick={() => removeShowOn(id)} />
+              </InlineStack>
+            ))}
+          </BlockStack>
+        )}
+        <InlineStack gap="200"><Button icon={PlusIcon} onClick={pickShowOn}>{form.showOn.length ? 'Change pages' : 'Choose pages'}</Button></InlineStack>
+      </BlockStack>
+    </Card>
+  ) : null;
+
   const configureStep = (
     <Layout>
       <Layout.Section>
         <BlockStack gap="400">
           {coverageStep}
+          {extraProductsCard}
+          {showOnCard}
           {tiersCard}
         </BlockStack>
       </Layout.Section>
@@ -718,6 +1086,27 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const contentField = (key, label, maxLength, helpText) => <TextField label={label} value={form.customization.content[key]} maxLength={maxLength} showCharacterCount helpText={helpText} onChange={(value) => updateCustom('content', key, value)} autoComplete="off" />;
   // Sizes are sliders bounded by the same schema the server validates
   // against, so every position the merchant can drag to is a valid value.
+  // One choice instead of many switches: the theme's buttons, BRIX's own, Cash on Delivery only,
+  // or the theme's own buttons under the Pack (the Pack draws none; they buy the selected Pack).
+  const buttonChoice = (() => {
+    const c = form.customization.content;
+    if (c.showThemeButtons === true && c.themeAddsPack !== false) return 'under';
+    if (c.showAddToCart === false && c.showBuyNow === false && c.showCod === true) return 'cod';
+    return c.buttonMode === 'brix' ? 'brix' : 'theme';
+  })();
+  const setButtonChoice = (choice) => {
+    if (choice === 'under') {
+      updateCustom('content', 'showThemeButtons', true); updateCustom('content', 'themeAddsPack', true); updateCustom('content', 'showCod', false);
+      return;
+    }
+    updateCustom('content', 'showThemeButtons', false);
+    if (choice === 'cod') {
+      updateCustom('content', 'showAddToCart', false); updateCustom('content', 'showBuyNow', false); updateCustom('content', 'showCod', true);
+      return;
+    }
+    updateCustom('content', 'showAddToCart', true); updateCustom('content', 'showBuyNow', true);
+    updateCustom('content', 'buttonMode', choice); updateCustom('content', 'matchThemeButtons', choice === 'theme');
+  };
   const sizeField = (group, key, label) => {
     const { min, max } = CUSTOMIZATION_SCHEMA[group][key];
     const current = Number(form.customization[group][key]);
@@ -744,7 +1133,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     { id: 'colors', label: 'Colors', icon: PaintBrushFlatIcon, description: 'Match the widget to your brand and theme.', prefixes: ['colors.'] },
     { id: 'typography', label: 'Typography', icon: TextFontIcon, description: 'Text sizes, weight and heading alignment.', prefixes: ['typography.'] },
     { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.', 'content.hideVariants'] },
-    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Choose which buttons show (Add to Cart, Buy Now, COD) and style them.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow', 'content.showAddToCart', 'content.showCod', 'content.codText', 'content.showThemeButtons', 'content.themeAddsPack', 'content.matchThemeButtons'] },
+    { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Choose which buttons show (Add to Cart, Buy Now, COD) and style them.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow', 'content.showAddToCart', 'content.showCod', 'content.codText', 'content.showThemeButtons', 'content.themeAddsPack', 'content.matchThemeButtons', 'content.buttonMode', 'content.theme'] },
     { id: 'badge', label: 'Badges', icon: StarIcon, description: 'The label on a pack ("Most Popular"): shape, corner, colors and text.', prefixes: ['badge.', 'colors.badge'] },
     { id: 'band', label: 'Offer band', icon: MegaphoneIcon, description: 'A strip of moving text ("Limited time offer") wrapped round a pack.', prefixes: ['band.'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
@@ -822,7 +1211,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                 </div>
                 <Text as="p" tone="subdued" variant="bodySm">A short product description goes here, giving shoppers context about this item before they see the Pack offer below.</Text>
                 <div style={{ margin: '16px 0' }}>
-                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} productOptions={productData.product?.options} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} currency={currency} />
+                  <PackPreview template={form.template} packType={form.packType} variants={applicableVariants} productOptions={productData.product?.options} extraProducts={extraEnabled ? extraEntries.filter((item) => item.status === 'ready' && item.applicable.length).map((item) => ({ productId: item.productId, title: item.title, image: item.image, variants: item.applicable })) : undefined} customization={form.customization} tiers={tiersForPreview} productImage={form.productImage} productTitle={form.productTitle} currency={currency} />
                 </div>
               </div>
             </div>
@@ -850,45 +1239,66 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     ),
     buttons: (
       <BlockStack gap="400">
-        <FieldGroup title="Match your theme">
-          <Toggle label="Use my theme's button style" helpText="The Pack's buttons copy your theme's own Add to cart and Buy it now buttons: colors, border, corner radius, text size, weight and font. The text stays what you write below. You'll see the result on your store, not in this preview, and it overrides the button colors and shape set here." checked={form.customization.content.matchThemeButtons === true} onChange={(value) => updateCustom('content', 'matchThemeButtons', value)} />
-        </FieldGroup>
-        <FieldGroup title="Your theme's own buttons">
-          <Toggle label="Keep my theme's buttons visible" helpText="Shows the theme's Add to cart, Buy it now (including Shiprocket / GoKwik buttons), quantity box and variant picker next to the Pack, instead of hiding them. They add a single item as usual, not the Pack. To avoid doubles, switch off the Pack's own Add to Cart / Buy Now below." checked={form.customization.content.showThemeButtons === true} onChange={(value) => updateCustom('content', 'showThemeButtons', value)} />
-          {form.customization.content.showThemeButtons === true && (
-            <Toggle label="Theme's Add to cart adds the selected Pack" helpText="When a shopper picks “Pack of 2” and taps your theme's Add to cart, the whole Pack (its quantity, variants and discount) goes in the cart instead of one plain item. Buy it now / Shiprocket / GoKwik buttons belong to other apps, so they still buy a single item." checked={form.customization.content.themeAddsPack !== false} onChange={(value) => updateCustom('content', 'themeAddsPack', value)} />
+        <FieldGroup title="Which buttons should the Pack show?">
+          <Segmented label="Buttons" options={[['theme', "My theme's buttons"], ['brix', 'BRIX buttons'], ['cod', 'COD only'], ['under', 'Below the Pack']]} value={buttonChoice} onChange={setButtonChoice} />
+          <Text as="p" variant="bodySm" tone="subdued">
+            {buttonChoice === 'theme' && "Add to cart and Buy it now are taken from your theme, so they look exactly like the rest of your product page, and they add the selected Pack. If your theme has no such button, BRIX's own is used. The preview shows your text and colors; the theme's own look appears on your store."}
+            {buttonChoice === 'brix' && "BRIX's own Add to Cart and Buy Now, styled below."}
+            {buttonChoice === 'cod' && 'Only the Buy with COD button shows. It needs BRIX COD to be turned on for product pages.'}
+            {buttonChoice === 'under' && "The Pack shows only the Pack choices. Your theme's own Add to cart, Shiprocket Buy Now and BRIX COD buttons stay under it and buy the selected Pack, with its price on the Prepaid and COD buttons. Your theme's quantity box is hidden."}
+          </Text>
+          {buttonChoice !== 'cod' && buttonChoice !== 'under' && (
+            <Toggle label="Also show a Buy with COD button" helpText="In its own row under the other buttons. Shows only on stores where BRIX COD is turned on for product pages." checked={form.customization.content.showCod === true} onChange={(value) => updateCustom('content', 'showCod', value)} />
+          )}
+          {form.customization.content.showThemeButtons === true && buttonChoice !== 'under' && (
+            <Toggle label="Keep my theme's own buttons visible (older setting)" helpText="Shows the theme's own buttons next to the Pack, adding a single item. Turn off to use the choice above." checked onChange={() => updateCustom('content', 'showThemeButtons', false)} />
           )}
         </FieldGroup>
-        <FieldGroup title="Add to Cart">
-          <Toggle label="Show an Add to Cart button" helpText="Turn off if you only want Buy Now and / or COD. If every button is off, Add to Cart still shows so shoppers can always buy." checked={form.customization.content.showAddToCart !== false} onChange={(value) => updateCustom('content', 'showAddToCart', value)} />
+        {buttonChoice === 'theme' && (
+          <FieldGroup title="Customize theme buttons (optional)">
+            <Text as="p" variant="bodySm" tone="subdued">Leave empty to keep exactly what your theme uses. Fill in only what you want to change.</Text>
+            <Text as="h3" variant="headingSm">Add to cart</Text>
+            <TextField label="Button text" value={form.customization.content.themeAddLabel || ''} maxLength={40} placeholder="Your theme's text" helpText="Amount tags you can use: {price} (Pack total), {was} (before discount), {saving}, {each} (per item), {quantity}, {pack} (offer name). Example: Buy now · {price}." onChange={(value) => updateCustom('content', 'themeAddLabel', value)} autoComplete="off" />
+            <div className="pz-colors">{colorField('themeAddBg', 'Background', 'content')}{colorField('themeAddText', 'Text', 'content')}{colorField('themeAddBorder', 'Border', 'content')}</div>
+            <Text as="h3" variant="headingSm">Buy now</Text>
+            <TextField label="Button text" value={form.customization.content.themeBuyLabel || ''} maxLength={40} placeholder="Your theme's text" helpText="Amount tags you can use: {price} (Pack total), {was} (before discount), {saving}, {each} (per item), {quantity}, {pack} (offer name). Example: Buy now · {price}." onChange={(value) => updateCustom('content', 'themeBuyLabel', value)} autoComplete="off" />
+            <div className="pz-colors">{colorField('themeBuyBg', 'Background', 'content')}{colorField('themeBuyText', 'Text', 'content')}{colorField('themeBuyBorder', 'Border', 'content')}</div>
+          </FieldGroup>
+        )}
+        {buttonChoice === 'brix' && (
+          <>
+            <FieldGroup title="Add to Cart">
           {form.customization.content.showAddToCart !== false && (
             <>
-              {contentField('cta', 'Button label', 40)}
+              {contentField('cta', 'Button label', 40, 'Tags: {price}, {was}, {saving}, {each}, {quantity}, {pack}.')}
               <div className="pz-colors">{colorField('button', 'Background')}{colorField('buttonText', 'Text')}{colorField('addBorder', 'Border', 'buttons')}</div>
             </>
           )}
         </FieldGroup>
-        <FieldGroup title="Buy Now">
-          <Toggle label="Show a Buy Now button" helpText="Checks out only this Pack — whatever else is in the shopper’s cart stays there for later. While it’s on, your theme’s own Buy it now button is hidden on this product." checked={form.customization.content.showBuyNow !== false} onChange={(value) => updateCustom('content', 'showBuyNow', value)} />
+            <FieldGroup title="Buy Now">
           {form.customization.content.showBuyNow !== false && (
             <>
-              {contentField('buyNow', 'Button label', 40)}
+              {contentField('buyNow', 'Button label', 40, 'Tags: {price}, {was}, {saving}, {each}, {quantity}, {pack}.')}
               <div className="pz-colors">{colorField('buyNowBackground', 'Background', 'buttons')}{colorField('buyNowText', 'Text', 'buttons')}{colorField('buyNowBorder', 'Border', 'buttons')}</div>
               <Segmented label="Arrangement" options={[['side_by_side', 'Side by side'], ['stacked', 'Stacked']]} value={form.customization.buttons.layout} onChange={(value) => updateCustom('buttons', 'layout', value)} />
               <Segmented label="Order" options={[['add_first', 'Add to Cart first'], ['buy_first', 'Buy Now first']]} value={form.customization.buttons.order} onChange={(value) => updateCustom('buttons', 'order', value)} />
             </>
           )}
         </FieldGroup>
-        <FieldGroup title="Cash on Delivery">
-          <Toggle label="Show a Buy with COD button" helpText="Appears in its own row under the other buttons and opens BRIX COD Checkout for just this Pack. Shows only on stores where BRIX COD is turned on for product pages. While it's on, BRIX COD's own product-page button is hidden on this product." checked={form.customization.content.showCod === true} onChange={(value) => updateCustom('content', 'showCod', value)} />
-          {form.customization.content.showCod === true && (
+          </>
+        )}
+        {form.customization.content.showCod === true && (
+          <FieldGroup title="Cash on Delivery button">
+            {form.customization.content.showCod === true && (
             <>
               {contentField('codText', 'Button label', 40)}
               <div className="pz-colors">{colorField('codBackground', 'Background', 'buttons')}{colorField('codText', 'Text', 'buttons')}{colorField('codBorder', 'Border', 'buttons')}</div>
             </>
           )}
-        </FieldGroup>
-        <FieldGroup title="Shape & text">
+          </FieldGroup>
+        )}
+        {(buttonChoice === 'brix' || buttonChoice === 'cod') && (
+          <FieldGroup title="Shape & text">
           {sizeField('buttons', 'radius', 'Corner radius')}
           {sizeField('buttons', 'borderWidth', 'Border width')}
           {sizeField('buttons', 'paddingY', 'Height (top & bottom padding)')}
@@ -897,6 +1307,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           <Toggle label="Uppercase text" checked={form.customization.buttons.uppercase} onChange={(value) => updateCustom('buttons', 'uppercase', value)} />
           {sizeField('spacing', 'buttonSpacing', 'Space above buttons')}
         </FieldGroup>
+        )}
       </BlockStack>
     ),
     colors: (
@@ -1130,23 +1541,23 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                 <BlockStack gap="200">
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                      <thead><tr style={{ textAlign: 'left', color: '#6d7175' }}>{['Tier', 'Qty', 'Subtotal', 'Discount', 'Pack price', 'Savings', 'Per item'].map((heading) => <th key={heading} style={{ padding: '6px 8px', fontWeight: 500 }}>{heading}</th>)}</tr></thead>
+                      <thead><tr style={{ textAlign: 'left', color: '#6d7175' }}>{(isCombo ? ['Pack', 'Contents', 'Subtotal', 'Discount', 'Pack price', 'Savings'] : ['Tier', 'Qty', 'Subtotal', 'Discount', 'Pack price', 'Savings', 'Per item']).map((heading) => <th key={heading} style={{ padding: '6px 8px', fontWeight: 500 }}>{heading}</th>)}</tr></thead>
                       <tbody>
-                        {reviewData.tiers.map((tier) => (
-                          <tr key={tier.quantity} style={{ borderTop: '1px solid #e1e3e5' }}>
+                        {reviewData.tiers.map((tier, rowIndex) => (
+                          <tr key={rowIndex} style={{ borderTop: '1px solid #e1e3e5' }}>
                             <td style={{ padding: '8px' }}>{tier.name || `Buy ${tier.quantity}`}{tier.badge ? <> <Badge tone="info">{tier.badge}</Badge></> : null}</td>
-                            <td style={{ padding: '8px' }}>{tier.quantity}</td>
+                            <td style={{ padding: '8px' }}>{isCombo ? comboContents(tier) : tier.quantity}</td>
                             <td style={{ padding: '8px' }}>{tier.formatted.subtotal}</td>
                             <td style={{ padding: '8px' }}>{tier.discountType === 'none' ? '—' : tier.discountType === 'percentage' ? `${tier.discountValue}%` : tier.formatted.discountAmount}</td>
                             <td style={{ padding: '8px', fontWeight: 600 }}>{tier.formatted.price}</td>
                             <td style={{ padding: '8px' }}>{tier.savings > 0 ? tier.formatted.savings : '—'}</td>
-                            <td style={{ padding: '8px' }}>{tier.formatted.effectiveUnitPrice}</td>
+                            {!isCombo && <td style={{ padding: '8px' }}>{tier.formatted.effectiveUnitPrice}</td>}
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <Text as="p" variant="bodySm" tone="subdued">Calculated by BRIX from the live Shopify price of {fmt(reviewData.variant.price)} per unit ({currency.code}).</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">{isCombo ? <>Calculated by BRIX from the live Shopify prices: {fmt(reviewData.variant.price)} for this product plus each pack&apos;s products ({currency.code}).</> : <>Calculated by BRIX from the live Shopify price of {fmt(reviewData.variant.price)} per unit ({currency.code}).</>}</Text>
                   {!reviewData.variant.availableForSale && <Banner tone="warning"><p>None of this Pack’s variants are in stock in Shopify. You can save a draft, but the Pack can’t be activated until one is available.</p></Banner>}
                   {reviewData.variant.availableForSale && soldOutCount > 0 && <Banner tone="info"><p>{soldOutCount} of {applicableVariants.length} variants are out of stock. The Pack still works: shoppers only see the in-stock variants, and the others come back automatically when they’re restocked.</p></Banner>}
                 </BlockStack>
@@ -1178,7 +1589,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const reviewPreviewStep = (
     <Layout>
       <Layout.Section>
-        {storefrontPreviewCard(reviewData?.valid ? reviewData.tiers : previewTiers)}
+        {storefrontPreviewCard(reviewData?.valid && !isCombo ? reviewData.tiers : previewTiers)}
       </Layout.Section>
     </Layout>
   );

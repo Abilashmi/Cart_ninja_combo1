@@ -1,10 +1,11 @@
 import { createRoot } from 'react-dom/client';
-import { RouterProvider, createMemoryRouter } from 'react-router';
+import { RouterProvider, createMemoryRouter, useLocation } from 'react-router';
 import { AppProvider } from '@shopify/polaris';
 import enTranslations from '@shopify/polaris/locales/en.json';
 import '@shopify/polaris/build/esm/styles.css';
 import AccountPage from '../../../app/routes/app.additional.jsx';
 import DashboardPage from '../../../app/routes/app._index.jsx';
+import SupportChat from '../../../app/components/support/SupportChat.jsx';
 import { I18nProvider } from '../../../app/i18n/admin.jsx';
 import { pickAdminMessages, ADMIN_LANGUAGE_CHOICES, LANGUAGE_NAMES } from '../../../app/i18n/admin.shared.js';
 import { PlanProvider } from '../../../app/components/PlanContext.jsx';
@@ -22,6 +23,13 @@ const pageName = params.get('page') || 'account';
 const messages = pickAdminMessages({ en, hi, ta, es, ar }, lang);
 window.__posts = [];
 
+// The Home loader's period, as app._index.jsx resolves it (fixed "today").
+const RANGES = { today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days', last30: 'Last 30 days', last90: 'Last 90 days', thisMonth: 'This month', lastMonth: 'Last month' };
+const rangeFor = (preset) => {
+  const id = RANGES[preset] ? preset : 'last30';
+  return { preset: id, label: RANGES[id], from: '2026-10-15', to: '2026-11-13', today: '2026-11-13' };
+};
+
 const router = createMemoryRouter([
   {
     path: '/app/additional',
@@ -37,8 +45,11 @@ const router = createMemoryRouter([
       return form.intent === 'language' ? { ok: true, language: form.language } : { ok: true, priceDisplay: { wholePrices: form.wholePrices === 'true' } };
     },
   },
-  { path: '/app', Component: DashboardPage, loader: () => ({ shop: 'demo.myshopify.com', initialAnalytics: {} }) },
-], { initialEntries: [pageName === 'home' ? '/app' : '/app/additional'] });
+  ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),
+  { path: '/app', Component: DashboardPage, loader: ({ request }) => ({ shop: 'demo.myshopify.com', initialAnalytics: {}, range: rangeFor(new URL(request.url).searchParams.get('range')), moduleStatus: { cart: true, combo: false, cod: true, packs: false, fbt: true, coupon: null } }) },
+  // The support chat widget alone (tests/support-chat/widget-browser-check.mjs mocks /api/support-chat).
+  { path: '/app/chat', Component: function ChatPage() { return <div><h1>Some BRIX page</h1><SupportChat /></div>; } },
+], { initialEntries: [pageName === 'home' ? '/app' : pageName === 'chat' ? '/app/chat' : '/app/additional'] });
 
 createRoot(document.getElementById('root')).render(
   <AppProvider i18n={enTranslations}>

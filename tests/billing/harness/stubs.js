@@ -6,4 +6,5 @@ export const getShopBillingInterval = null;
 export const setPendingPlanKey = null;
 export const confirmPlanFromWebhook = null;
 export const getPromoTrialDays = null;
+export const getShopTrialDays = null;
 export const redeemPromoCode = null;

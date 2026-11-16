@@ -35,6 +35,27 @@ export async function getPromoTrialDays(shop) {
   }
 }
 
+// The trial length the BRIX team set for this one shop
+// (shops.trial_days_override, promo_admin.php "Shop trials"), 0 = none, so
+// the shop gets the standard trial. Fails closed (0) like the promo lookup:
+// a missed override means the standard trial, never a lockout.
+export async function getShopTrialDays(shop) {
+  if (!shop) return 0;
+  try {
+    const db = getDb();
+    await ensurePromoTables(db);
+    const [rows] = await db.execute(
+      'SELECT trial_days_override FROM shops WHERE shop_domain = ? LIMIT 1',
+      [shop]
+    );
+    const days = Number(rows[0]?.trial_days_override) || 0;
+    return days > 0 ? days : 0;
+  } catch (error) {
+    console.error('[Promo] Failed to resolve shop trial override:', error.message);
+    return 0;
+  }
+}
+
 // Validates and redeems a promo code for a shop. Idempotent — re-submitting
 // the same already-redeemed code returns success without double-incrementing
 // uses_count.

@@ -155,21 +155,46 @@
     try { return JSON.parse(node.textContent); } catch (e) { return null; }
   }
 
-  // Price stored Packs (pricing:'client') from the page's live variants,
-  // mirroring hydratePacks in app/services/packs-shopify.server.js. A Pack whose
-  // anchor variant isn't on this page is dropped — never priced from a cache.
-  function priceOnPage(data, product) {
-    var shopCode = product.shopCurrency;
-    var code = product.currency || shopCode;
-    var rate = 1;
-    if (code !== shopCode) {
-      // Fixed tier discounts are stored in the shop currency.
-      var parsed = parseFloat(window.Shopify && window.Shopify.currency && window.Shopify.currency.rate);
-      if (isFinite(parsed) && parsed > 0) rate = parsed; else code = shopCode; // makeMoney then hides amounts
-    }
-    var decimals = 2;
-    try { decimals = new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; } catch (e) { /* keep default */ }
+  // One flat variant list for a Pack that draws from several products: two synthetic options, Product and
+  // Variant, so the slot pickers work unchanged. Mirrors flattenPackProducts in app/utils/packs.shared.js.
+  //   products: [{ productId, title, image, variants: [...] }], main product first.
+  function flattenPackProducts(products) {
+    var used = {};
+    var rows = [];
+    (products || []).forEach(function (product) {
+      var base = String(product.title || 'Product');
+      used[base] = (used[base] || 0) + 1;
+      var label = used[base] > 1 ? base + ' (' + used[base] + ')' : base;
+      (product.variants || []).forEach(function (variant) {
+        var title = variant.title && variant.title !== DEFAULT_OPTION_VALUE ? String(variant.title) : 'Standard';
+        rows.push(shallow(variant, { id: String(variant.id), productId: product.productId, productTitle: product.title, image: variant.image || product.image || '', options: [label, title] }));
+      });
+    });
+    return { productOptions: ['Product', 'Variant'], variants: rows };
+  }
 
+  // A product from /products/<handle>.js (prices in minor units) in the shape Packs.liquid renders,
+  // so the page product and the other products of a Pack go through the same code.
+  function fromProductJs(json) {
+    if (!json || !Array.isArray(json.variants)) return null;
+    var image = json.featured_image && typeof json.featured_image === 'object' ? json.featured_image.src : json.featured_image;
+    return {
+      title: json.title,
+      image: image || '',
+      options: (json.options || []).map(function (option) { return option && typeof option === 'object' ? option.name : option; }),
+      variants: json.variants.map(function (variant) {
+        var own = variant.featured_image && typeof variant.featured_image === 'object' ? variant.featured_image.src : '';
+        return {
+          id: variant.id, title: variant.title, price: variant.price, available: variant.available,
+          inventoryManagement: variant.inventory_management, inventoryPolicy: variant.inventory_policy, inventoryQuantity: variant.inventory_quantity,
+          image: own || '', options: Array.isArray(variant.options) ? variant.options : [variant.option1, variant.option2, variant.option3].filter(Boolean),
+        };
+      }),
+    };
+  }
+
+  // A product's variants as the widget uses them: price in major units, stock cap, option values.
+  function shapeCatalog(product) {
     var byId = {};
     var order = [];
     (product.variants || []).forEach(function (variant) {
@@ -189,25 +214,89 @@
         options: Array.isArray(variant.options) ? variant.options.map(String) : [],
       };
     });
+    return { title: product.title, image: product.image || '', options: Array.isArray(product.options) ? product.options : null, byId: byId, order: order };
+  }
+
+  // The variants of a catalog a Pack covers (scope 'all', or the allowed ids), in the product's own order.
+  function coveredVariants(catalog, scope, allowedIds) {
+    var allowed = (allowedIds || []).map(numericId);
+    return catalog.order.map(function (id) { return catalog.byId[id]; }).filter(function (variant) {
+      return variant.price !== null && (scope === 'all' || allowed.indexOf(variant.id) >= 0);
+    });
+  }
+
+  // Price stored Packs (pricing:'client') from live variants, mirroring hydratePacks in
+  // app/services/packs-shopify.server.js. The page's own product comes from Packs.liquid; the Pack's
+  // other products (its main product on an extra page it is shown on, and its extra products) come
+  // from `fetched` ({ productId: /products/<handle>.js data }). A Pack whose anchor variant can't be
+  // found is dropped, never priced from a cache; an extra product that couldn't be loaded is left out.
+  function priceOnPage(data, product, pageProductId, fetched) {
+    fetched = fetched || {};
+    var shopCode = product.shopCurrency;
+    var code = product.currency || shopCode;
+    var rate = 1;
+    if (code !== shopCode) {
+      // Fixed tier discounts are stored in the shop currency.
+      var parsed = parseFloat(window.Shopify && window.Shopify.currency && window.Shopify.currency.rate);
+      if (isFinite(parsed) && parsed > 0) rate = parsed; else code = shopCode; // makeMoney then hides amounts
+    }
+    var decimals = 2;
+    try { decimals = new Intl.NumberFormat('en', { style: 'currency', currency: code }).resolvedOptions().maximumFractionDigits; } catch (e) { /* keep default */ }
+
+    var pageCatalog = shapeCatalog(product);
+    function catalogFor(id) {
+      if (String(id) === String(pageProductId)) return pageCatalog;
+      return fetched[String(id)] ? shapeCatalog(fetched[String(id)]) : null;
+    }
 
     var packs = [];
     (data.packs || []).forEach(function (pack) {
-      var saved = byId[numericId(pack.variantId)];
+      // Packs from an older cached response have no productId: they belong to this page's product.
+      var mainId = pack.productId ? String(pack.productId) : String(pageProductId);
+      var main = catalogFor(mainId);
+      if (!main) return;
+      var saved = main.byId[numericId(pack.variantId)];
       if (!saved || saved.price === null) return;
       // Every variant the Pack covers, in the product's own order.
-      var allowed = (pack.allowedVariantIds || []).map(numericId);
-      var variants = order.map(function (id) { return byId[id]; }).filter(function (variant) {
-        return variant.price !== null && (pack.variantScope === 'all' || allowed.indexOf(variant.id) >= 0);
-      });
+      var variants = coveredVariants(main, pack.variantScope, pack.allowedVariantIds);
       if (!variants.length) variants = [saved];
       // Price from an in-stock variant when the saved one has sold out
       // (a Pack saved before its first variant ran out).
       var anchor = forSale(saved) ? saved : (variants.filter(forSale)[0] || saved);
+      var productOptions = main.options;
+      if (pack.packType === 'mix_match' && pack.extraProducts && pack.extraProducts.length) {
+        var products = [{ productId: mainId, title: main.title || pack.productTitle, image: main.image, variants: variants }];
+        pack.extraProducts.forEach(function (item) {
+          var catalog = catalogFor(item.productId);
+          if (!catalog) return;
+          var list = coveredVariants(catalog, item.variantScope, item.allowedVariantIds);
+          if (list.length) products.push({ productId: String(item.productId), title: catalog.title || item.title, image: catalog.image, variants: list });
+        });
+        if (products.length > 1) {
+          var flat = flattenPackProducts(products);
+          variants = flat.variants;
+          productOptions = flat.productOptions;
+        }
+      }
       var tiers = (pack.tiers || []).map(function (tier) {
         var t = shallow(tier);
         if (t.discountType === 'fixed') t.discountValue = Number(t.discountValue) * rate;
         var prices = [];
-        for (var i = 0; i < t.quantity; i += 1) prices.push(anchor.price);
+        if (pack.packType === 'combo') {
+          // Fixed Combo: this product (one) + the tier's items at their live prices. An item that
+          // can't be found (unpublished, gone) makes the pack unavailable; never priced from a guess.
+          prices.push(anchor.price);
+          t.comboItems = [];
+          (tier.items || []).forEach(function (item) {
+            var catalog = catalogFor(item.productId);
+            var v = catalog && catalog.byId[numericId(item.variantId)];
+            if (!v || v.price === null) { t.comboMissing = true; return; }
+            t.comboItems.push({ variant: shallow(v, { productTitle: catalog.title || item.title, image: v.image || catalog.image || item.image || '' }), quantity: Number(item.quantity) || 1, title: catalog.title || item.title || '', variantTitle: item.variantTitle || '' });
+            for (var q = 0; q < (Number(item.quantity) || 1); q += 1) prices.push(v.price);
+          });
+        } else {
+          for (var i = 0; i < t.quantity; i += 1) prices.push(anchor.price);
+        }
         var priced = calc(prices, t, decimals);
         t.subtotal = priced.subtotal;
         t.savings = priced.savings;
@@ -220,12 +309,12 @@
       copy.basePrice = anchor.price;
       copy.tiers = tiers;
       copy.variants = variants;
-      copy.productOptions = Array.isArray(product.options) ? product.options : null;
+      copy.productOptions = productOptions;
       copy.available = variants.some(forSale);
       copy.maxQuantity = anchor.maxQuantity;
-      copy.productTitle = product.title || pack.productTitle;
+      copy.productTitle = main.title || pack.productTitle;
       copy.variantTitle = anchor.title;
-      copy.productImage = product.image || pack.productImage;
+      copy.productImage = main.image || pack.productImage;
       packs.push(copy);
     });
 
@@ -252,13 +341,22 @@
     // Account → Price display → "Hide decimals in prices" (window.__brixWholePrices).
     var whole = null;
     try { whole = new Intl.NumberFormat(locale, { style: 'currency', currency: active, minimumFractionDigits: 0, maximumFractionDigits: 0 }); } catch (e) { whole = null; }
+    function format(value) {
+      var amount = Number(value) * rate;
+      if (window.__brixWholePrices === true) return whole ? whole.format(Math.round(amount)) : active + ' ' + Math.round(amount);
+      return fmt ? fmt.format(amount) : active + ' ' + amount.toFixed(2);
+    }
     return {
       hidden: hidden,
       decimals: shopDecimals,
-      format: function (value) {
+      // Shown in another currency than the shop's (BRIX COD charges only the shop's).
+      converted: active !== shopCode,
+      format: format,
+      // Button prices: "₹2,798" for a whole amount, like BRIX COD's own buttons.
+      short: function (value) {
         var amount = Number(value) * rate;
-        if (window.__brixWholePrices === true) return whole ? whole.format(Math.round(amount)) : active + ' ' + Math.round(amount);
-        return fmt ? fmt.format(amount) : active + ' ' + amount.toFixed(2);
+        if (whole && Math.round(amount * 100) % 100 === 0) return whole.format(Math.round(amount));
+        return format(value);
       },
       // The number without the currency sign (customization.price.symbol = 'hide').
       plain: function (value) {
@@ -368,6 +466,100 @@
     return themeButtonsOn(pack) && content.themeAddsPack !== false;
   }
 
+  // "Theme's buttons under the Pack": the theme's Add to cart adds the Pack, so the
+  // widget draws no buttons of its own. Shiprocket's Buy Now and BRIX COD's own
+  // product button take the selected Pack too (packShiprocket).
+  function underThemeOn(pack) {
+    return themeAddsPackOn(pack);
+  }
+
+  // content.buttonMode 'theme' (default for new Packs): the Pack's Add to cart / Buy Now are drawn
+  // from the theme's own buttons. We never move or trust a copied button's listeners: the theme's
+  // buttons stay where they are (hidden while a Pack shows, so nothing is doubled), a shell with the
+  // same classes and a snapshot of its computed look is drawn inside the Pack, and OUR click handler
+  // adds the Pack (every variant, with the _brix_pack_* properties) through /cart/add.js and tells
+  // the theme's cart with the usual cart events. A Pack saved before buttonMode existed follows
+  // matchThemeButtons (look only) as it did. No usable theme button = BRIX's own button + a warning.
+  function themeModeOn(pack) {
+    var content = (pack && pack.customization && pack.customization.content) || {};
+    if (!pack || themeButtonsOn(pack)) return false; // the theme's own buttons are kept visible: no second copy
+    return content.buttonMode ? content.buttonMode === 'theme' : content.matchThemeButtons === true;
+  }
+
+  // The theme's Add to cart: a submit button of the product form (or one tied to it by
+  // form="id"), never a payment button or one of ours.
+  // Other widgets' buttons are never the theme's Add to cart (Silverline: the Frequently Bought
+  // Together box sits inside the Shiprocket form that productForm() finds, and its untyped
+  // "Add" buttons were taken for Add to cart).
+  var NOT_THEME_ADD = '.shopify-payment-button, [data-shopify="payment-button"], ps-fbt-widget, ps-coupon-slider, [data-brix-cod-slot], [data-brix-pay-cta], .shiprocket-headless';
+  function findThemeAdd() {
+    var form = productForm();
+    if (!form) return null;
+    var formId = form.getAttribute('id');
+    var list = function (nodes) { return Array.prototype.slice.call(nodes); };
+    // Real submit buttons first; an untyped <button> (Debut) only when there is none.
+    var candidates = list(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
+    if (formId) candidates = candidates.concat(list(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
+    // A submit tied by form="id" to another /cart/add form holding the selected variant
+    // (Silverline: <button type="submit" form="pdp-form"> outside pdp-form).
+    var variant = currentVariantId();
+    candidates = candidates.concat(list(document.querySelectorAll('[type="submit"][form]')).filter(function (node) {
+      var owner = node.form;
+      var idInput = owner && owner !== form && /\/cart\/add/.test(owner.getAttribute('action') || '') && owner.querySelector('[name="id"]');
+      return Boolean(idInput && idInput.value && variant && numericId(idInput.value) === variant);
+    }));
+    candidates = candidates.concat(list(form.querySelectorAll('button:not([type])')));
+    for (var i = 0; i < candidates.length; i += 1) {
+      var node = candidates[i];
+      if (root.contains(node) || node.closest(NOT_THEME_ADD)) continue;
+      return node;
+    }
+    return null;
+  }
+
+  // The theme's Buy it now, only when it is a plain text button we can draw faithfully. Branded
+  // wallet buttons (Shop Pay, PayPal, Google Pay) are Shopify-hosted and can't buy a Pack.
+  function findThemeBuy() {
+    var form = productForm();
+    if (!form) return null;
+    var nodes = form.querySelectorAll('.shopify-payment-button__button--unbranded');
+    for (var i = 0; i < nodes.length; i += 1) if (!root.contains(nodes[i])) return nodes[i];
+    return null;
+  }
+
+  function themeLabel(source, fallback) {
+    var text = String(source.value || source.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text || text.length > 40 || /sold out|unavailable|out of stock/i.test(text)) return fallback;
+    return text;
+  }
+
+  var THEME_LOOK_PROPS = ['backgroundColor', 'color', 'borderTopColor', 'borderTopWidth', 'borderTopStyle', 'borderTopLeftRadius', 'fontSize', 'fontWeight', 'fontFamily', 'textTransform', 'letterSpacing', 'lineHeight', 'paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight', 'boxShadow', 'minHeight'];
+
+  // Same classes as the theme's button (so its hover and focus styles apply), no other attributes
+  // (so no theme script or delegated listener recognises it), our own click handler.
+  function themeProxy(source, kind, label, disabled, onclick) {
+    var node = document.createElement('button');
+    node.className = String(source.className || '').replace(/\s+/g, ' ').trim() + ' brix-packs-themebtn brix-packs-themebtn--' + kind;
+    node.type = 'button';
+    node.setAttribute('data-fk', kind === 'add' ? 'add-to-cart' : 'buy-now');
+    node.setAttribute('data-brix-theme-button', kind);
+    node.textContent = label;
+    if (disabled) { node.disabled = true; node.setAttribute('aria-disabled', 'true'); }
+    node.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); if (!node.disabled) onclick(); });
+    node._brixSource = source;
+    return node;
+  }
+
+  // After the shell is in the page: where the theme's CSS is scoped to its own product form the
+  // shell would lose it, so any look that differs from the real button is copied across.
+  function syncThemeLook(node) {
+    var source = node._brixSource;
+    if (!source || !window.getComputedStyle) return;
+    var a = window.getComputedStyle(node);
+    var b = window.getComputedStyle(source);
+    THEME_LOOK_PROPS.forEach(function (prop) { if (a[prop] !== b[prop]) node.style[prop] = b[prop]; });
+  }
+
   function hideVariantsOn(pack) {
     var content = (pack && pack.customization && pack.customization.content) || {};
     return Boolean(pack) && content.hideVariants === true;
@@ -377,6 +569,115 @@
   function codOn(pack) {
     var content = (pack && pack.customization && pack.customization.content) || {};
     return Boolean(pack) && content.showCod === true;
+  }
+
+  // While the Pack's own COD button shows, BRIX COD's product-page button (one item at
+  // full price) is hidden. brix_cod.js styles its holder inline with
+  // display:block !important, which no stylesheet rule beats, so it is hidden inline
+  // too, and again when brix_cod.js mounts a new one; put back when the Pack's goes.
+  var codSlotHidden = false;
+  var codSlotWatch = null;
+  function syncBrixCodButton() {
+    var slots = document.querySelectorAll('[data-brix-cod-slot]');
+    for (var i = 0; i < slots.length; i += 1) {
+      var slot = slots[i];
+      if (codSlotHidden && !slot.hasAttribute('data-brix-pack-hid')) {
+        slot.setAttribute('data-brix-pack-hid', '');
+        slot.style.setProperty('display', 'none', 'important');
+      } else if (!codSlotHidden && slot.hasAttribute('data-brix-pack-hid')) {
+        slot.removeAttribute('data-brix-pack-hid');
+        slot.style.setProperty('display', 'block', 'important');
+      }
+    }
+  }
+  function hideBrixCodButton(hide) {
+    if (codSlotHidden === hide) return;
+    codSlotHidden = hide;
+    syncBrixCodButton();
+    if (hide && !codSlotWatch && window.MutationObserver) {
+      codSlotWatch = new MutationObserver(function () { if (codSlotHidden) syncBrixCodButton(); });
+      codSlotWatch.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  // "Buy with COD ₹2,798": the selected Pack's price + BRIX COD's fee for it
+  // (brix_cod.js priceTagValues, the fee rule the COD server charges). Price tags in
+  // the merchant's text ({cod_price}, {price}, {cod_fee}) are filled instead of adding
+  // the price. Without a price (COD settings not loaded yet, another currency, the
+  // admin preview) the text alone, tags removed.
+  // Shiprocket's own product Buy Now (Silverline: button.sr-headless-checkout in
+  // .shiprocket-headless[data-type=product]) buys the theme's single item at the
+  // full price. While a Pack with a saving (or more than one item) is selected,
+  // its tap is caught before Shiprocket's own handler: the Pack goes in the cart
+  // and Shiprocket opens for the cart, applying the Pack's automatic discount
+  // (brix_cod.js payOnlinePack). Its label follows the Pack's price too
+  // (BrixCod.setPackPrice).
+  var SR_BUY_NOW = '.sr-headless-checkout, .shiprocket-headless';
+  var SR_CART_PLACES = 'cart-drawer, cart-notification, #CartDrawer, #cart-drawer, .cart-drawer, .drawer--cart, #cc-root, [data-brix-cod-drawer], [data-brix-packs-root]';
+  var srTakeover = null; // the selected Pack's Shiprocket hand-off, or null
+  var srPrice = null;
+  var srOrder = null; // BRIX COD's own button orders the Pack (theme's buttons under the Pack)
+  var srWaits = 0;
+  var srTimer = null;
+  function pushPackPrice() {
+    clearTimeout(srTimer);
+    var cod = window.BrixCod;
+    if (cod && typeof cod.setPackPrice === 'function') { cod.setPackPrice(srPrice, srOrder); return; }
+    if (srPrice != null && srWaits < 30) { srWaits += 1; srTimer = setTimeout(pushPackPrice, 500); } // BRIX COD still loading
+  }
+  function packShiprocket(handler, price, order) {
+    srTakeover = handler;
+    var next = handler && price != null ? price : null;
+    var nextOrder = next != null && order ? order : null;
+    if (next === srPrice && nextOrder === srOrder) return;
+    srPrice = next;
+    srOrder = nextOrder;
+    srWaits = 0;
+    pushPackPrice();
+  }
+  function shiprocketTap(event) {
+    if (!srTakeover) return;
+    var hit = event.target && event.target.closest ? event.target.closest(SR_BUY_NOW) : null;
+    if (!hit || hit.closest(SR_CART_PLACES)) return;
+    // BRIX COD's own button can sit inside Shiprocket's box (Silverline): never Shiprocket's tap.
+    if (event.target.closest('[data-brix-cod-slot], [data-brix-cod-btn], [data-brix-pay-cta]')) return;
+    var typed = hit.closest('[data-type]');
+    var kind = String((typed && typed.getAttribute('data-type')) || '').toLowerCase();
+    if (kind === 'mini-cart' || kind === 'cart') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    srTakeover();
+  }
+  // "Below the Pack": BRIX COD's button right under Shiprocket's product Buy Now, so the
+  // buttons read Add to cart, Prepaid, COD. brix_cod.js places it from whichever Shiprocket
+  // element was on the page when it mounted (Silverline: above Prepaid on some loads, below
+  // FBT on others). Moved only when it isn't already there.
+  function keepCodUnderShiprocket() {
+    var shown = function (node) { return node.getClientRects().length > 0; };
+    var slot = Array.prototype.filter.call(document.querySelectorAll('[data-brix-cod-slot]'), shown)[0];
+    if (!slot) return;
+    var button = Array.prototype.filter.call(document.querySelectorAll('.sr-headless-checkout'), function (node) {
+      if (!shown(node) || node.closest(SR_CART_PLACES) || node.contains(slot)) return false;
+      var typed = node.closest('[data-type]');
+      var kind = String((typed && typed.getAttribute('data-type')) || '').toLowerCase();
+      return kind !== 'mini-cart' && kind !== 'cart';
+    })[0];
+    if (!button || !button.parentNode || button.nextElementSibling === slot) return;
+    button.parentNode.insertBefore(slot, button.nextSibling);
+  }
+
+  if (!window.__brixPacksShiprocketTap) {
+    window.__brixPacksShiprocketTap = true;
+    window.addEventListener('click', shiprocketTap, true);
+  }
+
+  var COD_TAGS = /\{(cod_price|price|cod_fee)\}/g;
+  function codButtonText(text, values, money) {
+    // No COD amount known: drop the COD-only tags; {price} etc. are filled by labelWithTags.
+    if (!values) return text.replace(/\s*\{(cod_price|cod_fee)\}/g, '').trim();
+    var fill = { price: money.short(values.price), cod_price: money.short(values.cod_price), cod_fee: money.short(values.cod_fee) };
+    if (text.search(COD_TAGS) !== -1) return text.replace(COD_TAGS, function (all, key) { return fill[key]; });
+    return text + ' ' + fill.cod_price;
   }
 
   // ── item selection (mirrors app/utils/packs.shared.js — keep in sync) ───────
@@ -632,6 +933,12 @@
     '.brix-packs-islot{display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:var(--brix-packs-card);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 1.5)}',
     '.brix-packs-islot[data-state="done"]{border-color:var(--brix-packs-primary)}',
     '.brix-packs-islot[data-state="problem"]{border-color:#b42318}',
+    // Fixed Combo: what else is in the pack.
+    '.brix-packs-includes{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-top:8px;font-size:13px;color:var(--brix-packs-text)}',
+    '.brix-packs-includes-title{font-weight:700;margin-right:2px}',
+    '.brix-packs-include{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px 3px 3px;border:1px solid var(--brix-packs-border);border-radius:999px;background:var(--brix-packs-card)}',
+    '.brix-packs-include img{width:26px;height:26px;flex-shrink:0;border-radius:50%;object-fit:cover;background:#f3f3f4}',
+    '.brix-packs-include span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.brix-packs-islot-photo{flex-shrink:0;width:64px;height:64px;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 1.5);background:#f3f3f4;border:1px solid rgba(0,0,0,.06)}',
     '.brix-packs-islot-photo img{display:block;width:100%;height:100%;object-fit:cover}',
     '.brix-packs-islot-name{font-size:14px;font-weight:600;overflow-wrap:anywhere}',
@@ -701,6 +1008,10 @@
     '.brix-packs-actions .brix-packs-add,.brix-packs-actions .brix-packs-buy{margin-top:0;flex:1 1 0}',
     // The button area: Add to Cart / Buy Now (side by side or stacked), COD in its own full-width row below.
     'html[data-brix-pack-cod] [data-brix-cod-slot]{display:none !important}',
+    '.brix-packs-themebtn{display:block;width:100%;box-sizing:border-box;cursor:pointer;margin-top:var(--brix-packs-btn-gap)}',
+    '.brix-packs-themebtn[disabled]{opacity:.55;cursor:not-allowed}',
+    '.brix-packs-actions .brix-packs-themebtn,.brix-packs-actions-col>.brix-packs-themebtn{margin-top:0}',
+    '.brix-packs-actions .brix-packs-themebtn{flex:1 1 0;width:auto}',
     '.brix-packs-actions-col{display:flex;flex-direction:column;gap:10px;margin-top:var(--brix-packs-btn-gap)}',
     '.brix-packs-actions-col>.brix-packs-add,.brix-packs-actions-col>.brix-packs-buy,.brix-packs-actions-col>.brix-packs-actions{margin-top:0}',
     /* ── Minimal templates (rail, list, ladder, stack, offer_rows): option chips. */
@@ -1010,9 +1321,11 @@
       return sellable[0] || m.variants[0] || null;
     }
 
+    // A Fixed Combo has nothing to build up item by item, so the Savings Ladder shows it as a Price List.
     function layoutFor(pack) {
       var custom = pack.customization || {};
-      return layoutOf(custom.design && custom.design.preset);
+      var layout = layoutOf(custom.design && custom.design.preset);
+      return layout === 'ladder' && isCombo(pack) ? 'list' : layout;
     }
 
     // A single-variant product's only variant is called "Default Title" by Shopify.
@@ -1020,6 +1333,19 @@
       if (!variant) return '';
       if (variant.optionValues && variant.optionValues.length) return variant.optionValues.join(' / ');
       return !variant.title || variant.title === DEFAULT_OPTION_VALUE ? (pack.productTitle || '') : variant.title;
+    }
+
+    // Fixed Combo: the pack's other items, as a small list with pictures.
+    function comboIncludes(tier) {
+      return el('div', { class: 'brix-packs-includes' }, [
+        el('span', { class: 'brix-packs-includes-title', text: bxT('storefront.packs.includes', 'Includes') }),
+      ].concat(((tier && tier.comboItems) || []).map(function (item) {
+        var image = item.variant && item.variant.image;
+        return el('span', { class: 'brix-packs-include' }, [
+          image ? el('img', { src: image, alt: '', loading: 'lazy' }) : null,
+          el('span', { text: (item.quantity > 1 ? item.quantity + ' \u00d7 ' : '') + item.title + (item.variantTitle ? ' (' + item.variantTitle + ')' : '') }),
+        ]);
+      })));
     }
 
     function tierName(tier) {
@@ -1078,11 +1404,47 @@
       return content.hideVariants === true;
     }
 
+    // Fixed Combo: this product's item (the one thing the shopper picks) + the tier's fixed items.
+    function isCombo(pack) { return Boolean(pack) && pack.packType === 'combo'; }
+    function comboMainItem(pack) {
+      var m = model(pack);
+      if (hideVariantsFor(pack)) {
+        var chosen = defaultVariant(m);
+        return chosen ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
+      }
+      if (layoutFor(pack) === 'quick_add') {
+        var picked = state.picks[0] ? variantById(m, state.picks[0]) : null;
+        return picked ? { variant: picked, problem: forSale(picked) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
+      }
+      return selectionStatus(m.variants, m.options, state.slots[0]);
+    }
+    function comboFixedItems(tier) {
+      var out = [];
+      ((tier && tier.comboItems) || []).forEach(function (item) {
+        for (var q = 0; q < item.quantity; q += 1) out.push({ variant: item.variant, problem: forSale(item.variant) ? null : 'sold_out', missing: [], fixed: true });
+      });
+      return out;
+    }
+    // The tier the pickers draw for a combo: just this product's one item.
+    function pickTier(pack, tier) { return isCombo(pack) && tier ? shallow(tier, { quantity: 1 }) : tier; }
+    function pickItems(pack, items) { return isCombo(pack) ? items.slice(0, 1) : items; }
+    // "Kurta + Dupatta (Red) + 2 × Palazzo"
+    function comboText(pack, tier) {
+      var parts = [pack.productTitle || bxT('storefront.packs.this_item', 'This item')];
+      ((tier && tier.comboItems) || []).forEach(function (item) {
+        var name = item.title + (item.variantTitle ? ' (' + item.variantTitle + ')' : '');
+        parts.push(item.quantity > 1 ? item.quantity + ' \u00d7 ' + name : name);
+      });
+      return parts.join(' + ');
+    }
+
     function itemsFor(pack, tier) {
       var m = model(pack);
       var items = [];
       var i;
-      if (hideVariantsFor(pack)) {
+      if (isCombo(pack)) {
+        items = [comboMainItem(pack)].concat(comboFixedItems(tier));
+      } else if (hideVariantsFor(pack)) {
         var chosen = defaultVariant(m);
         var hiddenStatus = chosen ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
         for (i = 0; i < tier.quantity; i += 1) items.push(hiddenStatus);
@@ -1132,15 +1494,40 @@
       var prices = [];
       if (index === state.tierIndex) {
         itemsFor(pack, tier).forEach(function (item) { prices.push(item.variant && item.variant.price !== null && item.variant.price !== undefined ? Number(item.variant.price) : unit); });
+      } else if (isCombo(pack)) {
+        prices.push(unit);
+        ((tier.comboItems) || []).forEach(function (item) { for (var q = 0; q < item.quantity; q += 1) prices.push(Number(item.variant.price) || 0); });
       } else {
         for (var i = 0; i < tier.quantity; i += 1) prices.push(unit);
       }
       return calc(prices, tier, money.decimals);
     }
 
+    // The selected Pack's price and COD price for the Pack's COD button (null = not known).
+    function codPrices(pack, tier) {
+      var cod = window.BrixCod;
+      if (!tier || !money || money.hidden || money.converted || !cod || typeof cod.priceTagValues !== 'function') return null;
+      var price = shownTier(pack, tier, state.tierIndex).price;
+      var minor = Math.round(price * 100);
+      // A one-line cart of this product at the Pack price: no cart-level (prepaid) discount in it.
+      var values = cod.priceTagValues({
+        items: [{ product_id: root.getAttribute('data-product-id'), final_line_price: minor, properties: {} }],
+        total_price: minor,
+        cart_level_discount_applications: [],
+      }, price);
+      if (!values || values.cod_price == null || values.cod_fee == null) return null;
+      return { price: price, cod_fee: values.cod_fee, cod_price: values.cod_price };
+    }
+
     // A pack size is offered only if the Pack's variants can supply it.
     function tierDisabled(pack, tier) {
       if (pack.available === false) return true;
+      if (isCombo(pack)) {
+        // Items never priced on this page (comboItems unset) = not offered, never sold short.
+        if (!tier || tier.comboMissing || ((tier.items || []).length && !tier.comboItems)) return true;
+        if (!model(pack).variants.some(forSale)) return true;
+        return ((tier.comboItems) || []).some(function (item) { return !forSale(item.variant) || (hasStockCap(item.variant) && Number(item.variant.maxQuantity) < item.quantity); });
+      }
       var m = model(pack);
       var sellable = m.variants.filter(forSale);
       if (!sellable.length) return true;
@@ -1533,8 +1920,8 @@
         props['aria-label'] = tierName(t) + (pct ? ', ' + bxT('storefront.packs.save_pct', 'Save {pct}%', { pct: pct }) : '');
         bar.appendChild(el('button', props, [
           t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
-          el('b', { text: String(t.quantity) }),
-          el('small', { text: pct ? bxT('storefront.packs.save_pct', 'Save {pct}%', { pct: pct }) : itemsText(t.quantity) }),
+          el('b', { text: isCombo(pack) ? tierName(t) : String(t.quantity) }),
+          el('small', { text: pct ? bxT('storefront.packs.save_pct', 'Save {pct}%', { pct: pct }) : (isCombo(pack) ? comboText(pack, t) : itemsText(t.quantity)) }),
         ]));
       });
       nodes.push(bar);
@@ -1545,13 +1932,15 @@
           el('strong', { text: ctx.priceText(shownNow.price) }),
           ctx.showWas && shownNow.savings > 0 ? el('span', { class: 'brix-packs-was', text: ctx.numberText(shownNow.subtotal) }) : null,
           ctx.saveTextFor(shownNow) ? el('span', { class: 'brix-packs-save', text: ctx.saveTextFor(shownNow) }) : null,
-          tier.quantity > 1 ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shownNow.price / tier.quantity) }) }) : null,
+          tier.quantity > 1 && !isCombo(pack) ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shownNow.price / tier.quantity) }) }) : null,
         ]));
       }
-      if (ctx.noPicking) return nodes;
-      var items = itemsFor(pack, tier);
+      var includes = isCombo(pack) && tier.comboItems && tier.comboItems.length ? comboIncludes(tier) : null;
+      if (ctx.noPicking) { if (includes) nodes.push(includes); return nodes; }
+      // A Fixed Combo's shopper picks only this product's item; the rest are listed.
+      var items = pickItems(pack, itemsFor(pack, tier));
       var left = items.length - readyCount(items);
-      if (state.activeSlot >= tier.quantity) state.activeSlot = 0;
+      if (state.activeSlot >= items.length) state.activeSlot = 0;
       var circles = el('ol', { class: 'brix-packs-circles' });
       items.forEach(function (item, slot) {
         var src = slotImage(pack, state.slots[slot], item);
@@ -1569,6 +1958,7 @@
       var activeLabel = bxT('storefront.packs.item_n', 'Item {n}', { n: state.activeSlot + 1 });
       var problem = active ? problemText(pack, active, m) : '';
       nodes.push(el('div', { class: 'brix-packs-railitems', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [
+        includes,
         el('div', { class: 'brix-packs-railhead' }, [
           el('b', { text: bxT('storefront.packs.your_items', 'Your items') }),
           el('span', { 'aria-live': 'polite', text: left ? bxT('storefront.packs.n_left', '{count} left to choose', { count: left }) : bxT('storefront.packs.all_set', 'All set') }),
@@ -1595,6 +1985,7 @@
         var save = ctx.saveTextFor(shown);
         var soldText = pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock');
         var sub = disabled ? soldText
+          : isCombo(pack) ? comboText(pack, t)
           : offer ? (save || itemsText(t.quantity))
           : (t.quantity > 1 && !money.hidden ? bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) : itemsText(t.quantity));
         var row = el('button', tierRadio(pack, t, index, 'brix-packs-lrow', selected, disabled), [
@@ -1615,9 +2006,10 @@
           ]),
         ]);
         var item = el('div', { class: 'brix-packs-litem', 'data-selected': selected ? '1' : null }, [offer && t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null, row]);
-        if (selected && !ctx.noPicking) {
+        var includes = selected && isCombo(pack) && t.comboItems && t.comboItems.length ? comboIncludes(t) : null;
+        if (selected && (!ctx.noPicking || includes)) {
           var lines = el('div', { class: 'brix-packs-llines', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') });
-          itemsFor(pack, t).forEach(function (entry, slot) {
+          (ctx.noPicking ? [] : pickItems(pack, itemsFor(pack, t))).forEach(function (entry, slot) {
             var label = bxT('storefront.packs.item_n', 'Item {n}', { n: slot + 1 });
             var problem = problemText(pack, entry, m);
             lines.appendChild(el('div', { class: 'brix-packs-lline', 'data-state': slotTone(entry) }, [
@@ -1626,6 +2018,7 @@
               problem ? el('p', { class: 'brix-packs-problem', text: problem }) : null,
             ]));
           });
+          if (includes) lines.appendChild(includes);
           item.appendChild(lines);
         }
         list.appendChild(bandWrap(item, ctx.bandOn(t, index, selected)));
@@ -1878,7 +2271,7 @@
       var gridScroll = oldGrid ? oldGrid.scrollTop : 0; // kept so tapping + doesn't jump the list to the top
       root.textContent = '';
       var pack = state.pack;
-      if (!pack || !state.data) return;
+      if (!pack || !state.data) { if (!adminPreview) packShiprocket(null, null); return; }
       var custom = pack.customization || {};
       var content = custom.content || {};
       if (codOn(pack) && !adminPreview) probeCod();
@@ -1893,17 +2286,34 @@
       var showWas = priceCfg.showWas !== false;
       function numberText(value) { return hideSymbol ? money.plain(value) : money.format(value); }
       function priceText(value) { return (pricePrefix ? pricePrefix + ' ' : '') + numberText(value) + (priceSuffix ? ' ' + priceSuffix : ''); }
+      // Amount tags a merchant can use in button text: {price} the Pack's total, {was} the total
+      // before the discount, {saving}, {each} per item, {quantity} items, {pack} the offer's name.
+      function labelWithTags(text, pack, tier) {
+        var value = String(text == null ? '' : text);
+        if (!tier || value.indexOf('{') < 0) return value;
+        var totals = shownTier(pack, tier, state.tierIndex);
+        var values = { price: numberText(totals.price), was: numberText(totals.subtotal), saving: numberText(totals.savings), each: numberText(tier.quantity ? totals.price / tier.quantity : totals.price), quantity: String(tier.quantity), pack: tierName(tier) };
+        return value.replace(/{(price|was|saving|each|quantity|pack)}/g, function (match, key) { return values[key]; });
+      }
       // Texts left at the Pack's English defaults follow the shopper's language ('' = none).
       var heading = content.heading ? bxText(content.heading, 'storefront.packs.heading', 'Choose Your Pack') : '';
       var subheading = content.subheading ? bxText(content.subheading, 'storefront.packs.subheading', 'Buy more and save more.') : '';
       var design = (custom.design && custom.design.preset) || 'slots';
-      var layout = layoutOf(design);
+      var layout = layoutFor(pack);
       var m = model(pack);
       var tier = pack.tiers[state.tierIndex];
 
       var section = el('section', { class: 'brix-packs-widget', dir: bxDir(), 'data-template': pack.template, 'data-design': design, 'data-layout': layout, 'data-mode': m.rules.sameVariant ? 'same' : 'mix', 'aria-label': heading || bxT('storefront.packs.packs', 'Packs') });
       applyCustomization(section, custom);
-      if (!adminPreview && matchThemeButtons(pack)) applyThemeButtonLook(section);
+      if (!adminPreview && (matchThemeButtons(pack) || themeModeOn(pack))) applyThemeButtonLook(section);
+      // Colors the merchant chose on top of the theme's look ('' = the theme's own).
+      var themeColors = themeModeOn(pack) ? {
+        add: { backgroundColor: content.themeAddBg, color: content.themeAddText, borderColor: content.themeAddBorder },
+        buy: { backgroundColor: content.themeBuyBg, color: content.themeBuyText, borderColor: content.themeBuyBorder },
+      } : null;
+      if (themeColors) {
+        [['--brix-packs-button', themeColors.add.backgroundColor], ['--brix-packs-button-text', themeColors.add.color], ['--brix-packs-add-border', themeColors.add.borderColor], ['--brix-packs-buy-bg', themeColors.buy.backgroundColor], ['--brix-packs-buy-text', themeColors.buy.color], ['--brix-packs-buy-border', themeColors.buy.borderColor]].forEach(function (pair) { if (pair[1]) section.style.setProperty(pair[0], pair[1]); });
+      }
 
       section.appendChild(el('div', { class: 'brix-packs-head' }, [
         heading ? el('h2', { class: 'brix-packs-heading', text: heading }) : null,
@@ -1972,7 +2382,7 @@
           onkeydown: function (event) { onTierKey(event, index); },
         };
         if (rows) {
-          var meta = itemsText(t.quantity) + (!money.hidden && shown.savings > 0 ? ' \u00b7 ' + bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) : '');
+          var meta = isCombo(pack) ? comboText(pack, t) : itemsText(t.quantity) + (!money.hidden && shown.savings > 0 ? ' \u00b7 ' + bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) : '');
           var row = el('div', { class: 'brix-packs-stack-item', 'data-selected': selected ? '1' : null }, [
             el('button', shallow(tierProps, { 'data-image': rowImage ? '1' : null }), [
               el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
@@ -1988,26 +2398,34 @@
               ]),
             ]),
           ]);
-          if (selected && !hideVars) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [renderImageSlots(pack, t, itemsFor(pack, t))]));
+          var comboList = isCombo(pack) && t.comboItems && t.comboItems.length ? comboIncludes(t) : null;
+          if (selected && (!hideVars || comboList)) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [hideVars ? null : renderImageSlots(pack, pickTier(pack, t), pickItems(pack, itemsFor(pack, t))), comboList]));
           cards.appendChild(bandWrap(row, bandOn(t, index, selected)));
           return;
         }
         var stackPhotos = null;
         if (layout === 'stack') {
           stackPhotos = el('span', { class: 'brix-packs-sphotos', 'aria-hidden': 'true' });
-          for (var k = 0; k < Math.min(Number(t.quantity) || 1, 4); k += 1) stackPhotos.appendChild(el('span', null, [photo(stackSrc, '')]));
+          var stackList = [];
+          if (isCombo(pack)) {
+            stackList.push(stackSrc);
+            (t.comboItems || []).forEach(function (item) { for (var q = 0; q < item.quantity; q += 1) stackList.push((item.variant && item.variant.image) || ''); });
+          } else {
+            for (var k = 0; k < (Number(t.quantity) || 1); k += 1) stackList.push(stackSrc);
+          }
+          stackList.slice(0, 4).forEach(function (src) { stackPhotos.appendChild(el('span', null, [photo(src, '')])); });
         }
         cards.appendChild(bandWrap(el('button', tierProps, [
           t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
           el('span', { class: 'brix-packs-card-check', 'aria-hidden': 'true' }),
           stackPhotos,
           el('span', { class: 'brix-packs-card-name', text: tierName(t) }),
-          el('span', { class: 'brix-packs-card-count', text: itemsText(t.quantity) }),
+          el('span', { class: 'brix-packs-card-count', text: isCombo(pack) ? comboText(pack, t) : itemsText(t.quantity) }),
           money.hidden ? null : el('span', { class: 'brix-packs-card-price' }, [
             el('strong', { text: priceText(shown.price) }),
             showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shown.subtotal) }) : null,
           ]),
-          layout === 'stack' && !money.hidden && t.quantity > 1 ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) }) : null,
+          layout === 'stack' && !money.hidden && t.quantity > 1 && !isCombo(pack) ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) }) : null,
           save ? el('span', { class: 'brix-packs-save', text: save }) : null,
           disabled ? el('span', { class: 'brix-packs-card-note', text: pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock') }) : null,
         ]), bandOn(t, index, selected)));
@@ -2028,18 +2446,23 @@
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
       } else if (tier) {
         var body = el('div', { class: 'brix-packs-body', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items'), role: 'group' });
+        // Fixed Combo: the shopper picks only this product; the pack's other items are listed.
+        var pTier = pickTier(pack, tier);
+        var pItems = pickItems(pack, items);
+        var pDone = readyCount(pItems);
         if (layout === 'quick_add') {
-          body.appendChild(progress(m.rules.sameVariant ? progressTitle(m, tier) : bxT('storefront.packs.choose_x', 'Choose {name}', { name: itemsText(tier.quantity) }), done, tier.quantity, bxT('storefront.packs.selected_n', 'Selected: {done} / {total}', { done: done, total: tier.quantity })));
-          renderQuickAdd(pack, tier, items).forEach(function (node) { body.appendChild(node); });
+          body.appendChild(progress(m.rules.sameVariant ? progressTitle(m, pTier) : bxT('storefront.packs.choose_x', 'Choose {name}', { name: itemsText(pTier.quantity) }), pDone, pTier.quantity, bxT('storefront.packs.selected_n', 'Selected: {done} / {total}', { done: pDone, total: pTier.quantity })));
+          renderQuickAdd(pack, pTier, pItems).forEach(function (node) { body.appendChild(node); });
         } else {
-          body.appendChild(progress(progressTitle(m, tier), done, tier.quantity));
-          body.appendChild(renderSlots(pack, tier, items, custom));
+          body.appendChild(progress(isCombo(pack) ? tierName(tier) + ' \u2014 ' + bxT('storefront.packs.choose_your_item', 'Choose your item') : progressTitle(m, tier), pDone, pTier.quantity));
+          body.appendChild(renderSlots(pack, pTier, pItems, custom));
         }
+        if (isCombo(pack) && tier.comboItems && tier.comboItems.length) body.appendChild(comboIncludes(tier));
         section.appendChild(body);
 
         var shownCurrent = shownTier(pack, tier, state.tierIndex);
         section.appendChild(el('div', { class: 'brix-packs-total' }, [
-          el('span', { class: 'brix-packs-total-label', text: tierName(tier) + ' \u00b7 ' + itemsText(tier.quantity) }),
+          el('span', { class: 'brix-packs-total-label', text: tierName(tier) + ' \u00b7 ' + (isCombo(pack) ? comboText(pack, tier) : itemsText(tier.quantity)) }),
           money.hidden ? null : el('span', { class: 'brix-packs-total-price' }, [
             showWas && shownCurrent.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shownCurrent.subtotal) }) : null,
             el('strong', { text: priceText(shownCurrent.price) }),
@@ -2054,29 +2477,68 @@
       if (state.message) section.appendChild(el('div', { class: 'brix-packs-msg', role: state.message.type === 'error' ? 'alert' : 'status', 'data-type': state.message.type, text: state.message.text }));
 
       var addDisabled = Boolean(state.busy) || !tier || tierDisabled(pack, tier) || !ready;
-      var addButton = el('button', { type: 'button', class: 'brix-packs-add', 'data-fk': 'add-to-cart', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding\u2026') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart')) });
+      var addButton = el('button', { type: 'button', class: 'brix-packs-add', 'data-fk': 'add-to-cart', disabled: addDisabled, onclick: function () { addToCart(false); }, text: state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding\u2026') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : labelWithTags(themeModeOn(pack) && content.themeAddLabel ? content.themeAddLabel : bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart'), pack, tier)) });
       // Which buttons show (content.showAddToCart / showBuyNow / showCod). Buy Now checks out
       // only this Pack; the shopper's cart is left as it was. COD opens the BRIX COD popup
       // for just this Pack. With every button switched off, Add to Cart stays so a Pack is
       // never unbuyable.
       var available = pack.available !== false;
-      var wantBuy = buyNowOn(pack) && available;
-      var wantCod = codOn(pack) && available && (adminPreview || state.cod === true);
-      var wantAdd = content.showAddToCart !== false || (!wantBuy && !wantCod);
+      var under = underThemeOn(pack);
+      var wantBuy = !under && buyNowOn(pack) && available;
+      var wantCod = !under && codOn(pack) && available && (adminPreview || state.cod === true);
+      var wantAdd = !under && (content.showAddToCart !== false || (!wantBuy && !wantCod));
       // The Pack's own COD button replaces BRIX COD's product-page button (which would order
       // a single item at the full price instead of the Pack).
       if (!adminPreview) {
         if (wantCod) document.documentElement.setAttribute('data-brix-pack-cod', '1');
         else document.documentElement.removeAttribute('data-brix-pack-cod');
+        hideBrixCodButton(wantCod);
+        // Shiprocket's Buy Now buys this Pack (see SR_BUY_NOW). A plain one-item tier
+        // (Buy 1, no saving) is left to Shiprocket as it is.
+        var srPack = tier && available && !tierDisabled(pack, tier) && (tier.quantity > 1 || shownTier(pack, tier, state.tierIndex).savings > 0);
+        packShiprocket(srPack ? shiprocketBuy : null, srPack && money && !money.hidden && !money.converted ? shownTier(pack, tier, state.tierIndex).price : null, under ? codPackOrder : null);
       }
-      var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now') }) : null;
-      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : bxText(content.codText, 'storefront.packs.cod', 'Buy with COD') }) : null;
+      var buyButton = wantBuy ? el('button', { type: 'button', class: 'brix-packs-buy', 'data-fk': 'buy-now', disabled: addDisabled, onclick: function () { addToCart(true); }, text: state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout\u2026') : labelWithTags(themeModeOn(pack) && content.themeBuyLabel ? content.themeBuyLabel : bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier) }) : null;
+      var codButton = wantCod ? el('button', { type: 'button', class: 'brix-packs-cod', 'data-fk': 'cod', disabled: addDisabled, onclick: function () { codOrder(); }, text: state.busy === 'cod' ? bxT('storefront.packs.opening_cod', 'Opening\u2026') : labelWithTags(codButtonText(bxText(content.codText, 'storefront.packs.cod', 'Buy with COD'), codPrices(pack, tier), money), pack, tier) }) : null;
+      // Theme buttons mode: swap in shells of the theme's own buttons (see themeModeOn). Whatever
+      // can't be drawn from a real theme button keeps BRIX's own working button, and the theme
+      // editor says so.
+      var themed = [];
+      var themeNote = '';
+      if (!adminPreview && themeModeOn(pack)) {
+        var themeAdd = wantAdd ? findThemeAdd() : null;
+        var themeBuy = wantBuy ? findThemeBuy() : null;
+        if (themeAdd) {
+          addButton = themeProxy(themeAdd, 'add', state.busy === 'add' ? bxT('storefront.packs.adding', 'Adding…') : (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : (content.themeAddLabel ? labelWithTags(content.themeAddLabel, pack, tier) : themeLabel(themeAdd, labelWithTags(bxText(content.cta, 'storefront.packs.cta', 'Add Pack to Cart'), pack, tier)))), addDisabled, function () { addToCart(false); });
+          themed.push(addButton);
+        } else if (wantAdd) themeNote = "couldn't find your theme's Add to cart button, so the Pack uses BRIX's own button.";
+        if (themeBuy) {
+          buyButton = themeProxy(themeBuy, 'buy', state.busy === 'buy' ? bxT('storefront.packs.going_checkout', 'Going to checkout…') : (content.themeBuyLabel ? labelWithTags(content.themeBuyLabel, pack, tier) : themeLabel(themeBuy, labelWithTags(bxText(content.buyNow, 'storefront.packs.buy_now', 'Buy Now'), pack, tier))), addDisabled, function () { addToCart(true); });
+          themed.push(buyButton);
+        } else if (wantBuy) {
+          // The theme has no Buy it now at all: show none. A wallet-only one can't buy a Pack: BRIX's own.
+          var themeForm = productForm();
+          if (!themeForm || !themeForm.querySelector('.shopify-payment-button, [data-shopify="payment-button"]')) buyButton = null;
+          else themeNote = themeNote || "your theme's Buy it now is a wallet button that can't buy a Pack, so the Pack uses BRIX's own Buy Now.";
+        }
+        section.setAttribute('data-brix-theme-buttons', themeNote ? (themed.length ? 'partial' : 'fallback') : 'theme');
+        if (themeNote) {
+          if (window.console && console.warn) console.warn('[BRIX Packs] ' + themeNote);
+          if (window.Shopify && window.Shopify.designMode) section.appendChild(el('p', { class: 'brix-packs-msg', role: 'status', 'data-type': 'info', text: 'BRIX Packs: ' + themeNote }));
+        }
+      }
       var mainButtons = [wantAdd ? addButton : null, buyButton].filter(Boolean);
+      if (under && adminPreview) section.appendChild(el('p', { class: 'brix-packs-msg', 'data-type': 'info', text: "On your store, your theme's Add to cart, Prepaid and COD buttons show under the Pack and buy the selected Pack." }));
       section.appendChild(el('div', { class: 'brix-packs-actions-col' }, [
         mainButtons.length > 1 ? el('div', { class: 'brix-packs-actions' }, mainButtons) : mainButtons[0] || null,
         codButton,
       ]));
       root.appendChild(section);
+      themed.forEach(function (node) {
+        syncThemeLook(node);
+        var chosen = themeColors && themeColors[node.getAttribute('data-brix-theme-button')];
+        if (chosen) Object.keys(chosen).forEach(function (prop) { if (chosen[prop]) node.style.setProperty(prop === 'backgroundColor' ? 'background-color' : prop === 'borderColor' ? 'border-color' : 'color', chosen[prop], 'important'); });
+      });
       mountBands();
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
@@ -2203,6 +2665,10 @@
     // the checkout Function prices them together.
     function buildItems(pack, tier) {
       var properties = { _brix_pack_id: String(pack.id), _brix_pack_quantity: String(tier.quantity), _brix_pack_version: String(pack.version), _brix_pack_group: token() };
+      // The pack's name for the cart drawer's pack card (display only; the Function never reads it):
+      // the merchant's name for the pack, else for a Fixed Combo what's in it.
+      var packName = tier.name || (isCombo(pack) ? comboText(pack, tier) : '');
+      if (packName) properties._brix_pack_name = String(packName).slice(0, 120);
       var ids = itemsFor(pack, tier).map(function (item) { return item.variant.id; });
       return groupCartItems(ids).map(function (line) { return { id: Number(line.id), quantity: line.quantity, properties: properties }; });
     }
@@ -2297,6 +2763,51 @@
     // Buy with COD: the BRIX COD popup for just this Pack (the shopper's cart is untouched).
     // The lines carry the same _brix_pack_* properties as Add to Cart so COD can price the
     // tier like checkout does. "Pay online" inside the popup goes to the Buy Now checkout.
+    // BRIX COD's own product button tapped with this Pack selected (theme's buttons
+    // under the Pack): the Pack's items for the COD popup, or null with the hint shown.
+    function codPackOrder() {
+      var pack = state.pack;
+      var tier = pack && pack.tiers[state.tierIndex];
+      if (!tier || state.busy) return null;
+      var items = itemsFor(pack, tier);
+      if (readyCount(items) !== items.length) {
+        state.message = { type: 'error', text: hintText(model(pack), tier, items) };
+        render();
+        return null;
+      }
+      return {
+        items: buildItems(pack, tier).map(function (line) { return { variantId: line.id, quantity: line.quantity, properties: line.properties }; }),
+        onPayOnline: function () { addToCart(true); },
+      };
+    }
+
+    // Shiprocket's own Buy Now tapped with this Pack selected (see SR_BUY_NOW).
+    function shiprocketBuy() {
+      var pack = state.pack;
+      var tier = pack && pack.tiers[state.tierIndex];
+      if (!tier || state.busy) return;
+      var items = itemsFor(pack, tier);
+      if (readyCount(items) !== items.length) {
+        state.message = { type: 'error', text: hintText(model(pack), tier, items) };
+        render();
+        return;
+      }
+      var cod = window.BrixCod;
+      if (!cod || typeof cod.payOnlinePack !== 'function' || !window.BrixCheckout) { addToCart(true); return; }
+      var lines = buildItems(pack, tier);
+      state.message = null;
+      state.busy = 'buy';
+      render();
+      var done = function () { clearTimeout(reset); if (state.busy === 'buy') { state.busy = false; render(); } };
+      var reset = setTimeout(done, 12000);
+      var started = cod.payOnlinePack(lines.map(function (line) { return { variantId: line.id, quantity: line.quantity, properties: line.properties }; }), {
+        onOpen: done,
+        // The Pack couldn't go in the cart: the Pack's own Buy Now (Shopify checkout).
+        fallback: function () { clearTimeout(reset); state.busy = false; addToCart(true); },
+      });
+      if (!started) done();
+    }
+
     function codOrder() {
       var pack = state.pack;
       var tier = pack && pack.tiers[state.tierIndex];
@@ -2390,6 +2901,7 @@
         if (state.bandWatch) state.bandWatch.disconnect();
         state.bands = []; state.bandRaf = 0; state.bandWatch = null;
         root.textContent = ''; state.pack = null;
+        if (!adminPreview) packShiprocket(null, null);
       },
     };
   }
@@ -2510,10 +3022,28 @@
 
   // below_price: right after the product price. custom: inside the "BRIX Packs
   // position" app block. When neither is found, above the buy buttons.
+  // "Below the Pack": the block holding the theme's own Add to cart (findThemeAdd), so the Pack
+  // sits right on top of the buttons it hands the Pack to (Silverline: the coupon slider and
+  // stock pill sat between the Pack below the price and the buttons). Its form when it is
+  // inside one (Dawn: before the product form, never inside it), else its buy-buttons row,
+  // else its parent. null = the usual place.
+  function themeButtonsAnchor() {
+    var button = findThemeAdd();
+    if (!button) return null;
+    var inForm = button.closest('form');
+    var anchor = inForm ? (inForm.closest('product-form') || inForm) : (button.closest('.product-form__buttons, [class*="buy-row"], [class*="buy-buttons"], [class*="buy_buttons"]') || button.parentElement);
+    return anchor && anchor.parentNode && !anchor.contains(root) ? anchor : null;
+  }
+
   function place(pack) {
     if (root.getAttribute('style')) root.removeAttribute('style'); // the embed's pre-placement spacing
     var slot = placementOf(pack) === 'custom' && document.querySelector('[data-brix-packs-slot]');
     if (slot) { if (root.parentNode !== slot) slot.appendChild(root); return; }
+    var buttons = underThemeOn(pack) ? themeButtonsAnchor() : null;
+    if (buttons) {
+      if (root.nextElementSibling !== buttons) buttons.parentNode.insertBefore(root, buttons);
+      return;
+    }
     var price = priceAnchor();
     if (price && price.parentNode) {
       if (price.nextElementSibling !== root) price.parentNode.insertBefore(root, price.nextSibling);
@@ -2557,6 +3087,11 @@
   function setThemeControlsHidden(hidden, hidePayment, hidePicker, keepTheme) {
     // content.showThemeButtons: the merchant keeps the theme's own Add to cart, Buy it now,
     // quantity box and variant picker next to the Pack (they add a single variant as usual).
+    // keepTheme 'buttons': the theme's Add to cart adds the Pack, so only its buttons stay;
+    // the quantity box (the Pack sets the quantity) and picker follow the usual rule.
+    var hideQuantity = hidden && keepTheme !== 'all';
+    hidePicker = hidePicker && keepTheme !== 'all';
+    var pickerHidden = hidden;
     if (keepTheme) hidden = false;
     var form = productForm();
     if (!form) return;
@@ -2572,10 +3107,10 @@
       var box = input.closest(QUANTITY_SELECTORS.join(',')) || input.parentElement;
       if (!box) return;
       box = box.closest('.product-form__input') || box;
-      if (outside(box)) setHidden(box, hidden);
+      if (outside(box)) setHidden(box, hideQuantity);
     });
     Array.prototype.forEach.call(info.querySelectorAll(QUANTITY_SELECTORS.join(',')), function (box) {
-      if (outside(box)) setHidden(box.closest('.product-form__input') || box, hidden);
+      if (outside(box)) setHidden(box.closest('.product-form__input') || box, hideQuantity);
     });
     var buttons = Array.prototype.slice.call(form.querySelectorAll('[name="add"], button[type="submit"], input[type="submit"]'));
     if (formId) buttons = buttons.concat(Array.prototype.slice.call(document.querySelectorAll('[type="submit"][form="' + formId + '"]')));
@@ -2596,16 +3131,70 @@
       pickers.push(control.closest('fieldset, .product-form__input, .selector-wrapper') || control);
     });
     pickers.forEach(function (node) {
-      if (outside(node)) setHidden(node, hidden && Boolean(hidePicker));
+      if (outside(node)) setHidden(node, pickerHidden && Boolean(hidePicker));
     });
+  }
+
+  // false = hide the theme's buy controls; 'buttons' = keep its buttons (they buy the Pack);
+  // 'all' = keep everything (the older "theme's Add to cart adds one plain item").
+  function keepThemeFor(pack) {
+    if (!themeButtonsOn(pack)) return false;
+    return themeAddsPackOn(pack) ? 'buttons' : 'all';
   }
 
   function showFor(variantId) {
     var next = packForVariant(widget.packs(), variantId);
-    setThemeControlsHidden(Boolean(next), buyNowOn(next), coversAllVariants(next) && !hideVariantsOn(next), themeButtonsOn(next));
+    // On a page the Pack is only also shown on (an extra product's), the theme's controls stay;
+    // on its own page, which theme buttons stay (keepThemeFor) and COD under Shiprocket as before.
+    var ownPage = isMainPage(next);
+    setThemeControlsHidden(Boolean(next) && ownPage, buyNowOn(next), ownPage && coversAllVariants(next) && !hideVariantsOn(next), keepThemeFor(next));
+    if (next && ownPage && underThemeOn(next)) keepCodUnderShiprocket();
     if (next) place(next);
     current = next;
     widget.show(next, variantId);
+  }
+
+  // Is this the Pack's own product page? On an extra page it is shown on, the theme's buttons stay and the
+  // Pack is an extra block (there the page's product is just one of the products the Pack can be filled from).
+  function isMainPage(pack) {
+    return !pack || !pack.productId || String(pack.productId) === String(productId);
+  }
+
+  // The Pack's products other than this page's (its main product on an extra page, and its extra products),
+  // from the storefront's own /products/<handle>.js. { productId: data }; one that fails is simply missing.
+  var productCache = {};
+  function loadProduct(handle) {
+    if (!productCache[handle]) {
+      productCache[handle] = fetch('/products/' + encodeURIComponent(handle) + '.js', { headers: { Accept: 'application/json' } })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(fromProductJs)
+        .catch(function () { return null; });
+    }
+    return productCache[handle];
+  }
+  function loadOtherProducts(packs) {
+    var wanted = {};
+    (packs || []).forEach(function (pack) {
+      if (pack.productId && String(pack.productId) !== String(productId) && pack.productHandle) wanted[String(pack.productId)] = pack.productHandle;
+      if (pack.packType === 'combo') {
+        (pack.tiers || []).forEach(function (tier) {
+          (tier.items || []).forEach(function (item) {
+            if (item.handle && String(item.productId) !== String(productId)) wanted[String(item.productId)] = item.handle;
+          });
+        });
+        return;
+      }
+      if (pack.packType !== 'mix_match') return;
+      (pack.extraProducts || []).forEach(function (item) {
+        if (item.handle && String(item.productId) !== String(productId)) wanted[String(item.productId)] = item.handle;
+      });
+    });
+    var ids = Object.keys(wanted);
+    return Promise.all(ids.map(function (id) { return loadProduct(wanted[id]); })).then(function (results) {
+      var out = {};
+      ids.forEach(function (id, index) { if (results[index]) out[id] = results[index]; });
+      return out;
+    });
   }
 
   function fail(message) {
@@ -2629,9 +3218,16 @@
         var product = readPageProduct();
         if (!product) { fail('the product data from Packs.liquid is missing.'); return; }
         pageVariantIds = (product.variants || []).map(function (variant) { return String(variant.id); });
-        data = priceOnPage(data, product);
-        if (!data.packs.length) data.reason = 'price_unverified';
+        return loadOtherProducts(data.packs).then(function (fetched) {
+          data = priceOnPage(data, product, productId, fetched);
+          if (!data.packs.length) data.reason = 'price_unverified';
+          return data;
+        });
       }
+      return data;
+    })
+    .then(function (data) {
+      if (!data) return;
       if (!data.packs || !data.packs.length) {
         if (preview) fail('no widget to show (' + (data.reason || 'no active Pack') + ').');
         return;
@@ -2642,15 +3238,25 @@
       // The theme's Add to cart (a click, or Enter in the form) adds the selected Pack when
       // the merchant kept the theme's buttons. Capture phase, so it runs before the theme's
       // own handler. Buy it now / Shiprocket / GoKwik buttons are other apps' and aren't touched.
+      // This product's add form: productForm(), or another /cart/add form holding the
+      // selected variant (Silverline: <button type="submit" form="pdp-form"> sits outside
+      // pdp-form, so productForm() finds a different form for the same product). A
+      // quick-add for another product holds another variant and is left alone.
+      function isProductForm(candidate, form) {
+        if (!candidate || candidate === form) return Boolean(candidate);
+        if (!/\/cart\/add/.test(candidate.getAttribute('action') || '')) return false;
+        var idInput = candidate.querySelector('[name="id"]');
+        return Boolean(idInput && idInput.value && numericId(idInput.value) === currentVariantId());
+      }
       function themeAdd(event) {
-        if (!current || !themeAddsPackOn(current)) return false;
+        if (!current || !isMainPage(current) || !themeAddsPackOn(current)) return false;
         var form = productForm();
         if (!form) return false;
         if (event.type === 'submit') {
-          if (event.target !== form) return false;
+          if (!isProductForm(event.target, form)) return false;
         } else {
           var button = event.target && event.target.closest ? event.target.closest('[name="add"], button[type="submit"], input[type="submit"]') : null;
-          if (!button || root.contains(button) || !(form.contains(button) || button.form === form)) return false;
+          if (!button || root.contains(button) || !(form.contains(button) || isProductForm(button.form, form))) return false;
           if (button.closest('.shopify-payment-button, [data-shopify="payment-button"]')) return false;
         }
         event.preventDefault();
@@ -2666,7 +3272,14 @@
         var variant = currentVariantId();
         if (variant !== lastVariant) { lastVariant = variant; showFor(variant); }
         else {
-          setThemeControlsHidden(Boolean(current), buyNowOn(current), coversAllVariants(current) && !hideVariantsOn(current), themeButtonsOn(current)); // a theme re-render can bring them back
+          var onOwnPage = Boolean(current) && isMainPage(current);
+          setThemeControlsHidden(onOwnPage, buyNowOn(current), onOwnPage && coversAllVariants(current) && !hideVariantsOn(current), keepThemeFor(current)); // a theme re-render can bring them back
+          if (onOwnPage && underThemeOn(current)) {
+            keepCodUnderShiprocket();
+            // Another app placed itself between the Pack and the buttons (Silverline: the coupon slider).
+            var buttonsBlock = themeButtonsAnchor();
+            if (buttonsBlock && root.nextElementSibling !== buttonsBlock) place(current);
+          }
           if (current && !root.isConnected) { place(current); } // a theme re-render replaced the block the Pack sat in
         }
       }, 700);

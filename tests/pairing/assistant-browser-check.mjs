@@ -234,6 +234,36 @@ await check('AI-Powered: saved instructions come back on reload and plain Save k
   await context.close();
 });
 
+await check('AI-Powered: saved AI suggestions are listed and drive the preview; none saved = a warning', async () => {
+  const slim = (p) => ({ id: p.id, title: p.title, image: p.image, price: p.price });
+  const aiRules = [
+    { trigger: slim(JOGGERS), picks: [slim(CAP), slim(SOCKS)] },
+    { trigger: slim(SOCKS), picks: [slim(JOGGERS)] },
+  ];
+  const aiCfg = { ...fbtData.fbtConfig, mode: 'ai', aiEnabled: true };
+  {
+    const { page, context, errors } = await open('/app/fbt', { fbt: { ...fbtData, fbtConfig: aiCfg, aiRules } });
+    await openFbtConfigure(page);
+    const dialog = page.getByRole('dialog');
+    await dialog.getByText('Current suggestions').waitFor();
+    await dialog.getByText('2 products').waitFor();
+    assert.ok(await dialog.getByText('Summer Cap').count() > 0, 'pick listed under its product');
+    await page.screenshot({ path: path.join(shotDir, 'fbt-ai-suggestions.png') });
+    await page.keyboard.press('Escape');
+    const preview = await page.locator('body').textContent();
+    assert.ok(preview.indexOf('Summer Cap') !== -1, 'preview uses the AI picks');
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+  {
+    const { page, context, errors } = await open('/app/fbt', { fbt: { ...fbtData, fbtConfig: aiCfg, aiRules: [] } });
+    await openFbtConfigure(page);
+    await page.getByRole('dialog').getByText('No AI suggestions are saved yet').waitFor();
+    assert.deepEqual(errors, []);
+    await context.close();
+  }
+});
+
 await check('Bundle offer: switch on, % and text; preview shows the offer; Save sends it and shows Shopify\'s state', async () => {
   const { page, context, posts, errors } = await open('/app/fbt');
   await page.getByRole('button', { name: /Bundle offer/ }).first().click();
