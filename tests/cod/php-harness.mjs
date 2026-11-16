@@ -19,7 +19,7 @@ const PHP = path.join(XAMPP, 'php/php.exe');
 const BASE_DB_PORT = 3399;
 const BASE_PHP_PORT = 8399;
 const BASE_APP_PORT = 8398; // fake BRIX app server that cod_checkout.php relays to
-const SECRET = 'test-forge-secret';
+const SECRET = 'test-internal-secret-0123456789abcdef'; // BRIX_INTERNAL_SECRET needs 32+ characters
 
 export const harnessAvailable = () => [MYSQLD, INSTALL_DB, PHP].every((f) => fs.existsSync(f));
 
@@ -77,7 +77,7 @@ $pdo = new PDO('mysql:host=127.0.0.1;port=${DB_PORT};dbname=brix_cod_test;charse
   });
   await new Promise((r) => appServer.listen(APP_PORT, '127.0.0.1', r));
 
-  const php = spawn(PHP, ['-S', `127.0.0.1:${PHP_PORT}`, '-t', webDir], { stdio: 'ignore', env: { ...process.env, SHOPIFY_API_KEY: SECRET, BRIX_APP_URL: `http://127.0.0.1:${APP_PORT}` } });
+  const php = spawn(PHP, ['-S', `127.0.0.1:${PHP_PORT}`, '-t', webDir], { stdio: 'ignore', env: { ...process.env, BRIX_INTERNAL_SECRET: SECRET, BRIX_ACCEPT_LEGACY_SECRET: '', BRIX_APP_URL: `http://127.0.0.1:${APP_PORT}` } });
   await waitFor(async () => (await fetch(`http://127.0.0.1:${PHP_PORT}/cod_settings.php`)).status === 403, 'PHP server');
 
   return {

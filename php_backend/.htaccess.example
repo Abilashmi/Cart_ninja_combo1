@@ -1,12 +1,14 @@
+# TEMPLATE: copy to .htaccess on the server and fill in the values. Never commit
+# the real .htaccess (it is git-ignored).
 # Makes getenv('SHOPIFY_API_KEY') resolve on Apache/mod_php hosting (Hostinger)
 # so the X-Forge-Secret check in db_proxy.php / progress_bar.php / etc. actually
 # enforces instead of silently no-op'ing. Must match SHOPIFY_API_KEY in the
 # Node app's fly.toml / .env.
 <IfModule mod_env.c>
-  SetEnv SHOPIFY_API_KEY "9f7189f9faf11f0771c1ef2f81c42b8d"
+  SetEnv SHOPIFY_API_KEY CHANGE_ME
   # Login password for promo_admin.php — change this to your own value,
   # then log out and back in with the new password.
-  SetEnv PROMO_ADMIN_PASSWORD "HjLoiP781g5yrsRcpFmE"
+  SetEnv PROMO_ADMIN_PASSWORD CHANGE_ME
 
   # Agency Dashboard (agencydashboard_c) server-to-server integration.
   # install_shop.php / uninstall_shop.php notify it of real Shopify
@@ -17,6 +19,14 @@
   #   - AGENCY_DASHBOARD_INTERNAL_SECRET must be byte-identical to the
   #     value set on the Agency Dashboard (Fly secret of the same name).
   #   - AGENCY_DASHBOARD_URL is that app's public base URL, no trailing slash.
-  SetEnv AGENCY_DASHBOARD_INTERNAL_SECRET "24a6f7e698655643d42af07fedc68fa18c3a59a20c70629e639da67a92d789ac"
-  SetEnv AGENCY_DASHBOARD_URL "https://REPLACE_WITH_AGENCY_DASHBOARD_HOST"
+  SetEnv AGENCY_DASHBOARD_INTERNAL_SECRET CHANGE_ME
+  SetEnv AGENCY_DASHBOARD_URL CHANGE_ME
+
+  # Server-to-server secret shared with the Fly app (php_backend/internal_auth.php).
+  # Same value as the Fly secret BRIX_INTERNAL_SECRET (openssl rand -hex 32).
+  SetEnv BRIX_INTERNAL_SECRET CHANGE_ME
+  # 1 only while switching from the old X-Forge-Secret; remove afterwards.
+  SetEnv BRIX_ACCEPT_LEGACY_SECRET 1
+  # MySQL password read by config.php.
+  SetEnv BRIX_DB_PASS CHANGE_ME
 </IfModule>

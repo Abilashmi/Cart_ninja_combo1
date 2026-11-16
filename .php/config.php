@@ -19,7 +19,8 @@ error_reporting(E_ALL);
 define('DB_HOST',    'localhost');
 define('DB_NAME',    'u218702675_cartdrawer');
 define('DB_USER',    'u218702675_cartdrawer');
-define('DB_PASS',    'Digi2025#cart');
+// From the server environment (never commit it): the old value was public on GitHub.
+define('DB_PASS',    getenv('BRIX_DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
 // ===== PDO CONNECTION =====

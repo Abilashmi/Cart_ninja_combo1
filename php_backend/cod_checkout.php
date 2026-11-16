@@ -49,9 +49,9 @@ $endpoint = $body['endpoint'] ?? '';
 if (!in_array($endpoint, ['otp', 'quote', 'order', 'prepaid-code', 'partial-cod'], true)) codc_fail(400, 'invalid_request', 'Refresh the page and try again.');
 unset($body['endpoint']);
 
-$secret = getenv('SHOPIFY_API_KEY') ?: '';
-if (!$secret) {
-    error_log('[cod_checkout] SHOPIFY_API_KEY is not set on this server');
+require_once __DIR__ . '/internal_auth.php';
+if (!brix_internal_configured()) {
+    error_log('[cod_checkout] BRIX_INTERNAL_SECRET is not set on this server');
     codc_fail(503, 'not_configured', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.');
 }
 
@@ -66,14 +66,13 @@ curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_CONNECTTIMEOUT => 5,
     CURLOPT_TIMEOUT => 45, // placing an order waits for Shopify
-    CURLOPT_HTTPHEADER => [
+    CURLOPT_HTTPHEADER => array_merge([
         'Content-Type: application/json',
         'Accept: application/json',
-        'X-Forge-Secret: ' . $secret,
         'X-Brix-Client-Ip: ' . $clientIp,
         'X-Brix-Client-Ua: ' . $clientUa,
         'ngrok-skip-browser-warning: 1', // lets BRIX_APP_URL point at a dev tunnel
-    ],
+    ], brix_internal_headers()),
 ]);
 $response = curl_exec($ch);
 $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);

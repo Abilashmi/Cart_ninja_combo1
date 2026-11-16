@@ -35,9 +35,8 @@ function cod_ok($body = []) {
 }
 
 function cod_require_secret() {
-    $secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
-    $expected = getenv('SHOPIFY_API_KEY') ?: '';
-    if (!$expected || !hash_equals($expected, $secret)) cod_fail(403, 'forbidden', 'Forbidden');
+    require_once __DIR__ . '/internal_auth.php';
+    if (!brix_internal_request_ok()) cod_fail(403, 'forbidden', 'Forbidden');
 }
 
 function cod_body() {

@@ -1,5 +1,6 @@
 import { authenticate } from '../shopify.server';
 import { BASE_PHP_URL } from '../utils/api-helpers';
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 async function callPhp(method, shop, body = null) {
   const url = method === 'GET'
@@ -10,7 +11,7 @@ async function callPhp(method, shop, body = null) {
     method,
     headers: {
       'Content-Type': 'application/json',
-      'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
+      ...internalAuthHeaders(),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });

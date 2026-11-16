@@ -8,6 +8,7 @@
 // mysql2/promise's pool.execute() so none of this app's ~45 call sites
 // needed to change.
 import { BASE_PHP_URL } from '../utils/api-helpers';
+import { internalAuthHeaders } from "../utils/internal-auth";
 
 function isReadStatement(sql) {
   return /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sql);
@@ -35,7 +36,7 @@ async function proxyExecuteOnce(sql, params) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
+      ...internalAuthHeaders(),
     },
     body: JSON.stringify({ sql, params }),
     signal: AbortSignal.timeout(DB_PROXY_TIMEOUT_MS),

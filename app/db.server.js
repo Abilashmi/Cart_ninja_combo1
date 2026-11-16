@@ -11,6 +11,7 @@
 // Shopify session storage does NOT use this file — it has its own SQLite
 // Prisma client (app/session-db.server.js), unaffected by any of this.
 import { BASE_PHP_URL } from './utils/api-helpers';
+import { internalAuthHeaders } from "./utils/internal-auth";
 
 function isReadStatement(sql) {
   return /^\s*(SELECT|SHOW|DESCRIBE|DESC|EXPLAIN)\b/i.test(sql);
@@ -23,7 +24,7 @@ async function rawExecute(sql, params) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Forge-Secret': process.env.SHOPIFY_API_KEY || '',
+      ...internalAuthHeaders(),
     },
     body: JSON.stringify({ sql, params }),
     signal: AbortSignal.timeout(DB_PROXY_TIMEOUT_MS),

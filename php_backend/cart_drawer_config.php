@@ -1,10 +1,10 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-// Auth check (skipped in local when SHOPIFY_API_KEY not set)
-$secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
-$expected = getenv('SHOPIFY_API_KEY') ?: '';
-if (!$expected || !hash_equals($expected, $secret)) {
+// Auth check
+// Internal secret, not the public client id (internal_auth.php).
+require_once __DIR__ . '/internal_auth.php';
+if (!brix_internal_request_ok()) {
     http_response_code(403);
     echo json_encode(['status' => 'error', 'message' => 'Forbidden']);
     exit;

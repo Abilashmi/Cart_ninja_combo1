@@ -1,5 +1,8 @@
 import { authenticate } from "../shopify.server";
 import { BASE_PHP_URL as PHP } from "../utils/api-helpers";
+import { getDb } from "../services/db.server";
+import { afterResponse } from "../services/webhook-queue.server";
+import { deleteForCustomer, deleteForShop } from "../services/saved-addresses.server";
 
 /**
  * POST /webhooks/compliance
@@ -33,6 +36,13 @@ export async function action({ request }) {
         break;
 
       case "customers/redact":
+        // Saved COD addresses (services/saved-addresses.server.js), after the 200.
+        afterResponse(`compliance ${topic} ${shop}`, () => deleteForCustomer(getDb(), shop, {
+          customerId: payload.customer?.id,
+          email: payload.customer?.email,
+          phone: payload.customer?.phone,
+          orderIds: payload.orders_to_redact ?? [],
+        }).catch((e) => console.error("[Compliance] saved addresses customers/redact error:", e.message)));
         await fetch(`${PHP}/customers-redact.php`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -47,6 +57,8 @@ export async function action({ request }) {
         break;
 
       case "shop/redact":
+        afterResponse(`compliance ${topic} ${shop}`, () => deleteForShop(getDb(), payload.shop_domain ?? shop)
+          .catch((e) => console.error("[Compliance] saved addresses shop/redact error:", e.message)));
         await fetch(`${PHP}/shop-redact.php`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

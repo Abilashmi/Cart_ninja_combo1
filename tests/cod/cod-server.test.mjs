@@ -17,7 +17,9 @@ if (!harnessAvailable()) {
 
 const harness = await startHarness();
 process.env.PHP_BASE_URL = harness.baseUrl;
-process.env.SHOPIFY_API_KEY = harness.secret;
+process.env.BRIX_INTERNAL_SECRET = harness.secret;
+process.env.SHOPIFY_API_KEY = 'public-client-id';
+delete process.env.BRIX_ACCEPT_LEGACY_SECRET;
 process.env.SHOPIFY_API_SECRET = 'test-secret';
 process.env.COD_OTP_DEV_LOG = '1';
 delete process.env.MSG91_AUTH_KEY;
@@ -652,11 +654,11 @@ test('rate limiter', () => {
 
 const callPhp = (file, body, secret = harness.secret) => fetch(`${harness.baseUrl}/${file}`, {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'X-Forge-Secret': secret },
+  headers: { 'Content-Type': 'application/json', 'X-Brix-Internal-Secret': secret },
   body: JSON.stringify(body),
 }).then(async (res) => ({ status: res.status, json: await res.json() }));
 
-test('PHP: every COD endpoint refuses calls without the Forge secret', async () => {
+test('PHP: every COD endpoint refuses calls without the internal secret', async () => {
   for (const file of ['cod_settings.php', 'cod_otp.php', 'cod_orders.php']) {
     const res = await callPhp(file, { action: 'get', shop: SHOP }, 'wrong');
     assert.equal(res.status, 403, file);
@@ -948,7 +950,8 @@ test('relay: forwards otp/quote/order to the app server with the secret and the 
   assert.deepEqual(res.json, { success: true, quote: { total: 948 } });
   const sent = harness.app.requests[0];
   assert.equal(sent.path, '/api/cod/quote');
-  assert.equal(sent.headers['x-forge-secret'], harness.secret);
+  assert.equal(sent.headers['x-brix-internal-secret'], harness.secret);
+  assert.equal(sent.headers['x-forge-secret'], undefined, 'the public client id is never sent');
   assert.equal(sent.headers['x-brix-client-ip'], '203.0.113.9');
   assert.equal(sent.headers['x-brix-client-ua'], 'Mozilla/5.0 (shopper phone)', 'User-Agent forwarded for Meta CAPI');
   assert.equal('endpoint' in sent.body, false, 'routing field is not forwarded');
@@ -978,22 +981,23 @@ test('relay: only otp, quote and order can be reached', async () => {
   assert.equal(harness.app.requests.length, 0);
 });
 
-test('Node trusts the relayed shopper IP only with the Forge secret', () => {
+test('Node trusts the relayed shopper IP only with the internal secret', () => {
   const req = (headers) => new Request('https://x.test', { headers });
-  const key = process.env.SHOPIFY_API_KEY;
-  assert.equal(cod.clientIp(req({ 'x-forge-secret': key, 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '203.0.113.9');
-  assert.equal(cod.clientIp(req({ 'x-forge-secret': 'nope', 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
+  const key = process.env.BRIX_INTERNAL_SECRET;
+  assert.equal(cod.clientIp(req({ 'x-forge-secret': process.env.SHOPIFY_API_KEY, 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1', 'the public client id is not a secret');
+  assert.equal(cod.clientIp(req({ 'x-brix-internal-secret': key, 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '203.0.113.9');
+  assert.equal(cod.clientIp(req({ 'x-brix-internal-secret': 'nope', 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
   assert.equal(cod.clientIp(req({ 'x-brix-client-ip': '203.0.113.9', 'fly-client-ip': '10.0.0.1' })), '10.0.0.1');
 });
 
-test('Node trusts the relayed shopper User-Agent only with the Forge secret', () => {
+test('Node trusts the relayed shopper User-Agent only with the internal secret', () => {
   const req = (headers) => new Request('https://x.test', { headers });
-  const key = process.env.SHOPIFY_API_KEY;
-  assert.equal(cod.clientUa(req({ 'x-forge-secret': key, 'x-brix-client-ua': 'Shopper UA', 'user-agent': 'PHP curl' })), 'Shopper UA');
-  assert.equal(cod.clientUa(req({ 'x-forge-secret': 'nope', 'x-brix-client-ua': 'Shopper UA', 'user-agent': 'PHP curl' })), 'PHP curl');
+  const key = process.env.BRIX_INTERNAL_SECRET;
+  assert.equal(cod.clientUa(req({ 'x-brix-internal-secret': key, 'x-brix-client-ua': 'Shopper UA', 'user-agent': 'PHP curl' })), 'Shopper UA');
+  assert.equal(cod.clientUa(req({ 'x-brix-internal-secret': 'nope', 'x-brix-client-ua': 'Shopper UA', 'user-agent': 'PHP curl' })), 'PHP curl');
 });
 
-test('PHP: tracking secrets need the Forge secret and look like keys', async () => {
+test('PHP: tracking secrets need the internal secret and look like keys', async () => {
   assert.equal((await callPhp('cod_settings.php', { action: 'secrets_get', shop: SHOP }, 'wrong')).status, 403);
   assert.equal((await callPhp('cod_settings.php', { action: 'secrets_save', shop: SHOP, secrets: { metaCapiToken: 'a b' } })).json.code, 'invalid_metaCapiToken');
   assert.equal((await callPhp('cod_orders.php', { action: 'sync', shop: SHOP, order_id: 'gid://x' })).json.code, 'invalid_order_id');

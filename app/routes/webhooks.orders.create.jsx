@@ -4,6 +4,7 @@ import { getDb } from "../services/db.server";
 import { upsertOrderFromPayload } from "../services/order-ingest.server";
 import { countBillableOrder } from "../services/billable-orders.server";
 import { completePartialCodOrder } from "../services/partial-cod.server";
+import { saveAddressFromOrder } from "../services/saved-addresses.server";
 
 // Order/line-item capture, plus the order's count toward the plan's monthly
 // orders — no revenue applied to the rollup here.
@@ -31,5 +32,11 @@ async function handle(shop, payload) {
     await completePartialCodOrder(shop, payload, { getAdmin: async () => (await unauthenticated.admin(shop)).admin });
   } catch (error) {
     console.error("[Webhook orders/create] Partial COD failed:", error.message);
+  }
+  // The order's address, hashed + encrypted, for COD autofill after an OTP (services/saved-addresses.server.js).
+  try {
+    await saveAddressFromOrder(db, shop, payload);
+  } catch (error) {
+    console.error("[Webhook orders/create] Saving the address failed:", error.message);
   }
 }

@@ -19,13 +19,13 @@ require_once __DIR__ . '/config.php';
  *   INSERT/UPDATE/DELETE/DDL     -> { success, insertId, affectedRows }
  */
 
-$secret = $_SERVER['HTTP_X_FORGE_SECRET'] ?? '';
-$expected = getenv('SHOPIFY_API_KEY') ?: '';
-// Fail closed: if SHOPIFY_API_KEY isn't configured server-side, this
+// Internal secret, not the public client id (internal_auth.php).
+require_once __DIR__ . '/internal_auth.php';
+// Fail closed: if BRIX_INTERNAL_SECRET isn't configured server-side, this
 // endpoint executes arbitrary SQL, so a missing secret must reject every
 // request rather than skip the check (the previous `$expected &&` guard
 // left this wide open whenever the env var was unset).
-if (!$expected || !hash_equals($expected, $secret)) {
+if (!brix_internal_request_ok()) {
     http_response_code(403);
     echo json_encode(['success' => false, 'error' => 'Forbidden']);
     exit;
