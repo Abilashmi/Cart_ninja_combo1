@@ -203,6 +203,20 @@ export async function verifyComboTiers(admin, { productId, tiers, mainPrice }, {
       const product = products.get(item.productId);
       if (!isSellableStatus(product.status)) throw new PackError('product_inactive', `${product.title} is not active in Shopify, so it can't be part of a Pack.`, { status: 409 });
       if (!product.published) throw new PackError('product_unpublished', `${product.title} is not available on your Online Store, so shoppers can't buy it in a Pack. Publish it first.`, { status: 409 });
+      if (item.pick) {
+        // Shoppers choose this product's variant: every variant counts; priced (and fixed discounts
+        // checked) from the cheapest; the stored variant is just one of them, refreshed here.
+        const priced = product.variants.filter((v) => v.price !== null && v.price >= 0);
+        if (!priced.length) throw new PackError('price_unverified', `Could not verify the current prices of ${product.title}.`, { status: 502 });
+        const inStock = priced.filter((v) => v.availableForSale);
+        if (requireAvailable && !inStock.length) throw new PackError('variant_unavailable', `${product.title} is sold out in every size, so a pack with it can't go live.`, { status: 409 });
+        const cheapest = Math.min(...priced.map((v) => v.price));
+        const stand = priced.find((v) => String(v.id) === String(item.variantId)) || inStock[0] || priced[0];
+        subtotal += cheapest * item.quantity;
+        itemPrices[String(stand.id)] = cheapest;
+        items.push({ productId: product.id, variantId: stand.id, quantity: item.quantity, handle: product.handle, title: product.title, variantTitle: '', image: product.image || stand.image || '', pick: true });
+        continue;
+      }
       const variant = product.variants.find((v) => String(v.id) === String(item.variantId));
       if (!variant) throw new PackError('invalid_tiers', `The chosen variant of ${product.title} no longer exists. Pick it again.`, { status: 422 });
       if (variant.price === null || variant.price < 0) throw new PackError('price_unverified', `Could not verify the current price of ${product.title}.`, { status: 502 });
@@ -291,7 +305,7 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
   let lookupFailed = null;
   try {
     // Fixed Combo items are priced live too (their variants join the same lookup).
-    live = await fetchVariants(admin, packs.flatMap((pack) => [pack.variantId, ...(pack.packType === 'combo' ? (pack.tiers || []).flatMap((tier) => (tier.items || []).map((item) => item.variantId)) : [])]));
+    live = await fetchVariants(admin, packs.flatMap((pack) => [pack.variantId, ...(pack.packType === 'combo' ? (pack.tiers || []).flatMap((tier) => (tier.items || []).filter((item) => !item.pick).map((item) => item.variantId)) : [])]));
   } catch (error) {
     lookupFailed = error instanceof PackError ? error.message : 'Could not verify prices with Shopify.';
   }
@@ -318,6 +332,14 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
     }));
   }
 
+  // Fixed Combo products the shopper chooses a variant of: priced from their cheapest variant
+  // (whatever variants they have now, so adding sizes later never breaks the pack).
+  const pickProducts = new Map();
+  const pickIds = [...new Set(packs.flatMap((pack) => (pack.packType === 'combo' ? (pack.tiers || []).flatMap((tier) => (tier.items || []).filter((item) => item.pick).map((item) => item.productId)) : [])))];
+  await Promise.all(pickIds.map(async (productId) => {
+    try { pickProducts.set(productId, await fetchProduct(admin, productId)); } catch { /* unpriced: the pack shows its issue */ }
+  }));
+
   return packs.map((pack) => {
     const variant = live.get(pack.variantId);
     let issue = lookupFailed;
@@ -330,6 +352,11 @@ export async function hydratePacks(admin, packs, currency, { includeVariants = f
     const itemPrices = {};
     if (pack.packType === 'combo') {
       for (const tier of pack.tiers || []) for (const item of tier.items || []) {
+        if (item.pick) {
+          const prices = (pickProducts.get(item.productId)?.variants || []).map((v) => v.price).filter((price) => price !== null && price >= 0);
+          itemPrices[String(toNumericId(item.variantId))] = prices.length ? Math.min(...prices) : null;
+          continue;
+        }
         const found = live.get(String(toNumericId(item.variantId)));
         itemPrices[String(toNumericId(item.variantId))] = found && found.price !== null ? found.price : null;
       }
@@ -419,7 +446,7 @@ export function buildFunctionConfig(activePacks, currencyCode = null) {
       tiers: normalizeTiers(pack.tiers).map((tier) => ({
         quantity: tier.quantity, discountType: tier.discountType, discountValue: tier.discountValue,
         // Fixed Combo: the tier's exact items ({ p: productId, v: variantId, q: quantity }).
-        ...(pack.packType === 'combo' ? { items: (tier.items || []).map((item) => ({ p: item.productId, v: item.variantId, q: item.quantity })) } : {}),
+        ...(pack.packType === 'combo' ? { items: (tier.items || []).map((item) => ({ p: item.productId, v: item.variantId, q: item.quantity, ...(item.pick ? { a: 1 } : {}) })) } : {}),
       })),
       // Written only for Fixed Combo packs, so every other pack stays byte-for-byte what it was.
       ...(pack.packType === 'combo' ? { packType: 'combo' } : {}),

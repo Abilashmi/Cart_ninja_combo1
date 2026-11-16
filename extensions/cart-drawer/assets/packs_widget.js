@@ -297,7 +297,22 @@
           t.comboItems = [];
           (tier.items || []).forEach(function (item) {
             var catalog = catalogFor(item.productId);
-            var v = catalog && catalog.byId[numericId(item.variantId)];
+            var v;
+            if (item.pick === true) {
+              // The shopper chooses this product's variant (a blouse's size): every priced variant,
+              // shown at the cheapest in-stock one until a size is chosen.
+              var choices = catalog ? coveredVariants(catalog, 'all', []) : [];
+              if (!choices.length) { t.comboMissing = true; return; }
+              var image = catalog.image || item.image || '';
+              var list = choices.map(function (choice) { return shallow(choice, { productTitle: catalog.title || item.title, image: choice.image || image }); });
+              var open = list.filter(forSale);
+              v = (open.length ? open : list).reduce(function (best, choice) { return choice.price < best.price ? choice : best; });
+              var names = catalog.options && catalog.options.length === 1 ? catalog.options[0] : null;
+              t.comboItems.push({ variant: v, variants: list, pick: true, productId: String(item.productId), optionName: names ? String(typeof names === 'string' ? names : names.name || '') : '', quantity: Number(item.quantity) || 1, title: catalog.title || item.title || '', variantTitle: '' });
+              for (var r = 0; r < (Number(item.quantity) || 1); r += 1) prices.push(v.price);
+              return;
+            }
+            v = catalog && catalog.byId[numericId(item.variantId)];
             if (!v || v.price === null) { t.comboMissing = true; return; }
             t.comboItems.push({ variant: shallow(v, { productTitle: catalog.title || item.title, image: v.image || catalog.image || item.image || '' }), quantity: Number(item.quantity) || 1, title: catalog.title || item.title || '', variantTitle: item.variantTitle || '' });
             for (var q = 0; q < (Number(item.quantity) || 1); q += 1) prices.push(v.price);
@@ -951,6 +966,8 @@
     '.brix-packs-include{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px 3px 3px;border:1px solid var(--brix-packs-border);border-radius:999px;background:var(--brix-packs-card)}',
     '.brix-packs-include img{width:26px;height:26px;flex-shrink:0;border-radius:50%;object-fit:cover;background:#f3f3f4}',
     '.brix-packs-include span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.brix-packs-include-pick{display:flex;flex-direction:column;align-items:flex-start;gap:6px;flex-basis:100%;min-width:0}',
+    '.brix-packs-include-pick .brix-packs-chips{margin-left:4px}',
     '.brix-packs-islot-photo{flex-shrink:0;width:64px;height:64px;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 1.5);background:#f3f3f4;border:1px solid rgba(0,0,0,.06)}',
     '.brix-packs-islot-photo img{display:block;width:100%;height:100%;object-fit:cover}',
     '.brix-packs-islot-name{font-size:14px;font-weight:600;overflow-wrap:anywhere}',
@@ -1274,7 +1291,7 @@
     // ladderSel: the Savings Ladder's chosen values for its next item; ladderMatch: the
     //   items added are exactly one pack size (state.tierIndex is then that pack).
     // bands: the offer bands drawn by mountBands; bandRaf / bandWatch: their animation and resize watcher.
-    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null, cod: null, codProbing: false, codTries: 0, activeSlot: 0, ladderSel: [], ladderMatch: false, bands: [], bandSpeed: 0, bandRaf: 0, bandWatch: null };
+    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], comboPicks: {}, busy: false, message: null, redirecting: false, open: false, openPicker: null, cod: null, codProbing: false, codTries: 0, activeSlot: 0, ladderSel: [], ladderMatch: false, bands: [], bandSpeed: 0, bandRaf: 0, bandWatch: null };
 
     // The COD button shows only where BRIX COD Checkout is on for product pages. Its script
     // comes from the Custom Cart Drawer app embed, which can load well after this widget, so
@@ -1352,10 +1369,27 @@
       return el('div', { class: 'brix-packs-includes' }, [
         el('span', { class: 'brix-packs-includes-title', text: bxT('storefront.packs.includes', 'Includes') }),
       ].concat(((tier && tier.comboItems) || []).map(function (item) {
-        var image = item.variant && item.variant.image;
-        return el('span', { class: 'brix-packs-include' }, [
+        var chosen = item.pick ? comboChosen(item) : null;
+        var image = (chosen && chosen.image) || (item.variant && item.variant.image);
+        var line = el('span', { class: 'brix-packs-include' }, [
           image ? el('img', { src: image, alt: '', loading: 'lazy' }) : null,
           el('span', { text: (item.quantity > 1 ? item.quantity + ' \u00d7 ' : '') + item.title + (item.variantTitle ? ' (' + item.variantTitle + ')' : '') }),
+        ]);
+        if (!item.pick) return line;
+        // The shopper picks this product's size / colour here.
+        var label = item.optionName ? item.title + ' ' + item.optionName : item.title;
+        return el('div', { class: 'brix-packs-include-pick' }, [
+          line,
+          el('div', { class: 'brix-packs-chips', role: 'group', 'aria-label': label }, item.variants.map(function (choice, position) {
+            var on = Boolean(chosen) && String(chosen.id) === String(choice.id);
+            var name = choice.title && choice.title !== DEFAULT_OPTION_VALUE ? choice.title : item.title;
+            var sold = !forSale(choice);
+            return el('button', {
+              type: 'button', class: 'brix-packs-chipbtn', 'aria-pressed': on ? 'true' : 'false', 'data-fk': 'cp-' + item.productId + '-' + position, disabled: sold,
+              title: name + (sold ? ' \u2014 ' + bxT('storefront.drawer.sold_out', 'Sold out') : ''), 'aria-label': label + ' ' + name + (sold ? ' (' + bxT('storefront.drawer.sold_out', 'Sold out') + ')' : ''),
+              onclick: function () { state.comboPicks[item.productId] = String(choice.id); state.message = null; render(); },
+            }, [name]);
+          })),
         ]);
       })));
     }
@@ -1430,9 +1464,25 @@
       }
       return selectionStatus(m.variants, m.options, state.slots[0]);
     }
+    // A shopper-chooses combo product's chosen variant (kept per product, so it stays when the shopper switches packs).
+    function comboChosen(item) {
+      var id = state.comboPicks[item.productId];
+      if (!id) return null;
+      for (var i = 0; i < (item.variants || []).length; i += 1) if (String(item.variants[i].id) === String(id)) return item.variants[i];
+      return null;
+    }
     function comboFixedItems(tier) {
       var out = [];
       ((tier && tier.comboItems) || []).forEach(function (item) {
+        if (item.pick) {
+          var chosen = comboChosen(item);
+          for (var p = 0; p < item.quantity; p += 1) {
+            out.push(chosen
+              ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [], fixed: true, comboItem: item }
+              : { variant: null, priceFrom: item.variant, problem: 'incomplete', missing: [], fixed: true, comboItem: item });
+          }
+          return;
+        }
         for (var q = 0; q < item.quantity; q += 1) out.push({ variant: item.variant, problem: forSale(item.variant) ? null : 'sold_out', missing: [], fixed: true });
       });
       return out;
@@ -1505,7 +1555,7 @@
       var unit = fallbackPrice(pack);
       var prices = [];
       if (index === state.tierIndex) {
-        itemsFor(pack, tier).forEach(function (item) { prices.push(item.variant && item.variant.price !== null && item.variant.price !== undefined ? Number(item.variant.price) : unit); });
+        itemsFor(pack, tier).forEach(function (item) { var v = item.variant || item.priceFrom; prices.push(v && v.price !== null && v.price !== undefined ? Number(v.price) : unit); });
       } else if (isCombo(pack)) {
         prices.push(unit);
         ((tier.comboItems) || []).forEach(function (item) { for (var q = 0; q < item.quantity; q += 1) prices.push(Number(item.variant.price) || 0); });
@@ -1532,13 +1582,26 @@
     }
 
     // A pack size is offered only if the Pack's variants can supply it.
+    // A combo whose added products can't be bought here (gone, unpublished, a variant replaced).
+    function comboUnpriced(pack, tier) {
+      return isCombo(pack) && Boolean(tier) && Boolean(tier.comboMissing || ((tier.items || []).length && !tier.comboItems));
+    }
+    // Why a pack can't be chosen: sold out, a combo product missing ("Unavailable", never "Low stock"), else not enough stock.
+    function disabledText(pack, tier) {
+      if (pack.available === false) return bxT('storefront.drawer.sold_out', 'Sold out');
+      if (comboUnpriced(pack, tier)) return bxT('storefront.packs.unavailable', 'Unavailable');
+      return bxT('storefront.packs.low_stock', 'Low stock');
+    }
     function tierDisabled(pack, tier) {
       if (pack.available === false) return true;
       if (isCombo(pack)) {
         // Items never priced on this page (comboItems unset) = not offered, never sold short.
         if (!tier || tier.comboMissing || ((tier.items || []).length && !tier.comboItems)) return true;
         if (!model(pack).variants.some(forSale)) return true;
-        return ((tier.comboItems) || []).some(function (item) { return !forSale(item.variant) || (hasStockCap(item.variant) && Number(item.variant.maxQuantity) < item.quantity); });
+        return ((tier.comboItems) || []).some(function (item) {
+          if (item.pick) return !(item.variants || []).some(function (choice) { return forSale(choice) && (!hasStockCap(choice) || Number(choice.maxQuantity) >= item.quantity); });
+          return !forSale(item.variant) || (hasStockCap(item.variant) && Number(item.variant.maxQuantity) < item.quantity);
+        });
       }
       var m = model(pack);
       var sellable = m.variants.filter(forSale);
@@ -1995,7 +2058,7 @@
         var disabled = tierDisabled(pack, t);
         var pct = percentOf(shown);
         var save = ctx.saveTextFor(shown);
-        var soldText = pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock');
+        var soldText = disabledText(pack, t);
         var sub = disabled ? soldText
           : isCombo(pack) ? comboText(pack, t)
           : offer ? (save || itemsText(t.quantity))
@@ -2010,7 +2073,7 @@
             ]),
             el('span', { class: 'brix-packs-lsub', text: sub }),
           ]),
-          money.hidden ? null : el('span', { class: 'brix-packs-lprice' }, [
+          money.hidden || comboUnpriced(pack, t) ? null : el('span', { class: 'brix-packs-lprice' }, [
             el('strong', { text: ctx.priceText(shown.price) }),
             offer
               ? (ctx.showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: ctx.numberText(shown.subtotal) }) : null)
@@ -2363,6 +2426,8 @@
         if (bandCfg.target === 'selected') return selected;
         return Boolean(t.badge && String(t.badge).trim());
       }
+      // Something to pick: an option with two or more values (one-value options, e.g. "Free size", are pre-picked).
+      var hasChoices = m.options.some(function (option) { return option.values.length > 1; });
       var minimal = layout === 'rail' || layout === 'list' || layout === 'ladder' || layout === 'offer_rows';
       var items, done, ready;
       if (minimal) {
@@ -2371,7 +2436,7 @@
         if (layout === 'ladder') { ladderSync(pack); tier = pack.tiers[state.tierIndex]; }
         var ctx = {
           label: heading || bxT('storefront.packs.choose_pack', 'Choose a pack'), shown: function (t, index) { return shownTier(pack, t, index); },
-          priceText: priceText, numberText: numberText, showWas: showWas, saveTextFor: saveTextFor, noPicking: hideVars || !m.options.length, bandOn: bandOn,
+          priceText: priceText, numberText: numberText, showWas: showWas, saveTextFor: saveTextFor, noPicking: hideVars || !hasChoices, bandOn: bandOn,
         };
         var parts = layout === 'rail' ? renderRail(pack, tier, ctx) : layout === 'ladder' ? renderLadder(pack, ctx) : renderRows(pack, ctx, layout === 'offer_rows');
         parts.forEach(function (node) { section.appendChild(node); });
@@ -2401,7 +2466,7 @@
               rowImage ? el('img', { class: 'brix-packs-img', src: rowImage, alt: '', loading: 'lazy', 'data-size': images.size || 'medium' }) : null,
               el('span', { class: 'brix-packs-content' }, [
                 el('span', { class: 'brix-packs-title' }, [tierName(t), t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null]),
-                el('span', { class: 'brix-packs-meta', text: disabled ? (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock')) : meta }),
+                el('span', { class: 'brix-packs-meta', text: disabled ? disabledText(pack, t) : meta }),
               ]),
               el('span', { class: 'brix-packs-price' }, [
                 !money.hidden && showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shown.subtotal) }) : null,
@@ -2439,7 +2504,7 @@
           ]),
           layout === 'stack' && !money.hidden && t.quantity > 1 && !isCombo(pack) ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) }) : null,
           save ? el('span', { class: 'brix-packs-save', text: save }) : null,
-          disabled ? el('span', { class: 'brix-packs-card-note', text: pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock') }) : null,
+          disabled ? el('span', { class: 'brix-packs-card-note', text: disabledText(pack, t) }) : null,
         ]), bandOn(t, index, selected)));
       });
       if (cards.querySelector('.brix-packs-band')) cards.classList.add('has-band');
@@ -2450,7 +2515,7 @@
       ready = !closed && Boolean(tier) && items.length > 0 && done === items.length;
       if (tier && closed) {
         section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: bxT('storefront.packs.choose_pack_first', 'Choose a pack to pick your items.') }));
-      } else if (tier && (hideVars || (layout === 'stack' && !m.options.length))) {
+      } else if (tier && (hideVars || (layout === 'stack' && !hasChoices))) {
         // Offer cards only; a hint appears just when the page's variant can't be bought.
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
       } else if (tier && rows) {
@@ -2579,6 +2644,14 @@
         if (items[i].problem && items[i].problem !== 'incomplete') return bxT('storefront.packs.needs_option', '{item} needs a different option before you can add this pack.', { item: m.rules.sameVariant ? bxT('storefront.packs.your_item', 'Your item') : bxT('storefront.packs.item_n', 'Item {n}', { n: i + 1 }) });
       }
       var left = items.length - readyCount(items);
+      for (var j = 0; j < items.length; j += 1) {
+        var open = items[j].comboItem;
+        if (open && items[j].problem === 'incomplete' && !(items[0] && items[0].problem === 'incomplete')) {
+          return open.optionName
+            ? bxT('storefront.packs.choose_option_of', 'Choose the {option} of {name} to add this pack.', { option: open.optionName.toLowerCase(), name: open.title })
+            : bxT('storefront.packs.choose_one_of', 'Choose your {name} to add this pack.', { name: open.title });
+        }
+      }
       if (m.rules.sameVariant) return bxT('storefront.packs.choose_item_to_add', 'Choose your item to add this pack.');
       return bxT('storefront.packs.choose_more', '{count, plural, one {Choose # more item to add this pack.} other {Choose # more items to add this pack.}}', { count: left });
     }

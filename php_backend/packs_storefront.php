@@ -50,7 +50,7 @@ function packs_json($value, $fallback) {
 }
 
 // Fixed Combo items, as saved (mirrors sanitizeComboItems in app/utils/packs.shared.js; the
-// app server already checked each one with Shopify): numeric ids, 1-10 each, at most 5.
+// app server already checked each one with Shopify): numeric ids, 1-10 each, at most 5, `pick`.
 function packs_combo_items($raw) {
     $items = [];
     foreach ($raw as $item) {
@@ -70,6 +70,8 @@ function packs_combo_items($raw) {
             'variantTitle' => is_string($item['variantTitle'] ?? null) ? mb_substr(trim($item['variantTitle']), 0, 255) : '',
             'image' => $image,
         ];
+        // The shopper chooses this product's variant (a blouse's size); variantId is one of them.
+        if (($item['pick'] ?? false) === true) { $items[count($items) - 1]['pick'] = true; $items[count($items) - 1]['variantTitle'] = ''; }
         if (count($items) >= 5) break;
     }
     return $items;

@@ -123,13 +123,32 @@ await check('adding products: this product is skipped with a note, a single-vari
   await context.close();
 });
 
-await check('a whole product ticked adds one variant; picked variants are added as chosen', async () => {
+await check('a whole product with several variants ticked: one item, shoppers choose its variant (priced from the cheapest)', async () => {
   const picker = [{ id: 'gid://shopify/Product/101', title: 'Dupatta', handle: 'dupatta', images: [], totalVariants: 3, variants: [{ id: 'gid://shopify/ProductVariant/1011', title: 'Red' }, { id: 'gid://shopify/ProductVariant/1012', title: 'Blue' }, { id: 'gid://shopify/ProductVariant/1013', title: 'Green' }] }];
-  const { page, context } = await open({ pack: comboPack({ tiers: [{ name: '', quantity: 1, discountType: 'none', discountValue: 0, badge: '', items: [] }] }), picker });
+  const { page, context } = await open({ pack: comboPack({ tiers: [{ name: '', quantity: 1, discountType: 'none', discountValue: 0, badge: '', items: [] }, { name: '', quantity: 2, discountType: 'none', discountValue: 0, badge: '', items: [RED] }] }), picker });
   await page.getByText('Products in this pack').first().waitFor();
-  await page.getByRole('button', { name: 'Add products' }).click();
+  await page.getByRole('button', { name: 'Add products' }).first().click();
   await page.getByText('Pack 1 · 2 items').waitFor();
-  assert.equal(await page.locator('.pc-combo-row').count(), 2, 'Kurta + one Dupatta, not all three colours');
+  assert.equal(await page.locator('.pc-combo').first().locator('.pc-combo-row').count(), 2, 'Kurta + one Dupatta, not all three colours');
+  const menu = page.locator('.pc-combo').first().getByLabel('Variant');
+  assert.equal(await menu.inputValue(), 'shopper-chooses');
+  assert.match(await menu.locator('option:checked').textContent(), /Shoppers choose — from ₹20/, 'cheapest colour');
+  // A fixed colour, then back to the shopper's choice.
+  await menu.selectOption('1012');
+  assert.equal(await menu.inputValue(), '1012');
+  await menu.selectOption('shopper-chooses');
+  assert.equal(await menu.inputValue(), 'shopper-chooses');
+  await context.close();
+});
+
+await check('save sends a shoppers-choose product as pick: true, without a variant title', async () => {
+  let saved = null;
+  const PICKED = { productId: '101', variantId: '1012', quantity: 1, handle: 'dupatta', title: 'Dupatta', variantTitle: '', image: '', pick: true };
+  const { page, context } = await open({ pack: comboPack({ tiers: [{ name: 'With dupatta', quantity: 2, discountType: 'percentage', discountValue: 10, badge: '', items: [PICKED] }] }), step: 'review', onSave: (body) => { saved = body; } });
+  await page.waitForFunction(() => { const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === 'Save changes'); return button && !button.disabled; });
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await page.waitForTimeout(500);
+  assert.deepEqual(saved.tiers[0].items, [PICKED]);
   await context.close();
 });
 

@@ -130,9 +130,11 @@ export function validateVariantCoverage({ packType, variantScope, allowedVariant
 
 // ─── Fixed Combo items (pack type 'combo') ─────────────────────────────────
 //
-// tier.items = [{ productId, variantId, quantity, handle, title, variantTitle, image }]:
+// tier.items = [{ productId, variantId, quantity, handle, title, variantTitle, image, pick? }]:
 // the products in that pack besides this product (one unit of it, the shopper's
 // variant). The tier's quantity is always 1 + the items' quantities.
+// `pick: true` = the shopper chooses that product's variant too (a blouse's size): any of its
+// variants counts, and `variantId` is just one of them (for prices before the shopper picks).
 
 export const COMBO_MAX_ITEMS = 5;
 export const COMBO_MAX_ITEM_QUANTITY = 10;
@@ -145,7 +147,9 @@ export function sanitizeComboItems(raw) {
     const variantId = toNumericId(item?.variantId);
     const quantity = Math.round(Number(item?.quantity ?? 1));
     if (!productId || !variantId || !Number.isFinite(quantity) || quantity < 1) continue;
-    const existing = out.find((x) => x.variantId === variantId);
+    const pick = item?.pick === true;
+    // One entry per variant; a "shoppers choose" product is one entry for the whole product.
+    const existing = out.find((x) => (pick || x.pick ? x.pick === pick && x.productId === productId : x.variantId === variantId));
     if (existing) { existing.quantity = Math.min(COMBO_MAX_ITEM_QUANTITY, existing.quantity + quantity); continue; }
     out.push({
       productId,
@@ -153,8 +157,9 @@ export function sanitizeComboItems(raw) {
       quantity: Math.min(COMBO_MAX_ITEM_QUANTITY, quantity),
       handle: typeof item?.handle === 'string' ? item.handle.trim().slice(0, 255) : '',
       title: typeof item?.title === 'string' ? item.title.trim().slice(0, 255) : '',
-      variantTitle: typeof item?.variantTitle === 'string' ? item.variantTitle.trim().slice(0, 255) : '',
+      variantTitle: pick ? '' : (typeof item?.variantTitle === 'string' ? item.variantTitle.trim().slice(0, 255) : ''),
       image: typeof item?.image === 'string' && /^https:\/\//.test(item.image.trim()) ? item.image.trim().slice(0, 1000) : '',
+      ...(pick ? { pick: true } : {}),
     });
     if (out.length >= COMBO_MAX_ITEMS) break;
   }
@@ -162,7 +167,7 @@ export function sanitizeComboItems(raw) {
 }
 
 function comboContentsKey(items) {
-  return items.map((item) => `${item.variantId}x${item.quantity}`).sort().join(',');
+  return items.map((item) => `${item.pick ? `p${item.productId}` : item.variantId}x${item.quantity}`).sort().join(',');
 }
 
 /** A combo tier's item count: this product (1) + its fixed items. */
@@ -181,6 +186,9 @@ export function validateComboTiers(tiers, productId) {
     const items = sanitizeComboItems(tier?.items);
     if (items.some((item) => item.productId === main)) errors.push({ index, field: 'items', message: 'A pack\'s other products can\'t include this product itself.' });
     if (Array.isArray(tier?.items) && tier.items.length > COMBO_MAX_ITEMS) errors.push({ index, field: 'items', message: `A pack can hold at most ${COMBO_MAX_ITEMS} other products.` });
+    // A product the shopper chooses can't also be in the same pack as one fixed variant (checkout couldn't tell them apart).
+    const both = items.find((item) => item.pick && items.some((other) => !other.pick && other.productId === item.productId));
+    if (both) errors.push({ index, field: 'items', message: `${both.title || 'A product'} is in this pack twice: once for shoppers to choose and once as a fixed variant. Keep one.` });
     // Two packs with the same contents: checkout couldn't tell which one the shopper chose.
     const key = comboContentsKey(items);
     const twin = (Array.isArray(tiers) ? tiers : []).findIndex((other, i) => i < index && comboContentsKey(sanitizeComboItems(other?.items)) === key);

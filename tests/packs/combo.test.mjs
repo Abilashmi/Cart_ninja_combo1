@@ -120,3 +120,61 @@ test('unlisted products can be in a Pack (main product, Mix & Match extras, comb
   const coverage = await verifyPackCoverage(admin, '100', { packType: 'same_variant', variantScope: 'all', allowedVariantIds: [] }, { requireAvailable: true });
   assert.equal(coverage.anchorVariant.id, '1001');
 });
+
+// ── Shoppers choose a combo product's variant (a blouse in sizes 30-40) ──
+const BLOUSE = { productId: '501', variantId: '5011', quantity: 1, handle: 'blouse', title: 'Blouse', variantTitle: '30', pick: true };
+
+test('shoppers choose: one item per product, no fixed variant title, never also fixed in the same pack', () => {
+  const items = sanitizeComboItems([BLOUSE, { ...BLOUSE, variantId: '5012' }, { productId: '501', variantId: '5013', quantity: 1 }]);
+  assert.deepEqual(items.map((i) => [i.variantId, i.quantity, i.pick === true, i.variantTitle]), [['5011', 2, true, ''], ['5013', 1, false, '']], 'two picks of one product merge; a fixed variant stays its own item');
+  assert.match(validateComboTiers([{ items }], '100').errors[0].message, /twice/);
+  // Same product chosen by the shopper vs. one fixed size: different packs, not twins.
+  assert.equal(validateComboTiers([{ items: [BLOUSE] }, { items: [{ ...BLOUSE, pick: false, variantId: '5011' }] }], '100').valid, true);
+  assert.equal(validateComboTiers([{ items: [BLOUSE] }, { items: [{ ...BLOUSE, variantId: '5019' }] }], '100').valid, false, 'two shopper-choice packs of the same product are twins whatever the stored variant');
+  assert.equal('pick' in sanitizeComboItems([DUPATTA_RED])[0], false, 'fixed items unchanged');
+});
+
+test('shoppers choose at checkout and in COD: any size of the product, mixed sizes, nothing else', () => {
+  const pack = { ...PACK, tiers: [{ name: 'Saree + blouse', discountType: 'percentage', discountValue: 10, items: [BLOUSE] }, { name: 'Saree + 2 blouses', discountType: 'percentage', discountValue: 15, items: [{ ...BLOUSE, quantity: 2 }] }] };
+  const cfg = buildFunctionConfig([pack], 'INR');
+  assert.deepEqual(cfg.packs['7'].tiers[0].items, [{ p: '501', v: '5011', q: 1, a: 1 }]);
+  assert.deepEqual(config.packs['7'].tiers[0].items, [{ p: '201', v: '2011', q: 1 }], 'fixed items carry no `a`');
+  const saree = (group = 'g1', packQuantity = 2) => line('s', '100', '1001', 1, 1699, packQuantity, group);
+  // A size the stored variant isn't (5014 = size 36): still the pack.
+  const sized = packDiscountsFor(cfg, [saree(), line('b', '501', '5014', 1, 650, 2)]);
+  assert.deepEqual(sized.map((d) => [d.id, d.percent]), [['s', 10], ['b', 10]]);
+  assert.equal(packCoversLine(cfg.packs['7'], { productId: '501', variantId: '5099' }), true);
+  // Two blouses in two sizes = the 2-blouse pack.
+  const two = packDiscountsFor(cfg, [saree('g2', 3), line('b1', '501', '5011', 1, 650, 3, 'g2'), line('b2', '501', '5016', 1, 650, 3, 'g2')]);
+  assert.deepEqual(two.map((d) => d.percent), [15, 15, 15]);
+  // Another product in the blouse's place, or a missing blouse: no pack.
+  assert.deepEqual(packDiscountsFor(cfg, [saree(), line('x', '777', '7771', 1, 650, 2)]), []);
+  assert.deepEqual(packDiscountsFor(cfg, [saree()]), []);
+});
+
+test('shoppers choose, saved: priced from the cheapest size, the stored variant refreshed when it was replaced', async () => {
+  const { verifyComboTiers } = await import('../../app/services/packs-shopify.server.js');
+  const sizes = (id) => ({ nodes: ['30', '32', '34'].map((size, i) => ({ id: `gid://shopify/ProductVariant/${id}${i + 4}`, title: size, price: i === 2 ? '700.00' : '650.00', availableForSale: i !== 0, inventoryQuantity: i === 0 ? 0 : 5, inventoryPolicy: 'DENY', image: null, selectedOptions: [{ name: 'Size', value: size }] })) });
+  const admin = fakeAdmin({ 100: productNode(100, 'ACTIVE'), 501: productNode(501, 'ACTIVE', { variants: sizes(501) }) });
+  // The stored variant 5011 no longer exists (the product got sizes since).
+  const tiers = normalizeTiers([{ discountType: 'fixed', discountValue: 200, items: [BLOUSE] }]);
+  const out = await verifyComboTiers(admin, { productId: '100', tiers, mainPrice: 1699 }, { requireAvailable: true });
+  assert.deepEqual(out.tiers[0].items.map((i) => [i.variantId, i.pick, i.variantTitle]), [['5015', true, '']], 'refreshed to the first in-stock size');
+  assert.deepEqual(out.subtotals, [2349], 'saree + cheapest size');
+  const soldOut = fakeAdmin({ 100: productNode(100, 'ACTIVE'), 501: productNode(501, 'ACTIVE', { variants: { nodes: sizes(501).nodes.map((v) => ({ ...v, availableForSale: false })) } }) });
+  await assert.rejects(verifyComboTiers(soldOut, { productId: '100', tiers, mainPrice: 1699 }, { requireAvailable: true }), { code: 'variant_unavailable' });
+});
+
+test('the checkout Function gives the pack price for any size of a shopper-chooses product', async () => {
+  const { cartLinesDiscountsGenerateRun: run } = await import('../../extensions/brix-packs-discount/src/cart_lines_discounts_generate_run.js');
+  const cfg = buildFunctionConfig([{ ...PACK, tiers: [{ name: 'Saree + blouse', discountType: 'percentage', discountValue: 10, items: [BLOUSE] }] }], 'INR');
+  const cartLine = (id, productId, variantId, amount) => ({
+    id: `gid://shopify/CartLine/${id}`, quantity: 1, packId: { value: '7' }, packQuantity: { value: '2' }, packGroup: { value: 'g' },
+    cost: { subtotalAmount: { amount: String(amount), currencyCode: 'INR' } },
+    merchandise: { __typename: 'ProductVariant', id: `gid://shopify/ProductVariant/${variantId}`, product: { id: `gid://shopify/Product/${productId}` } },
+  });
+  const input = (lines) => ({ cart: { lines }, discount: { discountClasses: ['PRODUCT'] }, shop: { metafield: { jsonValue: cfg } } });
+  const out = run(input([cartLine(1, '100', '1001', 1699), cartLine(2, '501', '5016', 650)]));
+  assert.equal(out.operations[0].productDiscountsAdd.candidates.length, 2);
+  assert.deepEqual(run(input([cartLine(1, '100', '1001', 1699), cartLine(2, '777', '7771', 650)])), { operations: [] });
+});

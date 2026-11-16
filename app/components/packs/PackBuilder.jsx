@@ -38,7 +38,9 @@ const blankTier = (quantity, discountType = 'none', discountValue = '') => ({ na
 const DEFAULT_TIERS = [blankTier(1), blankTier(2, 'percentage', 5), blankTier(3, 'percentage', 10)];
 // Fixed Combo: a pack = this product + `items` (other products' exact variants); quantity follows them.
 const comboTier = (discountType = 'none', discountValue = '') => ({ ...blankTier(1, discountType, discountValue), items: [] });
-const comboFormItem = (item) => ({ productId: String(item.productId), variantId: String(item.variantId), quantity: Number(item.quantity) || 1, handle: item.handle || '', title: item.title || '', variantTitle: item.variantTitle || '', image: item.image || '' });
+// The variant menu's "Shoppers choose" value for a Fixed Combo product.
+const PICK_VARIANT = 'shopper-chooses';
+const comboFormItem = (item) => ({ productId: String(item.productId), variantId: String(item.variantId), quantity: Number(item.quantity) || 1, handle: item.handle || '', title: item.title || '', variantTitle: item.pick ? '' : (item.variantTitle || ''), image: item.image || '', ...(item.pick ? { pick: true } : {}) });
 
 function emptyForm() {
   return {
@@ -284,9 +286,22 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const priceFloor = extraEnabled ? Math.min(...[...applicableVariants, ...extraEntries.flatMap((item) => item.applicable)].map((variant) => variant.price).filter((price) => price !== null && price !== undefined), basePrice ?? Infinity) : basePrice;
   // Fixed Combo: each item's live variant (price, stock), from the product loaded for it.
   const isCombo = form.packType === 'combo';
-  const comboVariant = (item) => (extraData[item.productId]?.product?.variants || []).find((variant) => String(variant.id) === String(item.variantId)) || null;
+  // A "shoppers choose" item is shown and priced at its cheapest in-stock variant (whatever variants it has now).
+  const comboChoices = (item) => (extraData[item.productId]?.product?.variants || []).filter((variant) => variant.price !== null && variant.price !== undefined);
+  const comboVariant = (item) => {
+    if (item.pick) {
+      const choices = comboChoices(item);
+      const open = choices.filter((variant) => variant.availableForSale !== false);
+      return (open.length ? open : choices).reduce((best, variant) => (!best || variant.price < best.price ? variant : best), null);
+    }
+    return (extraData[item.productId]?.product?.variants || []).find((variant) => String(variant.id) === String(item.variantId)) || null;
+  };
   const comboItemPrices = {};
-  if (isCombo) form.tiers.forEach((tier) => (tier.items || []).forEach((item) => { const live = comboVariant(item); comboItemPrices[String(item.variantId)] = live && live.price !== null ? live.price : null; }));
+  // Prices as the server checks them: a "shoppers choose" item at its cheapest variant.
+  if (isCombo) form.tiers.forEach((tier) => (tier.items || []).forEach((item) => {
+    if (item.pick) { const prices = comboChoices(item).map((variant) => variant.price); comboItemPrices[String(item.variantId)] = prices.length ? Math.min(...prices) : null; return; }
+    const live = comboVariant(item); comboItemPrices[String(item.variantId)] = live && live.price !== null ? live.price : null;
+  }));
   const comboPricesKey = JSON.stringify(comboItemPrices);
   // A fixed discount must fit even with this product's cheapest covered variant (as the server checks).
   const comboMainFloor = applicableVariants.map((variant) => variant.price).filter((price) => Number.isFinite(price));
@@ -309,7 +324,8 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     // An item whose product loaded but whose variant is gone (deleted in Shopify since it was picked).
     form.tiers.forEach((tier, index) => (tier.items || []).forEach((item) => {
       const data = extraData[item.productId];
-      if (data?.status === 'error' || (data?.status === 'ready' && !(data.product?.variants || []).some((variant) => String(variant.id) === String(item.variantId)))) {
+      const gone = item.pick ? !comboChoices(item).length : !(data?.product?.variants || []).some((variant) => String(variant.id) === String(item.variantId));
+      if (data?.status === 'error' || (data?.status === 'ready' && gone)) {
         errors.push({ index, field: 'items', message: `${item.title || 'A product'}${item.variantTitle ? ` (${item.variantTitle})` : ''} is no longer in Shopify. Remove it and pick it again.` });
       }
     }));
@@ -325,11 +341,14 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const comboItemsFor = (tier) => (tier.items || []).map((item) => {
     const live = comboVariant(item);
     const product = extraData[item.productId]?.product;
+    const shape = (variant) => ({ id: String(variant.id), title: variant.title, price: variant.price ?? 0, availableForSale: variant.availableForSale !== false, maxQuantity: variant.maxQuantity ?? null, image: variant.image || item.image || product?.image || '', productTitle: product?.title || item.title, optionValues: [] });
+    const options = product?.options || [];
     return {
-      variant: { id: String(item.variantId), title: item.variantTitle, price: live?.price ?? 0, availableForSale: live ? live.availableForSale : true, maxQuantity: live?.maxQuantity ?? null, image: live?.image || item.image || product?.image || '', productTitle: product?.title || item.title, optionValues: [] },
+      variant: live ? shape(live) : { id: String(item.variantId), title: item.variantTitle, price: 0, availableForSale: true, maxQuantity: null, image: item.image || product?.image || '', productTitle: product?.title || item.title, optionValues: [] },
       quantity: Number(item.quantity) || 1,
       title: product?.title || item.title,
-      variantTitle: item.variantTitle,
+      variantTitle: item.pick ? '' : item.variantTitle,
+      ...(item.pick ? { pick: true, productId: String(item.productId), variants: comboChoices(item).map(shape), optionName: options.length === 1 ? String(options[0]?.name || options[0] || '') : '' } : {}),
     };
   });
   const previewTiers = useMemo(() => {
@@ -345,7 +364,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.tiers, basePrice, tierCheck.valid, currency.code, currency.locale, isCombo, comboPricesKey, extraData]);
   // "Kurta + Dupatta (Red) + 2 × Palazzo"
-  const comboContents = (tier) => [form.productTitle || 'This product', ...(tier.items || []).map((item) => `${Number(item.quantity) > 1 ? `${item.quantity} × ` : ''}${item.title}${item.variantTitle ? ` (${item.variantTitle})` : ''}`)].join(' + ');
+  const comboContents = (tier) => [form.productTitle || 'This product', ...(tier.items || []).map((item) => `${Number(item.quantity) > 1 ? `${item.quantity} × ` : ''}${item.title}${item.pick ? ' (shopper\'s choice)' : item.variantTitle ? ` (${item.variantTitle})` : ''}`)].join(' + ');
 
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
   const updateTier = (index, patch) => setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i === index ? { ...tier, ...patch } : tier)) }));
@@ -977,6 +996,14 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       const chosen = Array.isArray(product.variants) ? product.variants.filter((variant) => variant?.id) : [];
       const total = Number(product.totalVariants);
       const some = Number.isFinite(total) && total > 0 && chosen.length < total;
+      // A whole product with several variants (a blouse in sizes): shoppers choose its variant.
+      if (!some && (total > 1 || chosen.length > 1)) {
+        const stand = chosen.find((variant) => variant.availableForSale !== false) || chosen[0];
+        if (stand && items.length < COMBO_MAX_ITEMS && !items.some((item) => item.pick && item.productId === productId)) {
+          items.push(comboFormItem({ productId, variantId: String(stand.id).split('/').pop(), quantity: 1, handle: product.handle, title: product.title, image: product.images?.[0]?.originalSrc || stand.image?.originalSrc || '', pick: true }));
+        }
+        continue;
+      }
       const picks = some ? chosen : [chosen.find((variant) => variant.availableForSale !== false) || chosen[0]].filter(Boolean);
       for (const variant of picks) {
         const variantId = String(variant.id).split('/').pop();
@@ -1034,11 +1061,16 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
   const updateComboItem = (index, variantId, patch) => setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i !== index ? tier : { ...tier, items: (tier.items || []).map((item) => (item.variantId === variantId ? { ...item, ...patch } : item)) })) }));
   const removeComboItem = (index, variantId) => setForm((current) => ({ ...current, tiers: current.tiers.map((tier, i) => (i !== index ? tier : { ...tier, items: (tier.items || []).filter((item) => item.variantId !== variantId) })) }));
   const changeComboVariant = (index, item, variantId) => {
+    const tier = form.tiers[index];
+    if (variantId === PICK_VARIANT) {
+      if ((tier.items || []).some((other) => other !== item && other.productId === item.productId)) return;
+      updateComboItem(index, item.variantId, { pick: true, variantTitle: '' });
+      return;
+    }
     const live = (extraData[item.productId]?.product?.variants || []).find((variant) => String(variant.id) === String(variantId));
     if (!live) return;
-    const tier = form.tiers[index];
-    if ((tier.items || []).some((other) => other.variantId === String(variantId))) return;
-    updateComboItem(index, item.variantId, { variantId: String(live.id), variantTitle: live.title && live.title !== 'Default Title' ? live.title : '', image: live.image || item.image });
+    if ((tier.items || []).some((other) => other !== item && !other.pick && other.variantId === String(variantId))) return;
+    updateComboItem(index, item.variantId, { pick: false, variantId: String(live.id), variantTitle: live.title && live.title !== 'Default Title' ? live.title : '', image: live.image || item.image });
   };
 
   const addTier = () => { if (isCombo) { addComboPack(); return; } const last = Math.max(0, ...form.tiers.map((tier) => Number(tier.quantity) || 0)); setForm((current) => ({ ...current, tiers: [...current.tiers, blankTier(last + 1)] })); };
@@ -1111,8 +1143,11 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                           <span className="pc-combo-name">
                             <strong>{product?.product?.title || item.title}</strong>
                             {productVariants.length > 1 ? (
-                              <Select label="Variant" labelHidden value={String(item.variantId)} onChange={(value) => changeComboVariant(index, item, value)}
-                                options={productVariants.map((variant) => ({ value: String(variant.id), label: `${variant.title} — ${variant.price === null ? '—' : fmt(variant.price)}${variant.availableForSale ? '' : ' · sold out'}`, disabled: String(variant.id) !== String(item.variantId) && (tier.items || []).some((other) => other.variantId === String(variant.id)) }))} />
+                              <Select label="Variant" labelHidden value={item.pick ? PICK_VARIANT : String(item.variantId)} onChange={(value) => changeComboVariant(index, item, value)}
+                                options={[
+                                  { value: PICK_VARIANT, label: `Shoppers choose${live ? ` — from ${fmt(live.price)}` : ''}` },
+                                  ...productVariants.map((variant) => ({ value: String(variant.id), label: `${variant.title} — ${variant.price === null ? '—' : fmt(variant.price)}${variant.availableForSale ? '' : ' · sold out'}`, disabled: (item.pick || String(variant.id) !== String(item.variantId)) && (tier.items || []).some((other) => other !== item && !other.pick && other.variantId === String(variant.id)) })),
+                                ]} />
                             ) : (
                               <span>{product?.status === 'loading' ? 'Loading…' : live ? `${fmt(live.price)}${live.availableForSale ? '' : ' · sold out'}` : ''}</span>
                             )}
@@ -1127,7 +1162,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                     })}
                     <InlineStack gap="200" blockAlign="center">
                       <Button icon={PlusIcon} disabled={(tier.items || []).length >= COMBO_MAX_ITEMS} onClick={() => addComboItems(index)}>Add products</Button>
-                      <Text as="span" variant="bodySm" tone="subdued">Open a product in the picker to choose one colour or size.</Text>
+                      <Text as="span" variant="bodySm" tone="subdued">A product with sizes or colours: shoppers choose theirs. To always add one, pick it in the menu next to the product.</Text>
                     </InlineStack>
                     {tierCheck.errors.filter((item) => item.index === index && (item.field === 'items' || item.field === 'quantity')).map((item) => <InlineError key={item.message} message={item.message} fieldID={`pc-combo-${index}`} />)}
                   </div>

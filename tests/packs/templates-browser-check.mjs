@@ -288,6 +288,41 @@ await check('Fixed Combo in the new templates: one item to pick, the fixed produ
   }
 });
 
+await check('a product whose only option has one value ("Free size"): no picker line, no lone item number', async () => {
+  const freeSize = { productOptions: ['Size'], variantId: '601', variants: [{ id: '601', title: 'Free size', price: 1699, availableForSale: true, maxQuantity: null, image: PX, options: ['Free size'] }] };
+  for (const preset of ['list', 'offer_rows', 'rail']) {
+    const { page, context, cartCalls, errors } = await open({ packs: [pack(preset, freeSize)], variantInput: '601' });
+    if (preset === 'rail') await page.locator('.brix-packs-rail button').nth(0).click();
+    else await page.locator('.brix-packs-lrow').nth(0).click();
+    assert.equal(await page.locator('.brix-packs-lline, .brix-packs-lnum, .brix-packs-circle').count(), 0, `${preset}: nothing to pick shown`);
+    await page.locator('.brix-packs-add').click();
+    await page.waitForFunction(() => document.querySelector('.brix-packs-msg'));
+    assert.deepEqual(cartCalls[0].items.map((line) => [line.id, line.quantity]), [[601, 1]], `${preset}: the one size added`);
+    assert.deepEqual(errors, [], preset);
+    await context.close();
+  }
+});
+
+await check('a combo whose added product is gone (variant replaced): "Unavailable", no price, not "Low stock"', async () => {
+  const broken = (preset) => pack(preset, {
+    template: 'fixed_combo', packType: 'combo',
+    tiers: [
+      { quantity: 1, name: 'Only Tee', badge: '', discountType: 'none', discountValue: 0, items: [], comboItems: [] },
+      { quantity: 2, name: 'With Cream', badge: '', discountType: 'none', discountValue: 0, items: [{ productId: '601', variantId: '599', quantity: 1 }] },
+    ],
+  });
+  for (const preset of ['list', 'offer_rows']) {
+    const { page, context, errors } = await open({ packs: [broken(preset)] });
+    const row = page.locator('.brix-packs-lrow').nth(1);
+    assert.equal(await row.isDisabled(), true, `${preset}: not choosable`);
+    const text = await row.textContent();
+    assert.match(text, /Unavailable/, preset);
+    assert.doesNotMatch(text, /Low stock|\u20b9/, `${preset}: no stock note, no price`);
+    assert.deepEqual(errors, [], preset);
+    await context.close();
+  }
+});
+
 await check('every new template fits a 360px phone without sideways scroll', async () => {
   for (const preset of ['rail', 'list', 'ladder', 'stack', 'offer_rows']) {
     const { page, context, errors } = await open({ packs: [pack(preset, { customization: customization(preset, { band: { enabled: true, target: 'all' } }) })], viewport: { width: 360, height: 900 } });

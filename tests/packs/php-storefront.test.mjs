@@ -118,3 +118,15 @@ test('a Pack used on more products / collections: found by product or by the pag
   await verify({ 1: 1, 2: 1, 3: 1 });
   assert.deepEqual((await get('501')).packs, []);
 });
+
+test('a Fixed Combo product the shopper chooses the size of: `pick` passes through, with no variant title; fixed items unchanged', async () => {
+  const comboTiers = JSON.stringify([
+    { quantity: 2, discountType: 'none', discountValue: 0, name: 'With blouse', badge: '', items: [{ productId: '601', variantId: '6011', quantity: 1, handle: 'blouse', title: 'Blouse', variantTitle: '30', pick: true }] },
+    { quantity: 2, discountType: 'none', discountValue: 0, name: 'With falls', badge: '', items: [{ productId: '602', variantId: '6021', quantity: 1, handle: 'falls', title: 'Falls', variantTitle: 'Gold', pick: 'yes' }] },
+  ]);
+  await addPack(6, '600', '6001', { template: 'fixed_combo', pack_type: 'combo', tiers_json: comboTiers });
+  await verify({ 1: 1, 2: 1, 3: 1, 6: 1 });
+  const items = (await get('600')).packs[0].tiers.map((t) => t.items[0]);
+  assert.deepEqual([items[0].pick, items[0].variantTitle], [true, '']);
+  assert.deepEqual(['pick' in items[1], items[1].variantTitle], [false, 'Gold'], 'only a real true counts');
+});

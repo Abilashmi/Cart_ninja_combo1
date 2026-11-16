@@ -57,9 +57,14 @@ export function packCoversMain(pack, line) {
   return Array.isArray(applies.c) && applies.c.some((id) => lineCollections.includes(String(id)));
 }
 
-// A Fixed Combo item's exact variant (tiers[].items = [{ p, v, q }]).
+// A Fixed Combo item (tiers[].items = [{ p, v, q, a? }]): its exact variant, or with `a`
+// (the shopper chooses, e.g. a blouse's size) any variant of that product.
+function itemMatches(item, line) {
+  if (String(item.p) !== String(line.productId)) return false;
+  return item.a ? true : String(item.v) === String(line.variantId);
+}
 function isComboItem(pack, line) {
-  return (pack.tiers || []).some((tier) => (tier.items || []).some((item) => String(item.v) === String(line.variantId) && String(item.p) === String(line.productId)));
+  return (pack.tiers || []).some((tier) => (tier.items || []).some((item) => itemMatches(item, line)));
 }
 
 export function packCoversLine(pack, line) {
@@ -85,16 +90,19 @@ function isMainLine(pack, line) {
 function comboTierFor(pack, packQuantity, groupLines) {
   const mainUnits = groupLines.filter((line) => isMainLine(pack, line)).reduce((sum, line) => sum + line.quantity, 0);
   if (mainUnits <= 0) return null;
-  const byVariant = new Map();
-  for (const line of groupLines) {
-    if (isMainLine(pack, line)) continue;
-    byVariant.set(String(line.variantId), (byVariant.get(String(line.variantId)) || 0) + line.quantity);
-  }
+  const others = groupLines.filter((line) => !isMainLine(pack, line));
   return (pack.tiers || []).find((tier) => {
     if (Number(tier.quantity) !== packQuantity) return false;
     const items = Array.isArray(tier.items) ? tier.items : [];
-    if (items.length !== byVariant.size) return false;
-    return items.every((item) => byVariant.get(String(item.v)) === Number(item.q) * mainUnits);
+    // Count the group's other lines per item of this tier (a "shopper chooses" item takes any of
+    // its product's variants, mixed sizes too); a line no item of this tier takes = not this tier.
+    const counts = items.map(() => 0);
+    for (const line of others) {
+      const at = items.findIndex((item) => itemMatches(item, line));
+      if (at < 0) return false;
+      counts[at] += line.quantity;
+    }
+    return items.every((item, at) => counts[at] === Number(item.q) * mainUnits);
   }) || null;
 }
 
