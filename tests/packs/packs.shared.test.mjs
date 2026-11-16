@@ -150,9 +150,9 @@ test('sanitizeCustomization validates and drops unknown fields', () => {
   assert.equal(sanitizeCustomization('nope').errors.length, 1);
 });
 
-test('only the three current templates are offered; removed ones map to the closest current template', () => {
-  assert.deepEqual(PACK_DESIGNS.map((design) => design.id), ['slots', 'quick_add', 'image_slots']);
-  assert.deepEqual(PACK_DESIGNS.map((design) => design.name), ['Horizontal Select', 'Quick Add Picker', 'Image Variant Select']);
+test('the eight current templates are offered; removed ones map to the closest current template', () => {
+  assert.deepEqual(PACK_DESIGNS.map((design) => design.id), ['slots', 'quick_add', 'image_slots', 'rail', 'list', 'ladder', 'stack', 'offer_rows']);
+  assert.deepEqual(PACK_DESIGNS.map((design) => design.name), ['Horizontal Select', 'Quick Add Picker', 'Image Variant Select', 'Quantity Rail', 'Price List', 'Savings Ladder', 'Stack Cards', 'Offer Rows']);
   assert.equal(defaultCustomization().design.preset, 'slots');
   for (const [old, next] of [['classic', 'slots'], ['highlight', 'slots'], ['premium', 'slots'], ['tabs', 'slots'], ['stacked', 'slots'], ['visual', 'image_slots']]) {
     const result = sanitizeCustomization({ design: { preset: old } });
@@ -160,6 +160,27 @@ test('only the three current templates are offered; removed ones map to the clos
     assert.equal(mergeCustomization(result.value).design.preset, next);
   }
   assert.ok(sanitizeCustomization({ design: { preset: 'bogus' } }).errors.length > 0);
+});
+
+test('offer band: off by default, validated, kept when switching templates; Offer Rows switches it on', () => {
+  const defaults = defaultCustomization();
+  assert.deepEqual(defaults.band, { enabled: false, target: 'badge', text: 'Limited time offer', background: '#13312b', textColor: '#ffffff', speed: 30, textSize: 10, thickness: 18 });
+  const good = sanitizeCustomization({ band: { enabled: true, target: 'all', text: 'Only today', background: '#ff0000', speed: 0, thickness: 28 } });
+  assert.deepEqual(good.errors, []);
+  assert.deepEqual(good.value.band, { enabled: true, target: 'all', text: 'Only today', background: '#ff0000', speed: 0, thickness: 28 });
+  const bad = sanitizeCustomization({ band: { target: 'some', text: 'x'.repeat(41), background: 'red', speed: 81, textSize: 7, thickness: 30 } });
+  assert.equal(bad.errors.length, 6);
+  // A Pack saved before the band existed has it off.
+  assert.equal(mergeCustomization({ colors: { primary: '#111111' } }).band.enabled, false);
+  // Offer Rows turns the band on and keeps the merchant's text and colors; other templates leave it as it is.
+  const mine = mergeCustomization({ band: { text: 'Sale ends soon', background: '#222222' } });
+  const offer = applyDesign(mine, 'offer_rows');
+  assert.equal(offer.design.preset, 'offer_rows');
+  assert.equal(offer.band.enabled, true);
+  assert.equal(offer.band.text, 'Sale ends soon');
+  assert.equal(offer.band.background, '#222222');
+  assert.equal(applyDesign(offer, 'list').band.enabled, true, 'switching away keeps the merchant’s band on');
+  assert.equal(applyDesign(mine, 'rail').band.enabled, false);
 });
 
 test('Buy Now is on by default and its label is validated', () => {

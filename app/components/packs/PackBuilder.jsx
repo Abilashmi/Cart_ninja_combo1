@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAppBridge } from '@shopify/app-bridge-react';
 import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup, TextField, Banner, Tabs, Divider, Badge, Box, Thumbnail, SkeletonBodyText, Spinner, Icon, RangeSlider } from '@shopify/polaris';
-import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon, StarIcon, CashDollarIcon } from '@shopify/polaris-icons';
+import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon, StarIcon, CashDollarIcon, MegaphoneIcon } from '@shopify/polaris-icons';
 import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
 import { formatMoney } from '../../utils/currency.shared';
@@ -397,7 +397,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
       <BlockStack gap="500">
         <BlockStack gap="100">
           <Text as="h2" variant="headingMd">Choose a template</Text>
-          <Text as="p" tone="subdued">Every template shows your Packs side by side. They differ in how shoppers choose the items in their Pack. Your colors stay the same, and you can fine-tune everything in the next step.</Text>
+          <Text as="p" tone="subdued">Templates differ in how shoppers choose a pack and the items in it. Stack Cards suits products with one variant. Your colors stay the same, and you can fine-tune everything in the next step.</Text>
         </BlockStack>
         <div role="radiogroup" aria-label="Pack template" className="pd-grid">
           {PACK_DESIGNS.map((design) => {
@@ -746,6 +746,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     { id: 'layout', label: 'Layout', icon: LayoutBlockIcon, description: 'Corners, borders, shadow and spacing.', prefixes: ['borders.', 'spacing.', 'content.hideVariants'] },
     { id: 'buttons', label: 'Buttons', icon: ButtonIcon, description: 'Choose which buttons show (Add to Cart, Buy Now, COD) and style them.', prefixes: ['buttons.', 'colors.button', 'spacing.buttonSpacing', 'content.cta', 'content.buyNow', 'content.showBuyNow', 'content.showAddToCart', 'content.showCod', 'content.codText', 'content.showThemeButtons', 'content.themeAddsPack', 'content.matchThemeButtons'] },
     { id: 'badge', label: 'Badges', icon: StarIcon, description: 'The label on a pack ("Most Popular"): shape, corner, colors and text.', prefixes: ['badge.', 'colors.badge'] },
+    { id: 'band', label: 'Offer band', icon: MegaphoneIcon, description: 'A strip of moving text ("Limited time offer") wrapped round a pack.', prefixes: ['band.'] },
     { id: 'savings', label: 'Savings', icon: DiscountIcon, description: 'How the discount is called out on each offer.', prefixes: ['savings.'] },
     { id: 'price', label: 'Amounts', icon: CashDollarIcon, description: 'How prices are drawn: weight, struck-through price, and your own words.', prefixes: ['price.'] },
     { id: 'image', label: 'Image', icon: ImageIcon, description: 'Photo size and position in the item slots.', prefixes: ['images.'] },
@@ -984,6 +985,29 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           {sizeField('badge', 'size', 'Text size (0 = automatic)')}
           <Segmented label="Font weight" options={[[400, 'Regular'], [500, 'Medium'], [600, 'Semi'], [700, 'Bold'], [800, 'Black']]} value={Number(form.customization.badge.fontWeight)} onChange={(value) => updateCustom('badge', 'fontWeight', value)} />
           <Toggle label="Uppercase text" checked={form.customization.badge.uppercase} onChange={(value) => updateCustom('badge', 'uppercase', value)} />
+        </FieldGroup>
+      </BlockStack>
+    ),
+    band: (
+      <BlockStack gap="400">
+        <Toggle label="Show the offer band" helpText="A strip with moving text wrapped round a pack, to call out an offer." checked={form.customization.band.enabled} onChange={(value) => updateCustom('band', 'enabled', value)} />
+        {['rail', 'ladder'].includes(form.customization.design.preset) && (
+          <Banner tone="info"><p>The offer band shows on templates with pack cards or rows. Quantity Rail and Savings Ladder don’t draw it.</p></Banner>
+        )}
+        <FieldGroup title="Which packs">
+          <Segmented label="Wrap" disabled={!form.customization.band.enabled} options={[['badge', 'Packs with a badge'], ['selected', 'The chosen pack'], ['all', 'Every pack']]} value={form.customization.band.target} onChange={(value) => updateCustom('band', 'target', value)} />
+          {form.customization.band.target === 'badge' && !form.tiers.some((tier) => String(tier.badge || '').trim()) && (
+            <Text as="p" variant="bodySm" tone="caution">None of your packs has a badge yet. Add one (for example “Most Popular”) on the Configure step, or pick another option.</Text>
+          )}
+        </FieldGroup>
+        <FieldGroup title="Text">
+          <TextField label="Moving text" disabled={!form.customization.band.enabled} value={form.customization.band.text} maxLength={40} placeholder="Limited time offer" onChange={(value) => updateCustom('band', 'text', value)} autoComplete="off" error={customCheck.errors.find((message) => message.startsWith('band.text '))} helpText="Shown in capitals and repeated round the pack." />
+          {sizeField('band', 'textSize', 'Text size')}
+        </FieldGroup>
+        <FieldGroup title="Look">
+          <div className="pz-colors">{colorField('background', 'Strip color', 'band')}{colorField('textColor', 'Text color', 'band')}</div>
+          {sizeField('band', 'thickness', 'Strip width')}
+          <RangeSlider label="Speed" min={0} max={80} step={5} value={Number(form.customization.band.speed)} onChange={(value) => updateCustom('band', 'speed', Number(value))} suffix={<span className="pz-slider-value">{Number(form.customization.band.speed) === 0 ? 'Still' : `${form.customization.band.speed}`}</span>} helpText="0 keeps the text still. Shoppers who turn off motion on their device always see it still." />
         </FieldGroup>
       </BlockStack>
     ),

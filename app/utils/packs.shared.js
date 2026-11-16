@@ -417,13 +417,19 @@ export const DEFAULT_CUSTOMIZATION = {
     codBackground: '#ffffff', codText: '#008060', codBorder: '#008060',
   },
   images: { enabled: true, size: 'medium', position: 'top' },
+  // Offer band: a strip of moving text ("Limited time offer") wrapped round a pack.
+  // target: which packs get it (badge = packs with a badge text, selected = the
+  // chosen pack, all = every pack). speed = px a second (0 = still), thickness =
+  // the strip's width in px. Drawn by packs_widget.js mountBands on the templates
+  // that show packs as cards or rows (every template but Quantity Rail and Savings Ladder).
+  band: { enabled: false, target: 'badge', text: 'Limited time offer', background: '#13312b', textColor: '#ffffff', speed: 30, textSize: 10, thickness: 18 },
   design: { preset: 'slots' },
   // Where the storefront widget sits: right below the product price, or in a
   // "BRIX Packs position" app block the merchant places in the theme editor.
   placement: { position: 'below_price' },
 };
 
-// Storefront templates (stored as customization.design.preset). All three show
+// Storefront templates (stored as customization.design.preset). The first three show
 // the packs as a horizontal row of cards; the chosen pack's quantity decides
 // how many items the shopper picks. They differ in HOW items are picked, and
 // are rendered by packs_widget.js (the admin PackPreview mounts that same
@@ -441,6 +447,18 @@ export const PACK_DESIGNS = [
     highlights: ['Horizontal packs', 'Variant photo grid', '+ quick add', 'Selected count'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 10 } } },
   { id: 'image_slots', name: 'Image Variant Select', description: 'Packs as rows. Each item shows its photo and a dropdown per option (size, color…) side by side — with variant photos for options that have them.',
     highlights: ['Stacked packs', 'Option dropdowns', 'Variant photos'], style: { borders: { radius: 12 }, spacing: { cardPadding: 16, cardGap: 12 } } },
+  // The minimal templates. Items are picked with option chips (photo chips for
+  // options whose values have variant photos) instead of dropdowns.
+  { id: 'rail', name: 'Quantity Rail', description: 'One segmented bar for the pack size, a big price, and a circle per item. Tap a circle, then its options.',
+    highlights: ['Segmented pack bar', 'Item circles', 'Option chips'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 10 } } },
+  { id: 'list', name: 'Price List', description: 'Packs as plain rows with a radio, like a menu. The chosen row opens one line per item with option chips.',
+    highlights: ['Stacked rows', 'Per-item lines', 'Option chips'], style: { borders: { radius: 10 }, spacing: { cardPadding: 14, cardGap: 0 } } },
+  { id: 'ladder', name: 'Savings Ladder', description: 'No pack to choose first: shoppers add items to a tray and the savings ladder climbs to the next pack.',
+    highlights: ['Build as you go', 'Savings ladder', 'Item tray'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 8 } } },
+  { id: 'stack', name: 'Stack Cards', description: 'Pack cards side by side, each showing that many product photos stacked. Made for products with one variant.',
+    highlights: ['Stacked photos', 'One tap', 'One-variant products'], style: { borders: { radius: 12 }, spacing: { cardPadding: 14, cardGap: 8 } } },
+  { id: 'offer_rows', name: 'Offer Rows', description: 'Full-width rows with a radio, price and a % OFF tag, with a moving offer band round the highlighted pack.',
+    highlights: ['% OFF tag', 'Offer band', 'Heading and footer lines'], style: { borders: { radius: 10, width: 2 }, spacing: { cardPadding: 14, cardGap: 10 }, band: { enabled: true } } },
 ];
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -467,6 +485,7 @@ export const CUSTOMIZATION_SCHEMA = {
     codBackground: color(), codText: color(), codBorder: color(),
   },
   images: { enabled: bool(), size: oneOf('small', 'medium', 'large'), position: oneOf('top', 'left') },
+  band: { enabled: bool(), target: oneOf('badge', 'selected', 'all'), text: str(40), background: color(), textColor: color(), speed: num(0, 80), textSize: num(8, 16), thickness: num(12, 28) },
   design: { preset: oneOf(...PACK_DESIGNS.map((design) => design.id)) },
   placement: { position: oneOf('below_price', 'custom') },
 };
@@ -580,6 +599,9 @@ export function applyDesign(customization, designId) {
   for (const group of ['colors', 'borders', 'typography', 'spacing', 'buttons', 'badge', 'price']) {
     next[group] = { ...DEFAULT_CUSTOMIZATION[group], ...(design.style[group] || {}) };
   }
+  // The offer band is the merchant's own setting: a template can switch it on
+  // (Offer Rows), never off, and its text and colors are kept.
+  if (design.style.band) next.band = { ...current.band, ...design.style.band };
   return next;
 }
 

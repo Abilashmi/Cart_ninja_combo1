@@ -457,6 +457,27 @@
     return false;
   }
 
+  // Options the minimal templates draw as photo chips / tiles: each value always
+  // shows the same variant photo and the values don't all share one photo (so
+  // Color, whose values have their own photos, but not Size, when every variant
+  // has a photo of its color).
+  function photoOptionFlags(variants, options) {
+    return options.map(function (option, index) {
+      if (option.values.length < 2) return false;
+      var byValue = {};
+      var distinct = [];
+      for (var i = 0; i < variants.length; i += 1) {
+        var value = variants[i].optionValues[index];
+        var image = variants[i].image || '';
+        if (!image) return false;
+        if (byValue[value] === undefined) byValue[value] = image;
+        else if (byValue[value] !== image) return false;
+        if (distinct.indexOf(image) < 0) distinct.push(image);
+      }
+      return distinct.length > 1;
+    });
+  }
+
   // Same Variant Packs: one variant for every item. Mix & Match: any variant
   // per item, repeats allowed. (No separate merchant setting exists.)
   function packSelectionRules(pack) {
@@ -496,7 +517,7 @@
   // saved settings from PHP, so it maps them itself).
   var LEGACY_LAYOUTS = { classic: 'slots', highlight: 'slots', premium: 'slots', tabs: 'slots', stacked: 'slots', visual: 'image_slots' };
   function layoutOf(design) {
-    if (design === 'slots' || design === 'quick_add' || design === 'image_slots') return design;
+    if (['slots', 'quick_add', 'image_slots', 'rail', 'list', 'ladder', 'stack', 'offer_rows'].indexOf(design) >= 0) return design;
     return LEGACY_LAYOUTS[design] || 'slots';
   }
 
@@ -682,6 +703,136 @@
     'html[data-brix-pack-cod] [data-brix-cod-slot]{display:none !important}',
     '.brix-packs-actions-col{display:flex;flex-direction:column;gap:10px;margin-top:var(--brix-packs-btn-gap)}',
     '.brix-packs-actions-col>.brix-packs-add,.brix-packs-actions-col>.brix-packs-buy,.brix-packs-actions-col>.brix-packs-actions{margin-top:0}',
+    /* ── Minimal templates (rail, list, ladder, stack, offer_rows): option chips. */
+    '.brix-packs-chiprows{display:flex;flex-direction:column;gap:10px;min-width:0}',
+    '.brix-packs-chiprow{display:flex;flex-direction:column;gap:6px;min-width:0}',
+    '.brix-packs-chiprow-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;opacity:.85}',
+    '.brix-packs-chiprow-head b{font-weight:600}',
+    '.brix-packs-chips{display:flex;flex-wrap:wrap;gap:6px}',
+    '.brix-packs-chipbtn{min-width:38px;height:32px;margin:0;padding:0 10px;font:inherit;font-size:13px;font-weight:500;color:var(--brix-packs-text);background:var(--brix-packs-card);border:1px solid var(--brix-packs-border);border-radius:calc(var(--brix-packs-radius) / 1.4);cursor:pointer;transition:border-color .15s,background .15s}',
+    '.brix-packs-chipbtn:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
+    '.brix-packs-chipbtn[aria-pressed="true"]{background:var(--brix-packs-primary);border-color:var(--brix-packs-primary);color:var(--brix-packs-button-text)}',
+    '.brix-packs-chipbtn[disabled]{opacity:.4;text-decoration:line-through;cursor:not-allowed}',
+    '.brix-packs-chipbtn.has-img{width:34px;min-width:34px;height:34px;padding:2px;border-radius:50%;overflow:hidden}',
+    '.brix-packs-chipbtn.has-img img{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%}',
+    '.brix-packs-chipbtn.has-img[aria-pressed="true"]{background:var(--brix-packs-card);box-shadow:0 0 0 2px var(--brix-packs-primary)}',
+    '.brix-packs-chipbtn:focus-visible,.brix-packs-rail button:focus-visible,.brix-packs-circle:focus-visible,.brix-packs-lrow:focus-visible,.brix-packs-ltile:focus-visible,.brix-packs-cell-x:focus-visible{outline:2px solid var(--brix-packs-primary);outline-offset:2px}',
+    /* ── Quantity Rail. */
+    '.brix-packs-rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:4px;margin-top:12px;padding:4px;background:var(--brix-packs-selected);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-rail button{position:relative;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;margin:0;padding:9px 2px 8px;font:inherit;color:var(--brix-packs-text);background:transparent;border:0;border-radius:calc(var(--brix-packs-radius) - 3px);cursor:pointer;opacity:.7}',
+    '.brix-packs-rail button[aria-checked="true"]{background:var(--brix-packs-card);box-shadow:0 1px 3px rgba(0,0,0,.14);opacity:1}',
+    '.brix-packs-rail button[disabled]{opacity:.35;cursor:not-allowed}',
+    '.brix-packs-rail b{font-size:calc(var(--brix-packs-title) + 1px);font-weight:700;line-height:1.2}',
+    '.brix-packs-rail small{font-size:11px;white-space:nowrap}',
+    '.brix-packs-rail button[aria-checked="true"] small{color:var(--brix-packs-discount);font-weight:600}',
+    '.brix-packs-rail .brix-packs-badge{position:absolute;top:-10px;left:50%;transform:translateX(-50%);max-width:calc(100% + 8px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--brix-packs-badge-size,9px)}',
+    '.brix-packs-railprice{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin-top:14px;color:var(--brix-packs-price)}',
+    '.brix-packs-railprice strong{font-size:calc(var(--brix-packs-priceSize) + 6px);font-weight:var(--brix-packs-price-weight,700);line-height:1.1}',
+    '.brix-packs-railprice .brix-packs-each{flex-basis:100%;font-size:12px;opacity:.7}',
+    '.brix-packs-railitems{display:flex;flex-direction:column;gap:10px;margin-top:14px}',
+    '.brix-packs-railhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px}',
+    '.brix-packs-railhead b{font-size:13px;font-weight:600}',
+    '.brix-packs-railhead span{opacity:.7}',
+    '.brix-packs-circles{display:flex;flex-wrap:wrap;gap:10px;margin:0;padding:0;list-style:none}',
+    '.brix-packs-circle{display:flex;flex-direction:column;align-items:center;gap:4px;width:60px;margin:0;padding:0;font:inherit;color:var(--brix-packs-text);background:transparent;border:0;cursor:pointer}',
+    '.brix-packs-circle-img{display:flex;align-items:center;justify-content:center;width:52px;height:52px;overflow:hidden;border-radius:50%;background:var(--brix-packs-selected);border:2px solid transparent;font-size:20px;opacity:.9}',
+    '.brix-packs-circle-img img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.brix-packs-circle[aria-pressed="true"] .brix-packs-circle-img{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-circle[data-state="problem"] .brix-packs-circle-img{border-color:#b42318}',
+    '.brix-packs-circle-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;opacity:.75}',
+    '.brix-packs-circle[aria-pressed="true"] .brix-packs-circle-name{font-weight:600;opacity:1}',
+    '.brix-packs-picker{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--brix-packs-selected);border-radius:var(--brix-packs-radius)}',
+    /* ── Price List and Offer Rows: packs as rows. */
+    '.brix-packs-list{display:flex;flex-direction:column;margin-top:10px;border-top:1px solid var(--brix-packs-border)}',
+    '.brix-packs-list>.brix-packs-litem,.brix-packs-list>.brix-packs-band{border-bottom:1px solid var(--brix-packs-border)}',
+    '.brix-packs-list>.brix-packs-band{margin:6px 0}',
+    '.brix-packs-orows{display:flex;flex-direction:column;gap:var(--brix-packs-gap);margin-top:12px}',
+    '.brix-packs-litem{position:relative;min-width:0}',
+    '.brix-packs-lrow{display:grid;grid-template-columns:20px minmax(0,1fr) auto;column-gap:12px;align-items:center;width:100%;margin:0;padding:var(--brix-packs-card-pad) 2px;font:inherit;color:var(--brix-packs-text);text-align:left;background:transparent;border:0;cursor:pointer}',
+    '.brix-packs-lrow[disabled]{opacity:.5;cursor:not-allowed}',
+    '.brix-packs-lrow .brix-packs-radio{width:20px;height:20px}',
+    '.brix-packs-lrow[aria-checked="true"] .brix-packs-radio{border-color:var(--brix-packs-primary)}',
+    '.brix-packs-lrow[aria-checked="true"] .brix-packs-radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--brix-packs-primary)}',
+    '.brix-packs-lname{display:flex;flex-direction:column;gap:2px;min-width:0}',
+    '.brix-packs-ltitle{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:var(--brix-packs-title);font-weight:var(--brix-packs-weight);line-height:1.25}',
+    '.brix-packs-lsub{font-size:var(--brix-packs-desc);opacity:.7}',
+    '.brix-packs-lprice{display:flex;flex-direction:column;align-items:flex-end;text-align:right;color:var(--brix-packs-price)}',
+    '.brix-packs-lprice strong{font-size:var(--brix-packs-priceSize);font-weight:var(--brix-packs-price-weight,600);white-space:nowrap}',
+    '.brix-packs-lprice .brix-packs-was{white-space:nowrap}',
+    '.brix-packs-lprice .brix-packs-save{font-size:12px}',
+    '.brix-packs-llines{display:flex;flex-direction:column;gap:10px;padding:0 2px var(--brix-packs-card-pad) 34px}',
+    '.brix-packs-lline{display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;align-items:start}',
+    '.brix-packs-lnum{padding-top:6px;font-size:12px;font-variant-numeric:tabular-nums;opacity:.6}',
+    '.brix-packs-lline .brix-packs-chiprows{flex-direction:row;flex-wrap:wrap;gap:8px 14px}',
+    '.brix-packs-lline .brix-packs-chipbtn{min-width:30px;height:28px;padding:0 8px;font-size:12px}',
+    '.brix-packs-lline .brix-packs-chipbtn.has-img{width:28px;min-width:28px;height:28px;padding:2px}',
+    '.brix-packs-lline .brix-packs-problem{grid-column:2}',
+    '.brix-packs-orows .brix-packs-litem{background:var(--brix-packs-card);border:var(--brix-packs-bw) var(--brix-packs-bs) var(--brix-packs-border);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-orows .brix-packs-litem[data-selected="1"]{background:var(--brix-packs-selected);border-color:var(--brix-packs-primary)}',
+    '.brix-packs-orows .brix-packs-lrow{padding:var(--brix-packs-card-pad);grid-template-columns:24px minmax(0,1fr) auto}',
+    '.brix-packs-orows .brix-packs-lrow .brix-packs-radio{width:24px;height:24px}',
+    '.brix-packs-orows .brix-packs-lrow[aria-checked="true"] .brix-packs-radio::after{inset:4px}',
+    '.brix-packs-orows .brix-packs-ltitle{font-size:calc(var(--brix-packs-title) + 2px);font-weight:700}',
+    '.brix-packs-orows .brix-packs-lsub{color:var(--brix-packs-discount);opacity:.85}',
+    '.brix-packs-orows .brix-packs-lprice strong{font-size:calc(var(--brix-packs-priceSize) + 1px);font-weight:var(--brix-packs-price-weight,700)}',
+    '.brix-packs-orows .brix-packs-llines{padding-left:calc(var(--brix-packs-card-pad) + 36px);padding-right:var(--brix-packs-card-pad)}',
+    '.brix-packs-off{display:inline-block;padding:1px 7px;font-size:11px;font-weight:600;line-height:1.5;letter-spacing:.02em;border:1.5px solid currentColor;border-radius:6px;white-space:nowrap}',
+    '.brix-packs-orows .brix-packs-litem>.brix-packs-badge{position:absolute;top:-11px;right:18px;z-index:2;max-width:calc(100% - 36px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.brix-packs-widget[data-layout="offer_rows"] .brix-packs-heading,.brix-packs-widget[data-layout="offer_rows"] .brix-packs-promo{display:flex;align-items:center;gap:12px;text-align:center}',
+    '.brix-packs-widget[data-layout="offer_rows"] .brix-packs-heading::before,.brix-packs-widget[data-layout="offer_rows"] .brix-packs-heading::after,.brix-packs-widget[data-layout="offer_rows"] .brix-packs-promo::before,.brix-packs-widget[data-layout="offer_rows"] .brix-packs-promo::after{content:"";flex:1 1 0;min-width:12px;border-top:1px solid var(--brix-packs-border)}',
+    '.brix-packs-widget[data-layout="offer_rows"] .brix-packs-promo{opacity:1;font-weight:600}',
+    /* ── Savings Ladder. */
+    '.brix-packs-ladder{position:relative;margin-top:14px;padding:0 12px}',
+    '.brix-packs-ladder-track{position:absolute;left:24px;right:24px;top:12px;height:2px;background:var(--brix-packs-border)}',
+    '.brix-packs-ladder-track span{position:absolute;left:0;top:0;bottom:0;background:var(--brix-packs-primary);transition:width .3s}',
+    '.brix-packs-ladder-nodes{position:relative;display:flex;justify-content:space-between;margin:0;padding:0;list-style:none}',
+    '.brix-packs-ladder-node{display:flex;flex-direction:column;align-items:center;gap:4px;width:24px}',
+    '.brix-packs-ladder-dot{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:700;color:var(--brix-packs-text);background:var(--brix-packs-card);border:2px solid var(--brix-packs-border);transition:background .2s,border-color .2s}',
+    '.brix-packs-ladder-node[data-hit="1"] .brix-packs-ladder-dot{color:var(--brix-packs-button-text);background:var(--brix-packs-primary);border-color:var(--brix-packs-primary)}',
+    '.brix-packs-ladder-node small{font-size:11px;white-space:nowrap;opacity:.7}',
+    '.brix-packs-ladder-node[data-hit="1"] small{color:var(--brix-packs-discount);font-weight:600;opacity:1}',
+    '.brix-packs-nudge{margin:12px 0 0;font-size:var(--brix-packs-desc);text-align:center}',
+    '.brix-packs-nudge b{color:var(--brix-packs-discount)}',
+    '.brix-packs-tray{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;margin:12px 0 0;padding:0;list-style:none}',
+    '.brix-packs-cell{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:1/1;max-width:100%;overflow:hidden;border:1.5px dashed var(--brix-packs-border);border-radius:var(--brix-packs-radius);font-size:18px;opacity:.75}',
+    '.brix-packs-cell[data-full="1"]{border-style:solid;border-width:1px;background:var(--brix-packs-selected);opacity:1}',
+    '.brix-packs-cell img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.brix-packs-cell-name{position:absolute;left:0;right:0;bottom:0;padding:2px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;font-weight:600;text-align:center;background:rgba(255,255,255,.88);color:#202223}',
+    '.brix-packs-cell-x{position:absolute;top:3px;right:3px;width:22px;height:22px;margin:0;padding:0;font:inherit;font-size:14px;line-height:1;color:#202223;background:#fff;border:0;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:pointer}',
+    '.brix-packs-lnext{display:flex;flex-direction:column;gap:8px;margin-top:12px}',
+    '.brix-packs-ltiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px}',
+    '.brix-packs-ltile{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;margin:0;padding:6px 4px 8px;font:inherit;color:var(--brix-packs-text);background:var(--brix-packs-card);border:1px solid var(--brix-packs-border);border-radius:var(--brix-packs-radius);cursor:pointer}',
+    '.brix-packs-ltile:hover:not([disabled]){border-color:var(--brix-packs-primary)}',
+    '.brix-packs-ltile[disabled]{opacity:.4;cursor:not-allowed}',
+    '.brix-packs-ltile-img{display:block;width:100%;aspect-ratio:1/1;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 1.5);background:#f3f3f4}',
+    '.brix-packs-ltile-img img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.brix-packs-ltile-name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}',
+    '.brix-packs-ltile-plus{position:absolute;top:8px;right:8px;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--brix-packs-primary);color:var(--brix-packs-button-text)}',
+    '.brix-packs-ltile-plus svg{width:12px;height:12px}',
+    /* ── Stack Cards: that many product photos stacked on each card. */
+    '.brix-packs-widget[data-layout="stack"] .brix-packs-cards{padding-top:14px}',
+    '.brix-packs-widget[data-layout="stack"] .brix-packs-card{align-items:center;text-align:center;padding:16px 6px 12px}',
+    '.brix-packs-widget[data-layout="stack"] .brix-packs-card-check{display:none}',
+    '.brix-packs-widget[data-layout="stack"] .brix-packs-card-name{padding-right:0}',
+    '.brix-packs-widget[data-layout="stack"] .brix-packs-card .brix-packs-badge{left:50%;transform:translateX(-50%)}',
+    '.brix-packs-widget[data-layout="stack"] .brix-packs-card-price{justify-content:center}',
+    '.brix-packs-sphotos{display:flex;justify-content:center;height:58px;margin-bottom:8px}',
+    '.brix-packs-sphotos>*{flex-shrink:0;width:44px;height:58px;overflow:hidden;border-radius:calc(var(--brix-packs-radius) / 1.5);background:#f3f3f4;border:2px solid var(--brix-packs-card);transition:transform .25s}',
+    '.brix-packs-sphotos>*+*{margin-left:-24px}',
+    '.brix-packs-sphotos img{display:block;width:100%;height:100%;object-fit:cover}',
+    '.brix-packs-card[aria-checked="true"] .brix-packs-sphotos>:first-child:not(:only-child){transform:rotate(-6deg)}',
+    '.brix-packs-card[aria-checked="true"] .brix-packs-sphotos>:last-child:not(:only-child){transform:rotate(6deg)}',
+    '.brix-packs-each{font-size:12px;opacity:.7}',
+    /* ── Offer band (customization.band): moving text on a strip round a pack. */
+    '.brix-packs-band{position:relative;min-width:0;padding:var(--brix-packs-band-w,18px);background:var(--brix-packs-band-bg,#13312b);border-radius:calc(var(--brix-packs-radius) + var(--brix-packs-band-w,18px));box-shadow:0 6px 18px rgba(0,0,0,.18)}',
+    '.brix-packs-band>.brix-packs-band-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}',
+    '.brix-packs-band>.brix-packs-litem,.brix-packs-band>.brix-packs-card,.brix-packs-band>.brix-packs-stack-item{position:relative;z-index:1;background:var(--brix-packs-card);border-radius:var(--brix-packs-radius)}',
+    '.brix-packs-list .brix-packs-band>.brix-packs-litem .brix-packs-lrow{padding-left:10px;padding-right:10px}',
+    '.brix-packs-band>.brix-packs-litem>.brix-packs-badge,.brix-packs-band>.brix-packs-card>.brix-packs-badge{top:calc(var(--brix-packs-band-real,18px) * -.5 - 10px)}',
+    // Pack cards side by side: a thinner strip, and two cards a row on narrow screens so a banded card has room.
+    '.brix-packs-cards.has-band{grid-template-columns:repeat(auto-fit,minmax(124px,1fr))}',
+    '.brix-packs-cards>.brix-packs-band{display:flex;padding:min(var(--brix-packs-band-w,18px),14px)}',
+    '.brix-packs-cards>.brix-packs-band>.brix-packs-card{flex:1;min-width:0}',
     '@media (max-width:480px){.brix-packs-card .brix-packs-badge{left:6px;padding:2px 6px;letter-spacing:0}.brix-packs-card{padding:10px 10px 8px}.brix-packs-card-check{top:8px;right:8px}.brix-packs-tier,.brix-packs-tier[data-image="1"]{column-gap:10px}.brix-packs-img[data-size]{width:52px;height:52px}.brix-packs-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.brix-packs-slot{padding:10px}.brix-packs-islot{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px 10px;padding:10px}.brix-packs-islot .brix-packs-slot-main{display:contents}.brix-packs-islot .brix-packs-fields,.brix-packs-islot .brix-packs-problem,.brix-packs-islot-name{grid-column:1/-1}.brix-packs-islot .brix-packs-fields{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}.brix-packs-islot-photo{width:36px;height:36px}}',
   ].join('\n');
 
@@ -737,6 +888,12 @@
       section.style.setProperty('--brix-packs-chip-text', HEX.test(savings.chipText || '') ? savings.chipText : '#ffffff');
     }
 
+    // Offer band colors and strip width (customization.band).
+    var band = custom.band || {};
+    if (HEX.test(band.background || '')) section.style.setProperty('--brix-packs-band-bg', band.background);
+    if (HEX.test(band.textColor || '')) section.style.setProperty('--brix-packs-band-text', band.textColor);
+    if (Number(band.thickness) >= 12 && Number(band.thickness) <= 28) section.style.setProperty('--brix-packs-band-w', Number(band.thickness) + 'px');
+
     // Amounts: weight, and a color for the struck-through price.
     var price = custom.price || {};
     section.style.setProperty('--brix-packs-price-weight', [400, 500, 600, 700, 800].indexOf(Number(price.weight)) >= 0 ? String(Number(price.weight)) : 'var(--brix-packs-weight)');
@@ -790,7 +947,11 @@
     // open: a pack card was chosen; the Quick Add Picker shows its grid only then.
     // openPicker: '<slot>-<option index>' of the open Image Variant Select photo dropdown, or null.
     // cod: null = not checked yet, true = BRIX COD is live for product pages on this store.
-    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null, cod: null, codProbing: false, codTries: 0 };
+    // activeSlot: the item circle the Quantity Rail is picking options for.
+    // ladderSel: the Savings Ladder's chosen values for its next item; ladderMatch: the
+    //   items added are exactly one pack size (state.tierIndex is then that pack).
+    // bands: the offer bands drawn by mountBands; bandRaf / bandWatch: their animation and resize watcher.
+    var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], busy: false, message: null, redirecting: false, open: false, openPicker: null, cod: null, codProbing: false, codTries: 0, activeSlot: 0, ladderSel: [], ladderMatch: false, bands: [], bandSpeed: 0, bandRaf: 0, bandWatch: null };
 
     // The COD button shows only where BRIX COD Checkout is on for product pages. Its script
     // comes from the Custom Cart Drawer app embed, which can load well after this widget, so
@@ -832,7 +993,7 @@
       if (inStock.length) list = inStock;
       var normalized = normalizeOptionData(pack.productOptions, list.map(function (variant) { return shallow(variant, { id: String(variant.id) }); }));
       var imageOptions = normalized.options.map(function (option, index) { return optionHasImages(normalized.variants, index); });
-      cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: widgetSelectionRules(pack), imageOptions: imageOptions } };
+      cache = { pack: pack, model: { options: normalized.options, variants: normalized.variants, rules: widgetSelectionRules(pack), imageOptions: imageOptions, photoOptions: photoOptionFlags(normalized.variants, normalized.options) } };
       return cache.model;
     }
 
@@ -902,7 +1063,7 @@
         var first = state.picks[0];
         state.picks = [];
         if (first) for (var j = 0; j < tier.quantity; j += 1) state.picks.push(first);
-      } else if (state.picks.length > tier.quantity) {
+      } else if (state.picks.length > tier.quantity && layoutFor(pack) !== 'ladder') {
         state.picks = state.picks.slice(0, tier.quantity);
       }
     }
@@ -925,7 +1086,7 @@
         var chosen = defaultVariant(m);
         var hiddenStatus = chosen ? { variant: chosen, problem: forSale(chosen) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] };
         for (i = 0; i < tier.quantity; i += 1) items.push(hiddenStatus);
-      } else if (layoutFor(pack) === 'quick_add') {
+      } else if (layoutFor(pack) === 'quick_add' || layoutFor(pack) === 'ladder') {
         for (i = 0; i < tier.quantity; i += 1) {
           var picked = state.picks[i] ? variantById(m, state.picks[i]) : null;
           items.push(picked ? { variant: picked, problem: forSale(picked) ? null : 'sold_out', missing: [] } : { variant: null, problem: 'incomplete', missing: [] });
@@ -1319,6 +1480,397 @@
       return [grid, el('ol', { class: 'brix-packs-picked', 'aria-label': bxT('storefront.packs.your_pack', 'Your pack') }, chips)];
     }
 
+    // ── Minimal templates (Quantity Rail, Price List, Savings Ladder, Offer Rows) ──
+    // Items are picked with chips: one row of chips per Shopify option (a round
+    // photo chip when the option's values have their own variant photos).
+
+    function chipFields(pack, slot, slotText, compact) {
+      var m = model(pack);
+      var values = state.slots[slot] || emptySelection(m.options);
+      return el('div', { class: 'brix-packs-chiprows' }, m.options.map(function (option, index) {
+        if (option.values.length === 1) return null;
+        var choices = optionChoices(m.variants, m.options, values, index);
+        return el('div', { class: 'brix-packs-chiprow', role: 'group', 'aria-label': slotText + ' ' + option.name }, [
+          compact ? null : el('div', { class: 'brix-packs-chiprow-head' }, [el('span', { text: option.name }), el('b', { text: values[index] || bxT('storefront.packs.choose', 'Choose') })]),
+          el('div', { class: 'brix-packs-chips' }, choices.map(function (choice, position) {
+            var on = values[index] === choice.value;
+            var img = m.photoOptions[index] ? valueImage(m, values, index, choice.value) : '';
+            var note = choice.available ? '' : (choice.exists ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.unavailable', 'Unavailable'));
+            return el('button', {
+              type: 'button', class: 'brix-packs-chipbtn' + (img ? ' has-img' : ''), 'aria-pressed': on ? 'true' : 'false', 'data-fk': 'c-' + slot + '-' + index + '-' + position,
+              disabled: !choice.available, title: choice.value + (note ? ' \u2014 ' + note : ''), 'aria-label': option.name + ' ' + choice.value + (note ? ' (' + note + ')' : ''),
+              onclick: function () { chooseOption(slot, index, choice.value); },
+            }, img ? [el('img', { src: img, alt: '', loading: 'lazy', decoding: 'async' })] : [choice.value]);
+          })),
+        ]);
+      }));
+    }
+
+    // The props every pack choice shares (a radio in a radiogroup).
+    function tierRadio(pack, t, index, cls, selected, disabled) {
+      return {
+        type: 'button', class: cls, role: 'radio', 'aria-checked': selected ? 'true' : 'false', 'data-index': index, 'data-fk': 'tier-' + index,
+        disabled: disabled, title: disabled ? (pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.not_enough_stock', 'Not enough stock for this pack')) : null, tabindex: index === state.tierIndex ? '0' : '-1',
+        onclick: function () { selectTier(index, false); },
+        onkeydown: function (event) { onTierKey(event, index); },
+      };
+    }
+
+    function percentOf(shown) {
+      return shown.subtotal > 0 && shown.savings > 0 ? Math.round((shown.savings / shown.subtotal) * 100) : 0;
+    }
+
+    // Template · Quantity Rail: a segmented bar of pack sizes, the chosen pack's
+    // price, and one circle per item; the chosen circle's option chips below.
+    function renderRail(pack, tier, ctx) {
+      var m = model(pack);
+      var nodes = [];
+      var bar = el('div', { class: 'brix-packs-rail', role: 'radiogroup', 'aria-label': ctx.label });
+      pack.tiers.forEach(function (t, index) {
+        var shown = ctx.shown(t, index);
+        var pct = percentOf(shown);
+        var props = tierRadio(pack, t, index, '', index === state.tierIndex, tierDisabled(pack, t));
+        props['aria-label'] = tierName(t) + (pct ? ', ' + bxT('storefront.packs.save_pct', 'Save {pct}%', { pct: pct }) : '');
+        bar.appendChild(el('button', props, [
+          t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
+          el('b', { text: String(t.quantity) }),
+          el('small', { text: pct ? bxT('storefront.packs.save_pct', 'Save {pct}%', { pct: pct }) : itemsText(t.quantity) }),
+        ]));
+      });
+      nodes.push(bar);
+      if (!tier) return nodes;
+      var shownNow = ctx.shown(tier, state.tierIndex);
+      if (!money.hidden) {
+        nodes.push(el('div', { class: 'brix-packs-railprice' }, [
+          el('strong', { text: ctx.priceText(shownNow.price) }),
+          ctx.showWas && shownNow.savings > 0 ? el('span', { class: 'brix-packs-was', text: ctx.numberText(shownNow.subtotal) }) : null,
+          ctx.saveTextFor(shownNow) ? el('span', { class: 'brix-packs-save', text: ctx.saveTextFor(shownNow) }) : null,
+          tier.quantity > 1 ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shownNow.price / tier.quantity) }) }) : null,
+        ]));
+      }
+      if (ctx.noPicking) return nodes;
+      var items = itemsFor(pack, tier);
+      var left = items.length - readyCount(items);
+      if (state.activeSlot >= tier.quantity) state.activeSlot = 0;
+      var circles = el('ol', { class: 'brix-packs-circles' });
+      items.forEach(function (item, slot) {
+        var src = slotImage(pack, state.slots[slot], item);
+        var done = item.variant && !item.problem;
+        circles.appendChild(el('li', null, [el('button', {
+          type: 'button', class: 'brix-packs-circle', 'data-fk': 'circle-' + slot, 'data-state': slotTone(item), 'aria-pressed': slot === state.activeSlot ? 'true' : 'false',
+          'aria-label': bxT('storefront.packs.item_n', 'Item {n}', { n: slot + 1 }) + (done ? ', ' + variantName(pack, item.variant) : ''),
+          onclick: function () { state.activeSlot = slot; render(); },
+        }, [
+          el('span', { class: 'brix-packs-circle-img' }, [done || state.slots[slot].some(Boolean) ? photo(src, '') : '+']),
+          el('span', { class: 'brix-packs-circle-name', text: done ? variantName(pack, item.variant) : bxT('storefront.packs.item_n', 'Item {n}', { n: slot + 1 }) }),
+        ])]));
+      });
+      var active = items[state.activeSlot];
+      var activeLabel = bxT('storefront.packs.item_n', 'Item {n}', { n: state.activeSlot + 1 });
+      var problem = active ? problemText(pack, active, m) : '';
+      nodes.push(el('div', { class: 'brix-packs-railitems', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [
+        el('div', { class: 'brix-packs-railhead' }, [
+          el('b', { text: bxT('storefront.packs.your_items', 'Your items') }),
+          el('span', { 'aria-live': 'polite', text: left ? bxT('storefront.packs.n_left', '{count} left to choose', { count: left }) : bxT('storefront.packs.all_set', 'All set') }),
+        ]),
+        circles,
+        el('div', { class: 'brix-packs-picker' }, [
+          chipFields(pack, state.activeSlot, activeLabel, false),
+          problem ? el('p', { class: 'brix-packs-problem', text: problem }) : null,
+        ]),
+      ]));
+      return nodes;
+    }
+
+    // Templates · Price List (plain rows) and Offer Rows (boxed rows with a % OFF tag).
+    // The chosen row opens one line per item with that item's option chips.
+    function renderRows(pack, ctx, offer) {
+      var m = model(pack);
+      var list = el('div', { class: offer ? 'brix-packs-orows' : 'brix-packs-list', role: 'radiogroup', 'aria-label': ctx.label });
+      pack.tiers.forEach(function (t, index) {
+        var shown = ctx.shown(t, index);
+        var selected = index === state.tierIndex;
+        var disabled = tierDisabled(pack, t);
+        var pct = percentOf(shown);
+        var save = ctx.saveTextFor(shown);
+        var soldText = pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock');
+        var sub = disabled ? soldText
+          : offer ? (save || itemsText(t.quantity))
+          : (t.quantity > 1 && !money.hidden ? bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) : itemsText(t.quantity));
+        var row = el('button', tierRadio(pack, t, index, 'brix-packs-lrow', selected, disabled), [
+          el('span', { class: 'brix-packs-radio', 'aria-hidden': 'true' }),
+          el('span', { class: 'brix-packs-lname' }, [
+            el('span', { class: 'brix-packs-ltitle' }, [
+              tierName(t),
+              offer && pct ? el('span', { class: 'brix-packs-off', text: bxT('storefront.packs.pct_off', '{pct}% OFF', { pct: pct }) }) : null,
+              !offer && t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
+            ]),
+            el('span', { class: 'brix-packs-lsub', text: sub }),
+          ]),
+          money.hidden ? null : el('span', { class: 'brix-packs-lprice' }, [
+            el('strong', { text: ctx.priceText(shown.price) }),
+            offer
+              ? (ctx.showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: ctx.numberText(shown.subtotal) }) : null)
+              : (save ? el('span', { class: 'brix-packs-save', text: save }) : null),
+          ]),
+        ]);
+        var item = el('div', { class: 'brix-packs-litem', 'data-selected': selected ? '1' : null }, [offer && t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null, row]);
+        if (selected && !ctx.noPicking) {
+          var lines = el('div', { class: 'brix-packs-llines', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') });
+          itemsFor(pack, t).forEach(function (entry, slot) {
+            var label = bxT('storefront.packs.item_n', 'Item {n}', { n: slot + 1 });
+            var problem = problemText(pack, entry, m);
+            lines.appendChild(el('div', { class: 'brix-packs-lline', 'data-state': slotTone(entry) }, [
+              el('span', { class: 'brix-packs-lnum', 'aria-hidden': 'true', text: String(slot + 1) }),
+              chipFields(pack, slot, label, true),
+              problem ? el('p', { class: 'brix-packs-problem', text: problem }) : null,
+            ]));
+          });
+          item.appendChild(lines);
+        }
+        list.appendChild(bandWrap(item, ctx.bandOn(t, index, selected)));
+      });
+      return [list];
+    }
+
+    // Template · Savings Ladder: no pack to choose first. The shopper adds items
+    // to a tray; the pack is the tier whose quantity equals the items added.
+    function ladderMax(pack) {
+      var max = 0;
+      pack.tiers.forEach(function (t) { if (!tierDisabled(pack, t)) max = Math.max(max, Number(t.quantity) || 0); });
+      return max;
+    }
+    function ladderSync(pack) {
+      state.ladderMatch = false;
+      for (var i = 0; i < pack.tiers.length; i += 1) {
+        if (Number(pack.tiers[i].quantity) === state.picks.length && !tierDisabled(pack, pack.tiers[i])) { state.tierIndex = i; state.ladderMatch = true; return; }
+      }
+    }
+    // The option whose values are shown as add tiles: the one with variant photos, else the last.
+    function ladderTileOption(m) {
+      for (var i = 0; i < m.options.length; i += 1) if (m.photoOptions[i]) return i;
+      return m.options.length - 1;
+    }
+    function ladderVariantFor(m, values) {
+      for (var i = 0; i < m.variants.length; i += 1) {
+        var variant = m.variants[i];
+        var match = true;
+        for (var j = 0; j < m.options.length; j += 1) if (values[j] && variant.optionValues[j] !== values[j]) { match = false; break; }
+        if (match) return variant;
+      }
+      return null;
+    }
+    function ladderAdd(pack, values) {
+      var m = model(pack);
+      for (var i = 0; i < m.options.length; i += 1) {
+        if (!values[i]) { state.message = { type: 'info', text: bxT('storefront.packs.choose_first', 'Choose {name} first.', { name: m.options[i].name.toLowerCase() }) }; render(); return; }
+      }
+      var variant = m.options.length ? resolveVariant(m.variants, m.options, values) : m.variants[0];
+      if (!variant) { state.message = { type: 'info', text: bxT('storefront.packs.combo_unavailable', 'This combination isn\u2019t available. Choose a different {option}.', { option: m.options[m.options.length - 1].name }) }; render(); return; }
+      addPick(variant);
+    }
+    function renderLadder(pack, ctx) {
+      var m = model(pack);
+      var nodes = [];
+      var max = ladderMax(pack);
+      var count = state.picks.length;
+      var tiers = pack.tiers.filter(function (t) { return !tierDisabled(pack, t); });
+      var hits = tiers.filter(function (t) { return count >= Number(t.quantity); }).length;
+      var fill = tiers.length > 1 && hits > 0 ? ((hits - 1) / (tiers.length - 1)) * 100 : 0;
+      nodes.push(el('div', { class: 'brix-packs-ladder', 'aria-hidden': 'true' }, [
+        el('div', { class: 'brix-packs-ladder-track' }, [el('span', { style: 'width:' + fill + '%' })]),
+        el('ol', { class: 'brix-packs-ladder-nodes' }, tiers.map(function (t) {
+          var pct = percentOf(ctx.shown(t, -1));
+          return el('li', { class: 'brix-packs-ladder-node', 'data-hit': count >= Number(t.quantity) ? '1' : null }, [
+            el('span', { class: 'brix-packs-ladder-dot', text: String(t.quantity) }),
+            el('small', { text: pct ? '\u2212' + pct + '%' : bxT('storefront.packs.full_price', 'Full price') }),
+          ]);
+        })),
+      ]));
+      var next = null;
+      tiers.forEach(function (t) { if (!next && Number(t.quantity) > count) next = t; });
+      var nudge;
+      if (!count) nudge = [bxT('storefront.packs.add_to_start', 'Add an item to start your pack')];
+      else if (next) {
+        var nextPct = percentOf(ctx.shown(next, -1));
+        nudge = nextPct
+          ? [bxT('storefront.packs.add_more_save', 'Add {count} more to save {pct}%', { count: next.quantity - count, pct: nextPct })]
+          : [bxT('storefront.packs.add_more_for', 'Add {count} more for {name}', { count: next.quantity - count, name: tierName(next) })];
+      } else nudge = [el('b', { text: bxT('storefront.packs.top_saving', 'Top saving unlocked') })];
+      nodes.push(el('p', { class: 'brix-packs-nudge', role: 'status', 'aria-live': 'polite' }, nudge));
+
+      var tray = el('ol', { class: 'brix-packs-tray', 'aria-label': bxT('storefront.packs.n_of_total_selected', '{done} / {total} selected', { done: count, total: max }) });
+      for (var i = 0; i < max; i += 1) {
+        (function (index) {
+          var variant = state.picks[index] ? variantById(m, state.picks[index]) : null;
+          if (!variant) { tray.appendChild(el('li', { class: 'brix-packs-cell', 'aria-hidden': 'true' }, ['+'])); return; }
+          var name = variantName(pack, variant);
+          tray.appendChild(el('li', { class: 'brix-packs-cell', 'data-full': '1' }, [
+            photo(variant.image || pack.productImage, name),
+            el('span', { class: 'brix-packs-cell-name', text: name }),
+            el('button', { type: 'button', class: 'brix-packs-cell-x', 'data-fk': 'cell-' + index, 'aria-label': bxT('storefront.packs.remove_item_n', 'Remove item {n}, {name}', { n: index + 1, name: name }), onclick: function () { removeAt(index); } }, ['\u00d7']),
+          ]));
+        })(i);
+      }
+      nodes.push(tray);
+
+      if (!state.ladderSel || state.ladderSel.length !== m.options.length) state.ladderSel = emptySelection(m.options);
+      var full = count >= max;
+      var chooser = el('div', { class: 'brix-packs-lnext', role: 'group', 'aria-label': bxT('storefront.packs.next_item', 'Next item') });
+      if (!m.options.length) {
+        var only = m.variants[0];
+        chooser.appendChild(el('div', { class: 'brix-packs-ltiles' }, [el('button', { type: 'button', class: 'brix-packs-ltile', 'data-fk': 'tile-0', disabled: full || !only || !forSale(only), onclick: function () { ladderAdd(pack, []); } }, [
+          el('span', { class: 'brix-packs-ltile-plus', 'aria-hidden': 'true' }, [icon('plus')]),
+          el('span', { class: 'brix-packs-ltile-img' }, [photo(pack.productImage || (only && only.image), '')]),
+          el('span', { class: 'brix-packs-ltile-name', text: bxT('storefront.packs.add_one', 'Add one') }),
+        ])]));
+      } else {
+        var tileAt = ladderTileOption(m);
+        m.options.forEach(function (option, index) {
+          if (index === tileAt || option.values.length === 1) return;
+          chooser.appendChild(el('div', { class: 'brix-packs-chiprow', role: 'group', 'aria-label': option.name }, [
+            el('div', { class: 'brix-packs-chiprow-head' }, [el('span', { text: option.name }), el('b', { text: state.ladderSel[index] || bxT('storefront.packs.choose', 'Choose') })]),
+            el('div', { class: 'brix-packs-chips' }, option.values.map(function (value, position) {
+              return el('button', { type: 'button', class: 'brix-packs-chipbtn', 'aria-pressed': state.ladderSel[index] === value ? 'true' : 'false', 'data-fk': 'lc-' + index + '-' + position, onclick: function () { state.ladderSel[index] = value; state.message = null; render(); } }, [value]);
+            })),
+          ]));
+        });
+        var tileOption = m.options[tileAt];
+        chooser.appendChild(el('div', { class: 'brix-packs-chiprow-head' }, [el('span', { text: tileOption.name })]));
+        chooser.appendChild(el('div', { class: 'brix-packs-ltiles' }, tileOption.values.map(function (value, position) {
+          var values = state.ladderSel.slice();
+          values[tileAt] = value;
+          var known = ladderVariantFor(m, values);
+          var sellable = false;
+          m.variants.forEach(function (variant) {
+            var match = true;
+            for (var j = 0; j < m.options.length; j += 1) if (values[j] && variant.optionValues[j] !== values[j]) { match = false; break; }
+            if (match && forSale(variant)) sellable = true;
+          });
+          var img = valueImage(m, values, tileAt, value) || (known && known.image) || pack.productImage;
+          return el('button', {
+            type: 'button', class: 'brix-packs-ltile', 'data-fk': 'tile-' + position, disabled: full || !sellable,
+            'aria-label': bxT('storefront.packs.add_x', 'Add {name}', { name: value }) + (sellable ? '' : ' (' + bxT('storefront.drawer.sold_out', 'Sold out') + ')'),
+            onclick: function () { ladderAdd(pack, values); },
+          }, [
+            el('span', { class: 'brix-packs-ltile-plus', 'aria-hidden': 'true' }, [icon('plus')]),
+            el('span', { class: 'brix-packs-ltile-img' }, [photo(img, '')]),
+            el('span', { class: 'brix-packs-ltile-name', text: value }),
+          ]);
+        })));
+      }
+      nodes.push(chooser);
+
+      if (count && !money.hidden) {
+        var tier = state.ladderMatch ? pack.tiers[state.tierIndex] : null;
+        var prices = state.picks.map(function (id) { var v = variantById(m, id); return v && v.price !== null && v.price !== undefined ? Number(v.price) : fallbackPrice(pack); });
+        var shownNow = tier ? calc(prices, tier, money.decimals) : calc(prices, { discountType: 'none' }, money.decimals);
+        nodes.push(el('div', { class: 'brix-packs-total' }, [
+          el('span', { class: 'brix-packs-total-label', text: (tier ? tierName(tier) + ' \u00b7 ' : '') + itemsText(count) }),
+          el('span', { class: 'brix-packs-total-price' }, [
+            ctx.showWas && shownNow.savings > 0 ? el('span', { class: 'brix-packs-was', text: ctx.numberText(shownNow.subtotal) }) : null,
+            el('strong', { text: ctx.priceText(shownNow.price) }),
+          ]),
+        ]));
+      }
+      return nodes;
+    }
+
+    // ── Offer band (customization.band) ──────────────────────────────────────
+
+    function bandWrap(node, on) {
+      if (!on) return node;
+      var svg = document.createElementNS(SVG_NS, 'svg');
+      svg.setAttribute('class', 'brix-packs-band-svg');
+      svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('focusable', 'false');
+      var wrap = el('div', { class: 'brix-packs-band' });
+      wrap.appendChild(svg);
+      wrap.appendChild(node);
+      return wrap;
+    }
+
+    // Draw each band's text along a rounded rectangle through the middle of its
+    // strip. Two copies of the text, each exactly one lap long, follow each other
+    // round, so the loop never shows a seam.
+    function mountBands() {
+      state.bands = [];
+      var section = root.querySelector('.brix-packs-widget');
+      if (!section || !state.pack) return;
+      var cfg = (state.pack.customization && state.pack.customization.band) || {};
+      var label = bxText(typeof cfg.text === 'string' ? cfg.text.trim() : '', 'storefront.packs.band', 'Limited time offer');
+      var size = Number(cfg.textSize) >= 8 && Number(cfg.textSize) <= 16 ? Number(cfg.textSize) : 10;
+      var thick = Number(cfg.thickness) >= 12 && Number(cfg.thickness) <= 28 ? Number(cfg.thickness) : 18;
+      var radius = parseFloat(getComputedStyle(section).getPropertyValue('--brix-packs-radius')) || 8;
+      Array.prototype.forEach.call(section.querySelectorAll('.brix-packs-band'), function (band, at) {
+        var svg = band.firstChild;
+        var w = band.offsetWidth;
+        var h = band.offsetHeight;
+        if (!w || !h || !svg) return;
+        // The strip is the band's padding (thinner round side-by-side cards than the setting).
+        var strip = parseFloat(getComputedStyle(band).paddingTop) || thick;
+        band.style.setProperty('--brix-packs-band-real', strip + 'px');
+        var fontSize = Math.min(size, Math.round(strip * 0.62));
+        var mid = strip / 2;
+        var r = Math.max(2, Math.min(radius + mid, (h - strip) / 2, (w - strip) / 2));
+        var x0 = mid; var y0 = mid; var x1 = w - mid; var y1 = h - mid;
+        var d = 'M' + (x0 + r) + ',' + y0 + ' H' + (x1 - r) + ' A' + r + ',' + r + ' 0 0 1 ' + x1 + ',' + (y0 + r)
+          + ' V' + (y1 - r) + ' A' + r + ',' + r + ' 0 0 1 ' + (x1 - r) + ',' + y1
+          + ' H' + (x0 + r) + ' A' + r + ',' + r + ' 0 0 1 ' + x0 + ',' + (y1 - r)
+          + ' V' + (y0 + r) + ' A' + r + ',' + r + ' 0 0 1 ' + (x0 + r) + ',' + y0 + ' Z';
+        var lap = 2 * (x1 - x0 - 2 * r) + 2 * (y1 - y0 - 2 * r) + 2 * Math.PI * r;
+        var unit = label.toUpperCase() + '\u2002\u00b7\u2002';
+        var copies = Math.max(1, Math.round(lap / (unit.length * fontSize * 0.68)));
+        var text = new Array(copies + 1).join(unit);
+        var id = uid + '-band' + at;
+        svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+        svg.textContent = '';
+        var path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('id', id);
+        path.setAttribute('d', d);
+        path.setAttribute('fill', 'none');
+        svg.appendChild(path);
+        var node = document.createElementNS(SVG_NS, 'text');
+        node.setAttribute('font-size', String(fontSize));
+        node.setAttribute('font-weight', '700');
+        node.setAttribute('letter-spacing', '1');
+        node.setAttribute('dominant-baseline', 'central');
+        node.style.fill = 'var(--brix-packs-band-text,#ffffff)';
+        var parts = [0, lap].map(function (offset) {
+          var tp = document.createElementNS(SVG_NS, 'textPath');
+          tp.setAttribute('href', '#' + id);
+          tp.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', '#' + id);
+          tp.setAttribute('startOffset', String(offset));
+          tp.setAttribute('textLength', lap.toFixed(1));
+          tp.setAttribute('lengthAdjust', 'spacing');
+          tp.textContent = text;
+          node.appendChild(tp);
+          return tp;
+        });
+        svg.appendChild(node);
+        state.bands.push({ a: parts[0], b: parts[1], lap: lap });
+      });
+      var speed = Number(cfg.speed);
+      state.bandSpeed = isFinite(speed) && speed >= 0 && speed <= 80 ? speed : 30;
+      var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (state.bands.length && state.bandSpeed > 0 && !still && !state.bandRaf && typeof requestAnimationFrame === 'function') state.bandRaf = requestAnimationFrame(bandTick);
+      if (!state.bandWatch && typeof ResizeObserver === 'function') {
+        var lastWidth = root.offsetWidth;
+        state.bandWatch = new ResizeObserver(function () { if (root.offsetWidth !== lastWidth) { lastWidth = root.offsetWidth; mountBands(); } });
+        state.bandWatch.observe(root);
+      }
+    }
+    function bandTick(time) {
+      if (!state.bands.length || !state.bandSpeed) { state.bandRaf = 0; return; }
+      var moved = (time * state.bandSpeed) / 1000;
+      state.bands.forEach(function (band) {
+        var offset = -(moved % band.lap);
+        band.a.setAttribute('startOffset', offset.toFixed(1));
+        band.b.setAttribute('startOffset', (offset + band.lap).toFixed(1));
+      });
+      state.bandRaf = requestAnimationFrame(bandTick);
+    }
+
     function render() {
       var active = document.activeElement;
       var focusKey = active && root.contains(active) ? active.getAttribute('data-fk') : null;
@@ -1381,6 +1933,33 @@
       var closed = layout === 'quick_add' && !state.open && !hideVars;
       var images = custom.images || {};
       var rowImage = rows && images.enabled !== false && pack.productImage ? pack.productImage : '';
+      // Offer band: which packs get the moving-text strip (customization.band.target).
+      var bandCfg = custom.band || {};
+      function bandOn(t, index, selected) {
+        if (bandCfg.enabled !== true || layout === 'rail' || layout === 'ladder') return false;
+        if (bandCfg.target === 'all') return true;
+        if (bandCfg.target === 'selected') return selected;
+        return Boolean(t.badge && String(t.badge).trim());
+      }
+      var minimal = layout === 'rail' || layout === 'list' || layout === 'ladder' || layout === 'offer_rows';
+      var items, done, ready;
+      if (minimal) {
+        // Quantity Rail, Price List, Savings Ladder, Offer Rows: their own pack choice
+        // and item pickers. Items are picked only when the product has options to pick.
+        if (layout === 'ladder') { ladderSync(pack); tier = pack.tiers[state.tierIndex]; }
+        var ctx = {
+          label: heading || bxT('storefront.packs.choose_pack', 'Choose a pack'), shown: function (t, index) { return shownTier(pack, t, index); },
+          priceText: priceText, numberText: numberText, showWas: showWas, saveTextFor: saveTextFor, noPicking: hideVars || !m.options.length, bandOn: bandOn,
+        };
+        var parts = layout === 'rail' ? renderRail(pack, tier, ctx) : layout === 'ladder' ? renderLadder(pack, ctx) : renderRows(pack, ctx, layout === 'offer_rows');
+        parts.forEach(function (node) { section.appendChild(node); });
+        items = tier ? itemsFor(pack, tier) : [];
+        done = readyCount(items);
+        ready = Boolean(tier) && items.length > 0 && done === items.length && (layout !== 'ladder' || state.ladderMatch);
+        if (tier && !ready && layout !== 'ladder' && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
+      } else {
+      // Stack Cards: each card shows its quantity of product photos (at most 4).
+      var stackSrc = layout === 'stack' ? (pack.productImage || (defaultVariant(m) && defaultVariant(m).image) || '') : '';
       pack.tiers.forEach(function (t, index) {
         var shown = shownTier(pack, t, index);
         var selected = !closed && index === state.tierIndex;
@@ -1410,30 +1989,38 @@
             ]),
           ]);
           if (selected && !hideVars) row.appendChild(el('div', { class: 'brix-packs-expand', role: 'group', 'aria-label': bxT('storefront.packs.choose_your_items', 'Choose your items') }, [renderImageSlots(pack, t, itemsFor(pack, t))]));
-          cards.appendChild(row);
+          cards.appendChild(bandWrap(row, bandOn(t, index, selected)));
           return;
         }
-        cards.appendChild(el('button', tierProps, [
+        var stackPhotos = null;
+        if (layout === 'stack') {
+          stackPhotos = el('span', { class: 'brix-packs-sphotos', 'aria-hidden': 'true' });
+          for (var k = 0; k < Math.min(Number(t.quantity) || 1, 4); k += 1) stackPhotos.appendChild(el('span', null, [photo(stackSrc, '')]));
+        }
+        cards.appendChild(bandWrap(el('button', tierProps, [
           t.badge ? el('span', { class: 'brix-packs-badge', text: t.badge }) : null,
           el('span', { class: 'brix-packs-card-check', 'aria-hidden': 'true' }),
+          stackPhotos,
           el('span', { class: 'brix-packs-card-name', text: tierName(t) }),
           el('span', { class: 'brix-packs-card-count', text: itemsText(t.quantity) }),
           money.hidden ? null : el('span', { class: 'brix-packs-card-price' }, [
             el('strong', { text: priceText(shown.price) }),
             showWas && shown.savings > 0 ? el('span', { class: 'brix-packs-was', text: numberText(shown.subtotal) }) : null,
           ]),
+          layout === 'stack' && !money.hidden && t.quantity > 1 ? el('span', { class: 'brix-packs-each', text: bxT('storefront.packs.each', '{price} each', { price: money.format(shown.price / t.quantity) }) }) : null,
           save ? el('span', { class: 'brix-packs-save', text: save }) : null,
           disabled ? el('span', { class: 'brix-packs-card-note', text: pack.available === false ? bxT('storefront.drawer.sold_out', 'Sold out') : bxT('storefront.packs.low_stock', 'Low stock') }) : null,
-        ]));
+        ]), bandOn(t, index, selected)));
       });
+      if (cards.querySelector('.brix-packs-band')) cards.classList.add('has-band');
       section.appendChild(cards);
 
-      var items = tier ? itemsFor(pack, tier) : [];
-      var done = readyCount(items);
-      var ready = !closed && Boolean(tier) && items.length > 0 && done === items.length;
+      items = tier ? itemsFor(pack, tier) : [];
+      done = readyCount(items);
+      ready = !closed && Boolean(tier) && items.length > 0 && done === items.length;
       if (tier && closed) {
         section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: bxT('storefront.packs.choose_pack_first', 'Choose a pack to pick your items.') }));
-      } else if (tier && hideVars) {
+      } else if (tier && (hideVars || (layout === 'stack' && !m.options.length))) {
         // Offer cards only; a hint appears just when the page's variant can't be bought.
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
       } else if (tier && rows) {
@@ -1459,6 +2046,8 @@
           ]),
         ]));
         if (!ready && !tierDisabled(pack, tier)) section.appendChild(el('p', { class: 'brix-packs-hint', role: 'status', text: hintText(m, tier, items) }));
+      }
+
       }
 
       if (content.promoText) section.appendChild(el('p', { class: 'brix-packs-promo', text: content.promoText }));
@@ -1488,6 +2077,7 @@
         codButton,
       ]));
       root.appendChild(section);
+      mountBands();
       var newGrid = root.querySelector('.brix-packs-grid');
       if (newGrid && gridScroll) newGrid.scrollTop = gridScroll;
       restoreFocus(focusKey);
@@ -1524,6 +2114,17 @@
       values[index] = value;
       state.slots[slot] = values;
       state.message = null;
+      // Quantity Rail: once an item is complete, open the next item still to choose.
+      if (layoutFor(state.pack) === 'rail') {
+        var m = model(state.pack);
+        var status = selectionStatus(m.variants, m.options, values);
+        if (status.variant && !status.problem) {
+          for (var step = 1; step < state.slots.length; step += 1) {
+            var next = (slot + step) % state.slots.length;
+            if (selectionStatus(m.variants, m.options, state.slots[next]).problem === 'incomplete') { state.activeSlot = next; break; }
+          }
+        }
+      }
       render();
     }
 
@@ -1532,7 +2133,9 @@
       var tier = pack && pack.tiers[state.tierIndex];
       if (!tier) return;
       var m = model(pack);
-      var reason = m.rules.sameVariant ? sameBlockReason(variant, tier) : pickBlockReason(state.picks, variant, { quantity: tier.quantity, allowDuplicates: m.rules.allowDuplicates });
+      // Savings Ladder: the tray holds up to the biggest pack; the pack follows the count.
+      var limit = layoutFor(pack) === 'ladder' ? ladderMax(pack) : tier.quantity;
+      var reason = m.rules.sameVariant ? sameBlockReason(variant, tier) : pickBlockReason(state.picks, variant, { quantity: limit, allowDuplicates: m.rules.allowDuplicates });
       if (reason) { state.message = { type: 'info', text: blockText(reason, pack, variant) }; render(); return; }
       if (m.rules.sameVariant) {
         state.picks = [];
@@ -1566,6 +2169,7 @@
       state.tierIndex = index;
       state.open = true;
       state.openPicker = null;
+      state.activeSlot = 0;
       state.message = null;
       syncSelections(state.pack);
       render();
@@ -1756,6 +2360,8 @@
           state.tierIndex = firstEnabledTier(pack);
           state.open = false;
           state.message = null;
+          state.activeSlot = 0;
+          state.ladderSel = [];
           seed(pack);
         }
         syncSelections(pack);
@@ -1778,7 +2384,13 @@
       },
       // The theme's own Add to cart adds the selected Pack (content.themeAddsPack).
       addPack: function () { addToCart(false); },
-      destroy: function () { document.removeEventListener('click', onDocumentClick); root.textContent = ''; state.pack = null; },
+      destroy: function () {
+        document.removeEventListener('click', onDocumentClick);
+        if (state.bandRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(state.bandRaf);
+        if (state.bandWatch) state.bandWatch.disconnect();
+        state.bands = []; state.bandRaf = 0; state.bandWatch = null;
+        root.textContent = ''; state.pack = null;
+      },
     };
   }
 
