@@ -738,7 +738,16 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         <div role="radiogroup" aria-label="Pack type" style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
           {PACK_TYPES.map((type) => {
             const selected = currentType.id === type.id;
-            const sample = type.id === 'same_variant' ? ['Black / M', 'Black / M', 'Black / M'] : type.id === 'combo' ? ['Kurta / M', 'Dupatta / Red'] : ['Black / M', 'White / S', 'Grey / L'];
+            // Example text comes from the merchant's own product/variants, not a fixed apparel sample.
+            const vt = variants.map((variant) => variant.title).filter((title) => title && title !== 'Default Title');
+            const mainTitle = form.productTitle || 'This product';
+            const addOn = (form.tiers.flatMap((tier) => tier.items || []).find((item) => item.title) || {}).title || 'Add-on product';
+            const sample = type.id === 'same_variant' ? [vt[0] || mainTitle, vt[0] || mainTitle, vt[0] || mainTitle]
+              : type.id === 'combo' ? [mainTitle, addOn]
+              : [vt[0] || mainTitle, vt[1] || vt[0] || mainTitle, vt[2] || vt[0] || mainTitle];
+            const example = type.id === 'same_variant' ? `${vt[0] || mainTitle} × 3`
+              : type.id === 'combo' ? `${mainTitle} + ${addOn}`
+              : [vt[0], vt[1], vt[2]].filter(Boolean).join(' + ') || `${mainTitle} (different variants)`;
             return (
               <button key={type.id} type="button" role="radio" aria-checked={selected} onClick={() => { if (!selected) chooseType(type); }}
                 style={{ textAlign: 'left', font: 'inherit', cursor: 'pointer', background: selected ? '#f3f3f3' : '#fff', border: `2px solid ${selected ? '#111111' : '#e3e5e8'}`, borderRadius: 14, padding: 24 }}>
@@ -750,7 +759,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                       <span key={index} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: selected ? '#e8e8e8' : '#f3f4f6', color: '#303030' }}>{index + 1} · {label}</span>
                     ))}
                   </div>
-                  <Text as="span" variant="bodySm" tone="subdued">Example: {type.example}</Text>
+                  <Text as="span" variant="bodySm" tone="subdued">Example: {example}</Text>
                 </BlockStack>
               </button>
             );
@@ -1097,7 +1106,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
         {isCombo && (
           <InlineStack gap="200" blockAlign="center">
             <Button icon={PlusIcon} onClick={addComboItemToAll}>Add a product to every pack</Button>
-            <Text as="span" variant="bodySm" tone="subdued">For example the same dupatta with every kurta.</Text>
+            <Text as="span" variant="bodySm" tone="subdued">For example the same add-on product with every pack.</Text>
           </InlineStack>
         )}
         {form.tiers.map((tier, index) => {
@@ -1180,7 +1189,7 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
                   <TextField label={tier.discountType === 'set' ? 'Pack price' : 'Value'} type="number" min={0} disabled={tier.discountType === 'none'} value={tier.discountValue} onChange={(value) => updateTier(index, { discountValue: value })} suffix={tier.discountType === 'percentage' ? '%' : tier.discountType === 'fixed' || tier.discountType === 'set' ? currency.code : undefined} placeholder={tier.discountType === 'none' ? '—' : '0'} autoComplete="off" error={tierErrors(index, 'discountValue')} />
                 </div>
                 <div className="pc-row2">
-                  <TextField label="Display name" value={tier.name} maxLength={60} onChange={(value) => updateTier(index, { name: value })} placeholder={isCombo ? 'e.g. Kurta + Dupatta' : `Buy ${Number(tier.quantity) || ''}`.trim()} helpText="Optional" autoComplete="off" error={tierErrors(index, 'name')} />
+                  <TextField label="Display name" value={tier.name} maxLength={60} onChange={(value) => updateTier(index, { name: value })} placeholder={isCombo ? `e.g. ${form.productTitle || 'Main product'} + add-on` : `Buy ${Number(tier.quantity) || ''}`.trim()} helpText="Optional" autoComplete="off" error={tierErrors(index, 'name')} />
                   <TextField label="Badge" value={tier.badge} maxLength={24} onChange={(value) => updateTier(index, { badge: value })} placeholder="e.g. Best value" helpText="Optional" autoComplete="off" error={tierErrors(index, 'badge')} />
                 </div>
                 {shared && tier.discountType !== 'none' && appliesRows.length > 0 && (() => {
