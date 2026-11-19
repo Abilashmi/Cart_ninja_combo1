@@ -49,6 +49,7 @@
   {%- comment -%} Store-wide "Hide decimals in prices" (Account → Price display, app/services/price-display.server.js). {%- endcomment -%}
   <script>window.__brixWholePrices = window.__brixWholePrices || {% if app.metafields.brix.display.value.wholePrices == true %}true{% else %}false{% endif %};</script>
   {% render 'brix-i18n' %}
+  {% render 'brix-font', display: app.metafields.brix.display.value %}
   <script src="{{ 'packs_widget.js' | asset_url }}" defer></script>
 {% endif %}
 

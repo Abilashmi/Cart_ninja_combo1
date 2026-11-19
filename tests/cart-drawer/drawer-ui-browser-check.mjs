@@ -618,6 +618,75 @@ for (const width of [1280, 390]) {
   await page.context().close();
 }
 
+/* A theme drawer parked off the right edge (never display:none) that loses a
+   loading class on page load (Standtron: <aside class="cart-drawer is-loading">).
+   The watcher took that first change for an open: our drawer opened by itself.
+   A drawer that really slides onto the screen must still open ours. */
+{
+  const parked = '<style>.cart-drawer{position:fixed;top:0;left:100%;width:380px;height:100vh;background:#fff;transition:transform .2s} .cart-drawer.shown-now{transform:translateX(-100%)}</style>' +
+    '<aside class="cart-drawer is-loading" id="parked"><p>Theme cart</p></aside>';
+  const page = await open({ width: 1280, before: parked });
+  await page.evaluate(() => document.getElementById('cc-backdrop')?.click());
+  await page.waitForTimeout(600);
+  const brixOpen = () => page.evaluate(() => { const d = document.getElementById('cc-drawer'); if (!d) return false; const r = d.getBoundingClientRect(); return r.left < innerWidth - 10 && getComputedStyle(d).visibility !== 'hidden'; });
+  check('parked theme drawer: our drawer closed to start', !(await brixOpen()));
+  await page.evaluate(() => document.getElementById('parked').classList.remove('is-loading'));
+  await page.waitForTimeout(1000);
+  check('parked theme drawer: losing its loading class never opens our cart', !(await brixOpen()));
+  // One the theme adds later, seen for the first time off the screen.
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<aside class="cart-drawer is-loading" id="late"><p>Theme cart</p></aside>');
+    setTimeout(() => document.getElementById('late').classList.remove('is-loading'), 50);
+  });
+  await page.waitForTimeout(1000);
+  check('parked theme drawer: a late one losing its loading class never opens our cart', !(await brixOpen()));
+  // The theme really opens one (a class we don't know, it slides on screen).
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<aside class="cart-drawer" id="slides"><p>Theme cart</p></aside>');
+    requestAnimationFrame(() => document.getElementById('slides').classList.add('shown-now'));
+  });
+  await page.waitForTimeout(1200);
+  check('parked theme drawer: one sliding onto the screen still opens ours', await brixOpen());
+  allErrors.push(...page.errors);
+  await page.context().close();
+}
+
+/* Account → Font (snippets/brix-font.liquid, filled in as Liquid would with a
+   saved font): every BRIX text takes it, even where the theme styles a tag;
+   text with its own font (inline font-family, SVG font-family attribute) and
+   the theme's own page keep theirs. */
+{
+  const snippet = fs.readFileSync(path.resolve('extensions/cart-drawer/snippets/brix-font.liquid'), 'utf8');
+  const body = snippet.slice(snippet.indexOf('-%}', snippet.indexOf('{%- if')) + 3, snippet.indexOf('{%- endif'))
+    .replace(/\{\{ display\.fontQuery[^}]*\}\}/, 'Poppins:wght@400;500;600;700')
+    .replace(/\{\{ display\.fontStack[\s\S]*?remove: ';' \}\}/, `'Poppins', system-ui, -apple-system, "Segoe UI", sans-serif`);
+  const themeCss = '<style>body{font-family:Georgia,serif} button,h2,h3,.price{font-family:"Courier New",monospace}</style>';
+  const page = await open({ width: 1280, before: themeCss + body });
+  await page.evaluate(() => {
+    const d = document.getElementById('cc-drawer');
+    d.insertAdjacentHTML('beforeend', '<h3 id="t-h3">Theme-styled heading</h3><span id="t-own" style="font-family:monospace">CODE10</span><svg><text id="t-svg" font-family="Arial">VISA</text></svg>');
+    document.querySelector('main').insertAdjacentHTML('beforeend', '<h2 id="t-page">Theme page heading</h2>');
+  });
+  const fonts = await page.evaluate(() => {
+    const f = (el) => (el ? getComputedStyle(el).fontFamily : 'missing');
+    return {
+      title: f(document.querySelector('#cc-drawer .bxcd-item, #cc-drawer [class*="title"]')),
+      checkout: f(document.querySelector('#cc-checkout-wrap a, #cc-checkout-wrap button')),
+      h3: f(document.getElementById('t-h3')), own: f(document.getElementById('t-own')), svg: f(document.getElementById('t-svg')),
+      page: f(document.getElementById('t-page')), body: f(document.body),
+    };
+  });
+  const isPoppins = (v) => /^"?Poppins"?,/.test(v);
+  check('font: drawer text in the saved font', isPoppins(fonts.title), fonts.title);
+  check('font: Checkout button in it too (theme styles buttons)', isPoppins(fonts.checkout), fonts.checkout);
+  check('font: a heading the theme styles takes it', isPoppins(fonts.h3), fonts.h3);
+  check('font: text with its own font keeps it', fonts.own === 'monospace' && fonts.svg === 'Arial', `${fonts.own} / ${fonts.svg}`);
+  check("font: the theme's own page is untouched", /Courier/.test(fonts.page) && /Georgia/.test(fonts.body), `${fonts.page} / ${fonts.body}`);
+  await page.screenshot({ path: path.join(shotDir, 'font-poppins.png') });
+  allErrors.push(...page.errors);
+  await page.context().close();
+}
+
 /* Fast Add on a product page: the drawer opens at the tap with the product
    (from the page's product), Shopify's answer then gives the real line; a
    refusal takes it back out; closed before the answer, it stays closed. */

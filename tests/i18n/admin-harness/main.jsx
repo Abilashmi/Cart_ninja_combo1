@@ -36,13 +36,15 @@ const router = createMemoryRouter([
     Component: AccountPage,
     loader: () => ({
       shop: 'demo.myshopify.com', shopInfo: { name: 'Demo', myshopifyDomain: 'demo.myshopify.com', createdAt: '2026-01-02T00:00:00Z' },
-      planKey: 'starter', subscriptionId: null, priceDisplay: { wholePrices: false },
+      planKey: 'starter', subscriptionId: null, priceDisplay: { wholePrices: false, font: '' },
       language: { value: lang === 'en' ? 'auto' : lang, choices: ADMIN_LANGUAGE_CHOICES.map((v) => ({ value: v, name: LANGUAGE_NAMES[v] || '' })) },
     }),
     action: async ({ request }) => {
       const form = Object.fromEntries(new URLSearchParams(await request.text()));
       window.__posts.push(form);
-      return form.intent === 'language' ? { ok: true, language: form.language } : { ok: true, priceDisplay: { wholePrices: form.wholePrices === 'true' } };
+      if (form.intent === 'language') return { ok: true, language: form.language };
+      if (form.intent === 'font') return { ok: true, priceDisplay: { wholePrices: false, font: form.font } };
+      return { ok: true, priceDisplay: { wholePrices: form.wholePrices === 'true' } };
     },
   },
   ...['/app/cartdrawer', '/app/bundles', '/app/cod', '/app/packs', '/app/fbt', '/app/productwidget'].map((path) => ({ path, Component: function ModuleStub() { return <div data-testid="module-page">{useLocation().pathname}</div>; } })),

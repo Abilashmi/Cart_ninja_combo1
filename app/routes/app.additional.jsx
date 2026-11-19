@@ -5,6 +5,7 @@ import {
   Page, Card, BlockStack, InlineStack, Text, Badge, Button, Divider, Banner, Icon, Checkbox, Select,
 } from '@shopify/polaris';
 import { getPriceDisplay, savePriceDisplay } from '../services/price-display.server';
+import { BRIX_FONTS, brixFontHref, brixFontStack } from '../utils/brix-font.shared';
 import { ADMIN_LANGUAGE_CHOICES, LANGUAGE_NAMES, getAdminLanguage, saveAdminLanguage } from '../i18n/admin.server';
 import { useAdminLocale, useT } from '../i18n/admin';
 import { FeatureHeaderBar } from '../components/feature/FeatureHeaderBar';
@@ -67,7 +68,7 @@ export const loader = async ({ request }) => {
   };
 };
 
-// Price display (services/price-display.server.js): saved when the box is ticked.
+// Price display and Font (services/price-display.server.js): saved when ticked / picked.
 // Language (i18n/admin.server.js): saved when picked; app.jsx reloads the admin texts.
 export const action = async ({ request }) => {
   const { admin } = await authenticate.admin(request);
@@ -78,6 +79,14 @@ export const action = async ({ request }) => {
       return { ok: true, language: await saveAdminLanguage(admin, String(form.get('language') || '')) };
     } catch (e) {
       console.error('[Account] language save failed:', e);
+      return { ok: false, error: 'error.admin.save_failed' };
+    }
+  }
+  if (intent === 'font') {
+    try {
+      return { ok: true, priceDisplay: await savePriceDisplay(admin, { font: String(form.get('font') || '') }) };
+    } catch (e) {
+      console.error('[Account] font save failed:', e);
       return { ok: false, error: 'error.admin.save_failed' };
     }
   }
@@ -158,6 +167,58 @@ function PriceDisplayCard({ initial }) {
             fetcher.submit({ intent: 'price-display', wholePrices: String(v) }, { method: 'post' });
           }}
         />
+      </BlockStack>
+    </Card>
+  );
+}
+
+// Account → Font: one font for every BRIX widget on the store ('' = the
+// theme's own, the default). snippets/brix-font.liquid applies it.
+function FontCard({ initial }) { // eslint-disable-line react/prop-types
+  const t = useT();
+  const fetcher = useFetcher();
+  const [font, setFont] = useState(initial?.font || ''); // eslint-disable-line react/prop-types
+  const saving = fetcher.state !== 'idle';
+  useEffect(() => {
+    if (fetcher.state !== 'idle' || !fetcher.data) return;
+    if (fetcher.data.ok) {
+      setFont(fetcher.data.priceDisplay?.font || '');
+      if (typeof shopify !== 'undefined') shopify.toast.show(t('admin.account.font_saved'));
+    } else {
+      setFont(initial?.font || ''); // eslint-disable-line react/prop-types
+      if (typeof shopify !== 'undefined') shopify.toast.show(t(fetcher.data.error || 'error.admin.save_failed'), { isError: true });
+    }
+  }, [fetcher.state, fetcher.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const group = (kind) => BRIX_FONTS.filter((f) => f.kind === kind).map((f) => ({ value: f.name, label: f.name }));
+  const options = [
+    { value: '', label: t('admin.account.font_theme') },
+    { title: t('admin.account.font_sans'), options: group('sans') },
+    { title: t('admin.account.font_serif'), options: group('serif') },
+  ];
+  const href = brixFontHref(font);
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <Text as="h2" variant="headingMd">{t('admin.account.font_title')}</Text>
+        <Divider />
+        <Select
+          label={t('admin.account.font_label')}
+          options={options}
+          value={font}
+          disabled={saving}
+          helpText={t('admin.account.font_help')}
+          onChange={(v) => {
+            setFont(v);
+            fetcher.submit({ intent: 'font', font: v }, { method: 'post' });
+          }}
+        />
+        {href ? <link rel="stylesheet" href={href} /> : null}
+        <div
+          data-brix-font-sample
+          style={{ fontFamily: brixFontStack(font) || 'inherit', fontSize: 16, padding: '12px 14px', border: '1px solid #e3e3e3', borderRadius: 10, background: '#fafafa' }}
+        >
+          {t('admin.account.font_sample')}
+        </div>
       </BlockStack>
     </Card>
   );
@@ -276,6 +337,7 @@ export default function AccountPage() {
         <LanguageCard initial={language} />
 
         <PriceDisplayCard initial={priceDisplay} />
+        <FontCard initial={priceDisplay} />
 
         {/* Support */}
         <Card>

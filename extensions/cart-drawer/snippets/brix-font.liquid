@@ -1,0 +1,6 @@
+{%- comment -%} Store-wide BRIX font, render with display: app.metafields.brix.display.value (Account → Font, app/utils/brix-font.shared.js; saved in app.metafields.brix.display only from that list). Nothing at all with the theme's font (the default). Sets --brix-font and puts it on every BRIX widget; text with its own font (inline font-family: combo heading font, FBT offer font, coupon codes, SVG text) keeps it. {%- endcomment -%}
+{%- if display.font != blank and display.fontQuery != blank and display.fontStack != blank -%}
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ display.fontQuery | escape }}&display=swap">
+<style>:root{--brix-font:{{ display.fontStack | remove: '<' | remove: '{' | remove: '}' | remove: ';' }}}#cc-root,#cc-overlay,ps-fbt-widget,ps-coupon-slider,.brix-packs-widget,[data-brix-combo-root],[data-brix-combo-popup],.bxpay,:is(#cc-root,#cc-overlay,ps-fbt-widget,ps-coupon-slider,.brix-packs-widget,[data-brix-combo-root],[data-brix-combo-popup],.bxpay) *:not([style*="font-family"]):not([font-family]){font-family:var(--brix-font)!important}</style>
+{%- endif -%}

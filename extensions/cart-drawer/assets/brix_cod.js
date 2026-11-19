@@ -560,7 +560,7 @@
     '*{box-sizing:border-box;font-family:inherit}',
     '.ov{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:2147483647;display:flex;align-items:flex-end;justify-content:center;opacity:0;transition:opacity .22s;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}',
     '.ov.on{opacity:1}',
-    '.sh{--tint:#f3f4f6;--tint:color-mix(in srgb,var(--cod-bg,#111827) 9%,#fff);--ring:color-mix(in srgb,var(--cod-bg,#111827) 35%,transparent);background:#fff;color:#111827;width:100%;max-width:460px;max-height:92vh;border-radius:22px 22px 0 0;display:flex;flex-direction:column;transform:translateY(40px);transition:transform .28s cubic-bezier(.2,.9,.3,1.15);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.45;box-shadow:0 -12px 48px rgba(0,0,0,.22);overflow:hidden;position:relative}',
+    '.sh{--tint:#f3f4f6;--tint:color-mix(in srgb,var(--cod-bg,#111827) 9%,#fff);--ring:color-mix(in srgb,var(--cod-bg,#111827) 35%,transparent);background:#fff;color:#111827;width:100%;max-width:460px;max-height:92vh;border-radius:22px 22px 0 0;display:flex;flex-direction:column;transform:translateY(40px);transition:transform .28s cubic-bezier(.2,.9,.3,1.15);font-family:var(--brix-font,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif);font-size:15px;line-height:1.45;box-shadow:0 -12px 48px rgba(0,0,0,.22);overflow:hidden;position:relative}',
     '.ov.on .sh{transform:none}',
     '.sh.drag{transition:none}',
     '@media (min-width:640px){.ov{align-items:center}.sh{border-radius:20px}.grab{display:none}}',
@@ -2075,7 +2075,7 @@
       'margin:' + z.marginTop + 'px 0 ' + z.marginBottom + 'px 0;padding:' + z.paddingY + 'px ' + z.paddingX + 'px;' +
       (o.paint || buttonPaint(look)) + 'border:none;border-radius:' + z.radius + 'px;' +
       'text-shadow:none;outline-offset:2px;appearance:none;-webkit-appearance:none;' +
-      'font-family:inherit;line-height:1.25;text-decoration:none;text-align:center;' + buttonType(look) +
+      'font-family:var(--brix-font,inherit);line-height:1.25;text-decoration:none;text-align:center;' + buttonType(look) +
       'cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';opacity:' + (disabled ? '0.5' : '1') + ';' +
       'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px') + '">' +
       '<span style="' + important('display:inline-flex;align-items:center;gap:8px;color:inherit;font:inherit;text-transform:inherit;letter-spacing:inherit') + '">' +
@@ -2166,7 +2166,7 @@
       'margin:' + (cs.placement === 'above' ? '0 0 10px 0' : '10px 0 0 0') + ';' +
       'padding:' + (link ? Math.max(2, Math.round(cs.paddingY / 2)) + 'px 8px' : cs.paddingY + 'px 16px') + ';' +
       paint + 'border:none;border-radius:' + (link ? 0 : cs.radius) + 'px;text-shadow:none;appearance:none;-webkit-appearance:none;' +
-      'font-family:inherit;font-size:' + cs.fontSize + 'px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;' +
+      'font-family:var(--brix-font,inherit);font-size:' + cs.fontSize + 'px;font-weight:600;line-height:1.25;letter-spacing:normal;text-transform:none;' +
       'text-align:center;text-decoration:' + (link ? 'underline' : 'none') + ';text-underline-offset:3px;cursor:pointer;opacity:1') + '">' +
       esc(bxText(cs.text, 'storefront.drawer.continue_shopping', 'Continue shopping')) + '</button>';
   }
@@ -3357,7 +3357,7 @@
         '[data-brix-pay-cod] .shopify-payment-button,[data-brix-pay-cod] [data-shopify="payment-button"],[data-brix-pay-cod] shopify-buy-it-now-button,[data-brix-pay-cod] shopify-accelerated-checkout{display:none !important}',
         // The merchant's own Buy it now (its selector, e.g. Shiprocket's) while COD is chosen.
         '[data-brix-pay-hidden]{display:none !important}',
-        '.bxpay{display:block;width:100%;max-width:100%;margin:14px 0;padding:0;font-family:inherit;line-height:1.4;text-align:left;box-sizing:border-box}',
+        '.bxpay{display:block;width:100%;max-width:100%;margin:14px 0;padding:0;font-family:var(--brix-font,inherit);line-height:1.4;text-align:left;box-sizing:border-box}',
         '.bxpay *,.bxpay *:before,.bxpay *:after{box-sizing:border-box}',
         '.bxpay-h{display:block;margin:0 0 8px;font-size:14px;font-weight:600;letter-spacing:normal;text-transform:none}',
         '.bxpay-banner{display:flex;align-items:flex-start;gap:10px;margin:0 0 10px;padding:10px 12px;border-radius:var(--bxpay-r);background:var(--bxpay-sel-bg);color:var(--bxpay-sel-fg);border:1px solid var(--bxpay-online)}',

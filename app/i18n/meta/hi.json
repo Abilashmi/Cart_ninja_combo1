@@ -31,6 +31,38 @@
     "status": "ai",
     "srcHash": "2a981fbd"
   },
+  "admin.account.font_help": {
+    "status": "ai",
+    "srcHash": "8c52d3e4"
+  },
+  "admin.account.font_label": {
+    "status": "ai",
+    "srcHash": "f07d847d"
+  },
+  "admin.account.font_sample": {
+    "status": "ai",
+    "srcHash": "bd73460e"
+  },
+  "admin.account.font_sans": {
+    "status": "ai",
+    "srcHash": "a547fbb3"
+  },
+  "admin.account.font_saved": {
+    "status": "ai",
+    "srcHash": "20b0052b"
+  },
+  "admin.account.font_serif": {
+    "status": "ai",
+    "srcHash": "a8216216"
+  },
+  "admin.account.font_theme": {
+    "status": "ai",
+    "srcHash": "e45d311b"
+  },
+  "admin.account.font_title": {
+    "status": "ai",
+    "srcHash": "a77a5eb0"
+  },
   "admin.account.free": {
     "status": "ai",
     "srcHash": "1c5c36fb"

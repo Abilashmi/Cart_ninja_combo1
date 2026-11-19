@@ -2581,7 +2581,21 @@
     return found;
   }
 
+  // At least part of it inside the window (a drawer parked off the edge by a
+  // transform or a negative offset is "visible" to CSS but not open).
+  function ccOnScreen(el) {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.left < window.innerWidth - 1 && r.right > 1 && r.top < window.innerHeight - 1 && r.bottom > 1;
+  }
+
   (function () {
+    // Remember how the theme's drawers look now, so their first change on
+    // load isn't taken for an open.
+    try {
+      document.querySelectorAll('[class*="cart"], [id*="cart"], [class*="drawer"], ' + CC_DRAWER_TAGS.join(',')).forEach(function (c) {
+        if (c._ccPrevVisible === undefined && ccLooksLikeNativeDrawer(c)) c._ccPrevVisible = ccIsVisible(c);
+      });
+    } catch (e) { /* the watcher below still works without it */ }
     new MutationObserver(function (mutations) {
       for (const m of mutations) {
         const el = m.target;
@@ -2615,11 +2629,27 @@
           CC_OPEN_CLASSES.some((c) => el.classList.contains(c));
 
         const nowVisible = ccIsVisible(el);
+        const known = el._ccPrevVisible !== undefined;
         const wasVisible = !!el._ccPrevVisible;
         el._ccPrevVisible = nowVisible;
         const becameVisible = nowVisible && !wasVisible;
 
         if (!matchedOpenClass && !becameVisible) continue;
+        // A drawer we had never seen before: its first change may just be the
+        // theme finishing its set-up, not an open (Standtron's
+        // <aside class="cart-drawer is-loading">, parked off the right edge
+        // and never display:none, loses is-loading on page load: our drawer
+        // opened by itself on some visits). Off the screen now: open only if
+        // it is on the screen once a slide-in would have finished.
+        if (!matchedOpenClass && !known && !ccOnScreen(el)) {
+          setTimeout(function () {
+            if (document.getElementById('cc-overlay') || !ccIsVisible(el) || !ccOnScreen(el)) return;
+            ccMilestone('Native drawer open attempt detected (first seen, on screen)', el.tagName);
+            scheduleOpenDrawer(0);
+            if (_ccActive) ccNeutralizeNativeDrawer(el);
+          }, 400);
+          continue;
+        }
         ccMilestone('Native drawer open attempt detected (body observer)', { matchedOpenClass, becameVisible });
         ccDebug('native drawer detected via body observer', el, { matchedOpenClass, becameVisible });
         scheduleOpenDrawer(200);

@@ -43,7 +43,7 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
   const t = cat(lang);
   const account = await open('account', lang);
   const text = await account.innerText('body');
-  const want = ['admin.language.title', 'admin.account.store_info', 'admin.account.plan_billing', 'admin.account.price_label', 'admin.account.support', 'admin.home.videos', 'admin.home.step1_title', 'admin.home.tips', 'admin.home.tip1_title'].map((k) => t[k]);
+  const want = ['admin.language.title', 'admin.account.store_info', 'admin.account.plan_billing', 'admin.account.price_label', 'admin.account.font_label', 'admin.account.font_theme', 'admin.account.support', 'admin.home.videos', 'admin.home.step1_title', 'admin.home.tips', 'admin.home.tip1_title'].map((k) => t[k]);
   const missing = want.filter((w) => !text.includes(w));
   check(`${lang}: Account page in ${lang}`, missing.length === 0, missing.length ? `missing ${JSON.stringify(missing)}` : '');
   // The picker always names each language in its own script.
@@ -56,6 +56,20 @@ for (const lang of ['hi', 'ta', 'es', 'en']) {
     const posts = await account.evaluate(() => window.__posts);
     const toast = await account.evaluate(() => window.__toast);
     check('hi: picking Tamil saves language=ta and confirms', posts.some((p) => p.intent === 'language' && p.language === 'ta') && toast === t['admin.language.saved'], JSON.stringify({ posts, toast }));
+  }
+  if (lang === 'en') {
+    // Account → Font: theme font to start; picking one saves it and the sample shows it.
+    const fontSelect = account.getByLabel(t['admin.account.font_label']);
+    check('en: font starts as the theme font', (await fontSelect.inputValue()) === '');
+    await fontSelect.selectOption('Poppins');
+    await account.waitForTimeout(400);
+    const posts = await account.evaluate(() => window.__posts);
+    const toast = await account.evaluate(() => window.__toast);
+    const sample = await account.evaluate(() => getComputedStyle(document.querySelector('[data-brix-font-sample]')).fontFamily);
+    check('en: picking Poppins saves font=Poppins and confirms', posts.some((p) => p.intent === 'font' && p.font === 'Poppins') && toast === t['admin.account.font_saved'], JSON.stringify({ posts, toast }));
+    check('en: the sample is drawn in the picked font', /Poppins/.test(sample), sample);
+    await account.locator('[data-brix-font-sample]').scrollIntoViewIfNeeded();
+    await account.screenshot({ path: path.join(shotDir, 'en-account-font.png') });
   }
   await account.close();
 
