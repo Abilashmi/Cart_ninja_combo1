@@ -339,6 +339,17 @@ await page.waitForFunction(() => window.__comboOnline === true);
 check('combo: Pay online hands back to the normal checkout', true);
 
 await shot(page, '7-error');
+await page.waitForFunction(() => !document.querySelector('[data-brix-cod-sheet]'));
+
+// Account → Font: with a BRIX font picked (brix-font.liquid sets --brix-font), the
+// popup uses it instead of the theme's page font.
+await page.evaluate(() => document.documentElement.style.setProperty('--brix-font', "'Poppins', system-ui, sans-serif"));
+forceQuoteError = false;
+await page.evaluate(() => window.BrixCod.open({ surface: 'combo', items: [{ variantId: 12, quantity: 1 }] }));
+await inSheet('.sh').waitFor();
+const sheetFonts = await page.evaluate(() => { const sh = document.querySelector('[data-brix-cod-sheet]').shadowRoot.querySelector('.sh'); return [getComputedStyle(sh).fontFamily, ...[...sh.querySelectorAll('button, input, p')].map((e) => getComputedStyle(e).fontFamily)]; });
+check('font: the popup uses the BRIX font when one is picked', sheetFonts.every((f) => /^"?Poppins/.test(f)), [...new Set(sheetFonts)].join(' | '));
+await page.evaluate(() => { document.querySelector('[data-brix-cod-sheet]')?.remove(); document.documentElement.style.removeProperty('--brix-font'); });
 
 // A theme without gtag / Meta pixel: the popup loads them itself, only once the shopper uses COD.
 const page2 = await browser.newPage();

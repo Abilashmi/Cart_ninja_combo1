@@ -919,7 +919,12 @@
     this.couponOpen = Boolean(look.couponOpen);
     this.policyOk = true; // Terms and conditions consent, ticked by default
     // :host{all:initial} drops the theme font; borrow the storefront's own.
-    try { var font = window.getComputedStyle(document.body).fontFamily; if (font) this.sh.style.fontFamily = font; } catch (e) { /* keep the system stack */ }
+    // The store-wide BRIX font (Account → Font, snippets/brix-font.liquid) when
+    // one is picked, else the theme's page font.
+    try {
+      var font = window.getComputedStyle(document.documentElement).getPropertyValue('--brix-font').trim() || window.getComputedStyle(document.body).fontFamily;
+      if (font) this.sh.style.fontFamily = font;
+    } catch (e) { /* keep the system stack */ }
     document.body.appendChild(host);
     this.prevOverflow = document.documentElement.style.overflow;
     document.documentElement.style.overflow = 'hidden';
