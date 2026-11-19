@@ -659,7 +659,7 @@ for (const width of [1280, 390]) {
   const snippet = fs.readFileSync(path.resolve('extensions/cart-drawer/snippets/brix-font.liquid'), 'utf8');
   const body = snippet.slice(snippet.indexOf('-%}', snippet.indexOf('{%- if')) + 3, snippet.indexOf('{%- endif'))
     .replace(/\{\{ display\.fontQuery[^}]*\}\}/, 'Poppins:wght@400;500;600;700')
-    .replace(/\{\{ display\.fontStack[\s\S]*?remove: ';' \}\}/, `'Poppins', system-ui, -apple-system, "Segoe UI", sans-serif`);
+    .replace(/\{\{ display\.fontStack[^}]*\}\}/, `'Poppins', system-ui, -apple-system, "Segoe UI", sans-serif`);
   const themeCss = '<style>body{font-family:Georgia,serif} button,h2,h3,.price{font-family:"Courier New",monospace}</style>';
   const page = await open({ width: 1280, before: themeCss + body });
   await page.evaluate(() => {
