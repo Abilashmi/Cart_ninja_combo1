@@ -7,8 +7,12 @@
  * Server environment (php_backend/.htaccess):
  *   BRIX_MSG91_AUTH_KEY      MSG91 → Settings → API keys (Authkey)
  *   BRIX_MSG91_TEMPLATE_ID   MSG91's template ID (letters and numbers, not the DLT number)
- *   BRIX_MSG91_API           otp  = template under MSG91 → OTP (holds ##OTP##), default
- *                            flow = template under MSG91 → SMS → Templates
+ *   BRIX_MSG91_API           flow = template under MSG91 → SMS → Templates (default; BRIX's own
+ *                                   template 6affe7aefe270a4c640d2813 is one, variable OTP)
+ *                            otp  = template under MSG91 → OTP (holds ##OTP##)
+ *                            The type must match the template: the first live test (Nov 2026)
+ *                            sent BRIX's Flow template through the OTP API, MSG91 answered OK
+ *                            and no SMS arrived.
  *   BRIX_MSG91_VARIABLE      flow only: the template variable that holds the code (default OTP)
  *   BRIX_MSG91_BASE          default https://control.msg91.com (the tests point it at a fake server)
  *
@@ -38,7 +42,7 @@ function otps_send($mobile10, $otp) {
     $base = rtrim(otps_env('BRIX_MSG91_BASE', 'https://control.msg91.com'), '/');
     $headers = ['authkey: ' . $authKey, 'Content-Type: application/json', 'Accept: application/json'];
 
-    if (otps_env('BRIX_MSG91_API', 'otp') === 'flow') {
+    if (otps_env('BRIX_MSG91_API', 'flow') !== 'otp') {
         $variable = preg_replace('/[^A-Za-z0-9_]/', '', otps_env('BRIX_MSG91_VARIABLE', 'OTP')) ?: 'OTP';
         $url = $base . '/api/v5/flow';
         $payload = json_encode(['template_id' => $template, 'short_url' => '0', 'recipients' => [['mobiles' => '91' . $mobile10, $variable => $otp]]]);

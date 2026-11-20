@@ -2,7 +2,7 @@
 // Run with: node --import ./tests/packs/register.mjs --test tests/cod/otp-wallet.test.mjs
 // The OTP wallet (50 paise per SMS, sent by the BRIX PHP server with BRIX's MSG91
 // account) against the REAL php_backend/otp_wallet*.php + otp_sms_lib.php files on a
-// throwaway MariaDB. The harness's fake app server stands in for MSG91 (/api/v5/otp)
+// throwaway MariaDB. The harness's fake app server stands in for MSG91 (/api/v5/flow)
 // and for Digifyce's razorpay_create_order.php; the test plays Digifyce's signed
 // confirmation.
 import test, { after, beforeEach } from 'node:test';
@@ -23,7 +23,7 @@ const harness = await startHarness({
   extraFiles: ['otp_wallet.php', 'otp_wallet_lib.php', 'otp_wallet_confirm.php', 'otp_sms_lib.php'],
   extraEnv: ({ appUrl }) => ({
     DIGIFYCE_API_URL: appUrl, DIGIFYCE_API_KEY: API_KEY, DIGIFYCE_CONFIRM_SECRET: CONFIRM_SECRET,
-    BRIX_MSG91_AUTH_KEY: MSG91_KEY, BRIX_MSG91_TEMPLATE_ID: 'tmplBRIX01', BRIX_MSG91_BASE: appUrl,
+    BRIX_MSG91_AUTH_KEY: MSG91_KEY, BRIX_MSG91_TEMPLATE_ID: 'tmplBRIX01', BRIX_MSG91_BASE: appUrl, // no BRIX_MSG91_API = Flow
   }),
 });
 process.env.PHP_BASE_URL = harness.baseUrl;
@@ -47,7 +47,7 @@ const reset = async () => {
   for (const t of ['cod_settings', 'cod_otp', 'cod_orders', 'cod_secrets', 'otp_wallet', 'otp_wallet_ledger', 'otp_recharges']) await sql(`DELETE FROM ${t}`).catch(() => {});
   harness.app.requests.length = 0;
   harness.app.reply = (entry) => {
-    if (entry.path.startsWith('/api/v5/otp')) return { status: 200, body: { type: 'success', request_id: 'r1' } };
+    if (entry.path.startsWith('/api/v5/flow')) return { status: 200, body: { type: 'success', message: 'r1' } };
     if (entry.path.startsWith('/razorpay_create_order.php')) return { status: 200, body: { ok: true, order_id: 'order_TEST1', pay_url: 'https://digifyce.example/razorpay_pay.php?order_id=order_TEST1' } };
     return { status: 404, body: {} };
   };
@@ -89,10 +89,14 @@ test('a funded wallet: OTP on; each SMS costs 50 paise; at 0 the OTP step switch
   assert.equal(await cod.otpAvailableForShop(SHOP), true);
 
   await cod.sendCodOtp(SHOP, '9876543210');
-  const sent = harness.app.requests.find((r) => r.path.startsWith('/api/v5/otp'));
-  const q = new URL(sent.path, 'http://x').searchParams;
+  const sent = harness.app.requests.find((r) => r.path.startsWith('/api/v5/flow'));
   assert.equal(sent.headers.authkey, MSG91_KEY, "BRIX's MSG91 key, from the PHP server's environment");
-  assert.deepEqual([q.get('template_id'), q.get('mobile'), /^\d{4}$/.test(q.get('otp'))], ['tmplBRIX01', '919876543210', true]);
+  // MSG91's Flow request for an SMS template with the variable OTP (BRIX's own template).
+  assert.equal(sent.body.template_id, 'tmplBRIX01');
+  assert.equal(sent.body.short_url, '0');
+  assert.equal(sent.body.recipients.length, 1);
+  assert.equal(sent.body.recipients[0].mobiles, '919876543210');
+  assert.match(sent.body.recipients[0].OTP, /^\d{4}$/);
   assert.equal(await balance(), 50);
 
   await ageOtp();
@@ -102,7 +106,7 @@ test('a funded wallet: OTP on; each SMS costs 50 paise; at 0 the OTP step switch
 
   await ageOtp();
   await assert.rejects(() => cod.sendCodOtp(SHOP, '9876543210'), (e) => e.code === 'otp_not_needed');
-  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/otp')).length, 2);
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/flow')).length, 2);
 });
 
 test('an SMS that fails to send is refunded', async () => {
@@ -257,7 +261,7 @@ test('send: the PHP server charges, sends and refunds in one call; a retried cal
   assert.deepEqual([first.status, first.json.sent, first.json.balance_paise], [200, true, 50]);
   const again = await wallet('otp_wallet.php', body);
   assert.deepEqual([again.json.sent, again.json.duplicate, again.json.balance_paise], [true, true, 50], 'charged once');
-  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/otp')).length, 1, 'sent once');
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/flow')).length, 1, 'sent once');
   // The price is the server's: an amount sent by the caller is ignored.
   const cheap = await wallet('otp_wallet.php', { ...body, ref: 'otp:78', amount_paise: 1 });
   assert.equal(cheap.json.balance_paise, 0);
@@ -267,7 +271,7 @@ test('send: the PHP server charges, sends and refunds in one call; a retried cal
   // Empty: 402, nothing sent.
   const empty = await wallet('otp_wallet.php', { ...body, ref: 'otp:80' });
   assert.deepEqual([empty.status, empty.json.code], [402, 'wallet_empty']);
-  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/otp')).length, 2);
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/flow')).length, 2);
   // A refused send that is retried stays refunded and unsent.
   await credit(50);
   harness.app.reply = () => ({ status: 200, body: { type: 'error', message: 'DLT' } });
