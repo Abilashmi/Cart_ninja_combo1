@@ -355,7 +355,7 @@ const GROUPS = [
   {
     title: 'Advanced',
     items: [
-      { id: 'sms', label: 'OTP SMS (MSG91)', icon: ChatIcon, preview: 'sheet', fields: ['msg91AuthKey', 'msg91TemplateId'] },
+      { id: 'sms', label: 'OTP SMS', icon: ChatIcon, preview: 'sheet', fields: ['msg91AuthKey', 'msg91TemplateId'] },
       { id: 'tracking', label: 'Ads & analytics', icon: ChartVerticalIcon, preview: null, fields: ['ga4Id', 'metaPixelId', 'ga4ApiSecret', 'metaCapiToken', 'metaTestCode'] },
       { id: 'orders', label: 'Order settings', icon: OrderIcon, preview: null, fields: [] },
     ],
@@ -610,7 +610,7 @@ export default function CodCustomizePage() {
                 {!otpOn && (
                   <Text as="p" variant="bodySm" tone="subdued">
                     {form.requireOtp
-                      ? (data.sms.source === 'wallet' ? 'Phone verification is paused: your OTP wallet is empty (Advanced → OTP SMS (MSG91)).' : 'Phone verification starts once you add your MSG91 keys (Advanced → OTP SMS (MSG91)).')
+                      ? (data.sms.source === 'wallet' ? 'Phone verification is paused: your OTP wallet is empty (Advanced → OTP SMS).' : 'Phone verification starts once you add your MSG91 keys (Advanced → OTP SMS).')
                       : 'Phone verification is off (Fraud protection).'}
                   </Text>
                 )}
@@ -1094,7 +1094,7 @@ export default function CodCustomizePage() {
                 label="Verify phone with an SMS code (OTP)"
                 helpText={data.sms.source === 'wallet'
                   ? (data.sms.configured ? 'Each code is one SMS sent by BRIX, paid from your OTP wallet (Advanced → OTP SMS).' : 'Your OTP wallet is empty, so no code is asked for. Add money in Advanced → OTP SMS.')
-                  : (data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS (MSG91)).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS (MSG91).')}
+                  : (data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS.')}
                 checked={form.requireOtp}
                 onChange={set('requireOtp')}
               />
@@ -1343,6 +1343,8 @@ export default function CodCustomizePage() {
               </BlockStack>
             </Card>
           )}
+          {/* MSG91 keys are shown only where BRIX's wallet isn't the SMS (no Digifyce on this server) or the store already saved its own keys (so they can be removed). */}
+          {(!wallet || own) && (<>
           <Card>
             <FormLayout>
               <SecretField
@@ -1367,6 +1369,7 @@ export default function CodCustomizePage() {
             </FormLayout>
           </Card>
           <Text as="p" variant="bodySm" tone="subdued">Both keys are kept on the BRIX server and never shown again; you only see the last 4 characters.</Text>
+          </>)}
         </BlockStack>
       );
     }

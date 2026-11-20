@@ -595,8 +595,8 @@ if (scenario === 'live') {
   check('Terms link: a link without https:// is flagged', await page.getByText('Use a link starting with https://').count() === 1);
   await page.getByLabel('Terms and conditions link').fill('/pages/terms');
 
-  // OTP SMS (MSG91)
-  await openSec('OTP SMS (MSG91)');
+  // OTP SMS
+  await openSec('OTP SMS');
   check('OTP SMS: says codes go from the BRIX server until the store adds its own keys', await page.getByText("sent from the BRIX server's MSG91 account").count() === 1);
   await page.getByLabel('MSG91 auth key').fill('authKEY12345');
   await page.getByLabel('OTP template ID').fill('tmpl6789');
