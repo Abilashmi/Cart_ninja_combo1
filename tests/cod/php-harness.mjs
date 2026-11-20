@@ -40,7 +40,8 @@ async function waitFor(fn, label, timeoutMs = 30000) {
 
 // extraFiles: more php_backend files to serve (e.g. save_cart_drawer.php for the cart drawer tests).
 // portOffset: added to every port, so two harnesses can run at once.
-export async function startHarness({ extraFiles = [], portOffset = 0 } = {}) {
+// extraEnv: more environment for PHP, as a function of { appUrl } (the fake app server's address).
+export async function startHarness({ extraFiles = [], portOffset = 0, extraEnv = null } = {}) {
   const DB_PORT = BASE_DB_PORT + portOffset;
   const PHP_PORT = BASE_PHP_PORT + portOffset * 2;
   const APP_PORT = BASE_APP_PORT + portOffset * 2;
@@ -84,7 +85,7 @@ $pdo = new PDO('mysql:host=127.0.0.1;port=${DB_PORT};dbname=brix_cod_test;charse
 
   // display_errors off, as on the server (config.php): a newer local PHP's deprecation
   // notices would otherwise land in the JSON.
-  const php = spawn(PHP, ['-d', 'display_errors=0', '-S', `127.0.0.1:${PHP_PORT}`, '-t', webDir], { stdio: 'ignore', env: { ...process.env, BRIX_INTERNAL_SECRET: SECRET, BRIX_ACCEPT_LEGACY_SECRET: '', BRIX_APP_URL: `http://127.0.0.1:${APP_PORT}` } });
+  const php = spawn(PHP, ['-d', 'display_errors=0', '-S', `127.0.0.1:${PHP_PORT}`, '-t', webDir], { stdio: 'ignore', env: { ...process.env, BRIX_INTERNAL_SECRET: SECRET, BRIX_ACCEPT_LEGACY_SECRET: '', BRIX_APP_URL: `http://127.0.0.1:${APP_PORT}`, ...(extraEnv ? extraEnv({ appUrl: `http://127.0.0.1:${APP_PORT}` }) : {}) } });
   await waitFor(async () => (await fetch(`http://127.0.0.1:${PHP_PORT}/cod_settings.php`)).status === 403, 'PHP server');
 
   return {

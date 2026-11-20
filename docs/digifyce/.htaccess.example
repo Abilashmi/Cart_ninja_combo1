@@ -1,0 +1,13 @@
+# Copy to .htaccess on the Digifyce server and fill in. Never commit the real file.
+SetEnv RAZORPAY_KEY_ID           rzp_test_xxxxxxxxxxxx
+SetEnv RAZORPAY_KEY_SECRET       xxxxxxxxxxxxxxxxxxxxxxxx
+SetEnv RAZORPAY_WEBHOOK_SECRET   a-long-random-webhook-secret
+# Long random value (32+ chars). BRIX sends it as a Bearer token; same as DIGIFYCE_API_KEY on BRIX.
+SetEnv BRIX_API_KEY              change-me-32-plus-random-characters
+# Where BRIX credits the wallet, and the shared signing secret (32+ chars; same as DIGIFYCE_CONFIRM_SECRET on BRIX).
+SetEnv BRIX_CONFIRM_URL          https://int.thebrix.io/otp_wallet_confirm.php
+SetEnv BRIX_CONFIRM_SECRET       change-me-another-32-plus-random-characters
+SetEnv DIGIFYCE_PUBLIC_URL       https://digifyce.global.com
+# Only for the example sms_gateway.php (MSG91). Replace with whatever your gateway needs.
+SetEnv DIGIFYCE_MSG91_AUTH_KEY   xxxxxxxx
+SetEnv DIGIFYCE_MSG91_TEMPLATE_ID xxxxxxxx

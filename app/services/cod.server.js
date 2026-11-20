@@ -16,7 +16,7 @@
  */
 import crypto from 'node:crypto';
 import { BASE_PHP_URL } from '../utils/api-helpers';
-import { sendOtpSms, smsProviderStatus } from './cod-sms.server';
+import { sendOtpSms, smsProviderStatus, digifyceConfig, OTP_PRICE_PAISE } from './cod-sms.server';
 import { sendCodPurchaseEvents, sendCodRefundEvent } from './cod-tracking.server';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
@@ -81,7 +81,8 @@ async function php(file, body) {
     console.error(`[cod] ${BASE_PHP_URL}/${file} not found — upload php_backend/cod_*.php to the PHP server.`);
     throw new CodError('storage_missing', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
   }
-  if ([409, 429].includes(res.status) && json?.code) throw new CodError(json.code, json.error, { status: res.status });
+  // 402 = otp_wallet.php: not enough OTP credit.
+  if ([402, 409, 429].includes(res.status) && json?.code) throw new CodError(json.code, json.error, { status: res.status });
   console.error(`[cod] ${file} ${body.action} failed:`, res.status, JSON.stringify(json).slice(0, 300));
   throw new CodError('database_error', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
 }
@@ -105,8 +106,8 @@ export async function getCodSettingsWithRuntime(shop) {
 // storefront can read everything from php_backend/cod_storefront.php.
 // `prepaid` (from prepaid-discount-shopify.server.js) is kept until the next
 // prepaid sync replaces it; `unlisted` (loadUnlistedBlocked) likewise.
-function runtimeFacts(previous, secrets) {
-  const facts = { otpAvailable: otpAvailable(secrets) };
+function runtimeFacts(previous, secrets, walletPaise = null, shop = null) {
+  const facts = { otpAvailable: otpAvailable(secrets, walletPaise, shop) };
   if (previous?.prepaid && typeof previous.prepaid === 'object') facts.prepaid = previous.prepaid;
   if (previous?.unlisted && typeof previous.unlisted === 'object') facts.unlisted = previous.unlisted;
   return facts;
@@ -124,7 +125,8 @@ export async function saveCodSettings(shop, patch, { syncPrepaid, syncUnlisted }
   const raw = await loadStoredSettings(shop);
   const current = sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS);
   const next = sanitizeCodSettings(patch, current);
-  const runtime = runtimeFacts(raw?._runtime, await getCodSecrets(shop));
+  const secrets = await getCodSecrets(shop);
+  const runtime = runtimeFacts(raw?._runtime, secrets, await walletPaiseFor(shop, secrets, { fresh: true }), shop);
   if (typeof syncPrepaid === 'function') runtime.prepaid = await syncPrepaid(next);
   if (typeof syncUnlisted === 'function') {
     runtime.unlisted = await syncUnlisted(next);
@@ -163,7 +165,8 @@ export async function syncCodRuntime(shop, { admin = null } = {}) {
   const raw = await loadStoredSettings(shop);
   if (!raw) return;
   const settings = sanitizeCodSettings(raw, DEFAULT_COD_SETTINGS);
-  const facts = runtimeFacts(raw._runtime, await getCodSecrets(shop));
+  const secrets = await getCodSecrets(shop);
+  const facts = runtimeFacts(raw._runtime, secrets, await walletPaiseFor(shop, secrets, { fresh: true }), shop);
   if (admin && Date.now() - (unlistedCheckedAt.get(shop) || 0) > UNLISTED_REFRESH_MS) {
     unlistedCheckedAt.set(shop, Date.now());
     const fresh = await loadUnlistedBlocked(admin, settings);
@@ -417,19 +420,146 @@ export function clientUa(request) {
 // Limits (30 s between codes, 5 per hour, 10 min expiry, 5 tries) are
 // enforced by php_backend/cod_otp.php.
 
-/** `secrets` = getCodSecrets(shop): the store's own MSG91 keys, else the server's. */
-export function otpAvailable(secrets) {
-  return smsProviderStatus(msg91Creds(secrets)).configured;
+/**
+ * `secrets` = getCodSecrets(shop): the store's own MSG91 keys, else BRIX's
+ * Digifyce SMS (paid from the OTP wallet: `walletPaise` must cover one OTP),
+ * else the server's MSG91.
+ */
+export function otpAvailable(secrets, walletPaise = null, shop = null) {
+  return smsProviderStatus(msg91Creds(secrets), walletPaise, shop).configured;
+}
+
+/* ───────────────────────── OTP wallet ───────────────────────── */
+
+// 50 paise per OTP SMS sent through Digifyce, prepaid. The balance lives in
+// php_backend/otp_wallet.php; a store with its own MSG91 keys never uses it.
+const WALLET_CACHE_MS = 10_000;
+const walletCache = new Map();
+
+function rememberWallet(shop, paise) {
+  walletCache.set(shop, { paise, at: Date.now() });
+}
+
+/** The store's OTP balance in paise. Throws a CodError when the wallet can't be read. */
+export async function getOtpWalletPaise(shop, { fresh = false } = {}) {
+  const hit = walletCache.get(shop);
+  if (!fresh && hit && Date.now() - hit.at < WALLET_CACHE_MS) return hit.paise;
+  const { balance_paise: paise } = await php('otp_wallet.php', { action: 'balance', shop });
+  rememberWallet(shop, Number(paise) || 0);
+  return Number(paise) || 0;
+}
+
+/**
+ * The balance that decides OTP for this store, or null when the wallet isn't what
+ * decides it (own MSG91 keys, or Digifyce isn't set up on this server). A wallet
+ * that can't be read counts as empty: the shopper is not asked for a code that
+ * can't be sent.
+ */
+async function walletPaiseFor(shop, secrets, { fresh = false } = {}) {
+  if (msg91Creds(secrets).authKey && msg91Creds(secrets).templateId) return null;
+  if (!digifyceConfig(shop)) return null;
+  try {
+    return await getOtpWalletPaise(shop, { fresh });
+  } catch (error) {
+    console.warn('[cod] OTP wallet unreadable, treating it as empty:', String(error?.message || error).slice(0, 200));
+    return 0;
+  }
+}
+
+/** Does this store ask shoppers for an OTP right now (own keys, or wallet with credit)? */
+export async function otpAvailableForShop(shop) {
+  const secrets = await getCodSecrets(shop).catch(() => null);
+  return otpAvailable(secrets, await walletPaiseFor(shop, secrets), shop);
+}
+
+const walletEntry = (e) => ({
+  id: Number(e.id) || null,
+  type: e.type, amountPaise: Number(e.amount_paise) || 0, balanceAfterPaise: Number(e.balance_after) || 0, note: e.note || '', at: e.created_at,
+  // The exact moment (an older otp_wallet.php sends only created_at, in the database's clock).
+  atMs: Number(e.created_ts) > 0 ? Number(e.created_ts) * 1000 : null,
+});
+
+/** { balancePaise, pricePaise, messagesLeft } for the admin wallet card (the history has its own page). */
+export async function getOtpWalletSummary(shop) {
+  const { balance_paise: paise } = await php('otp_wallet.php', { action: 'balance', shop });
+  rememberWallet(shop, Number(paise) || 0);
+  return {
+    balancePaise: Number(paise) || 0,
+    pricePaise: OTP_PRICE_PAISE,
+    messagesLeft: Math.floor((Number(paise) || 0) / OTP_PRICE_PAISE),
+  };
+}
+
+export const OTP_WALLET_TYPES = ['debit', 'refund', 'credit'];
+
+/**
+ * One page of the OTP wallet history, newest first: { balancePaise, entries[], hasMore, nextBefore }.
+ * `type` = debit | refund | credit (else all); `beforeId` = the last entry's id already shown.
+ */
+export async function getOtpWalletLedger(shop, { type = '', beforeId = 0, limit = 25 } = {}) {
+  const json = await php('otp_wallet.php', {
+    action: 'ledger', shop, limit: Math.max(1, Math.min(100, Number(limit) || 25)),
+    ...(Number(beforeId) > 0 ? { before_id: Number(beforeId) } : {}),
+    ...(OTP_WALLET_TYPES.includes(type) ? { type } : {}),
+  });
+  const paise = Number(json.balance_paise) || 0;
+  rememberWallet(shop, paise);
+  const entries = (json.entries || []).map(walletEntry);
+  const last = entries[entries.length - 1];
+  // An older otp_wallet.php sends no ids or has_more: one page only.
+  const hasMore = Boolean(json.has_more && last?.id);
+  return { balancePaise: paise, pricePaise: OTP_PRICE_PAISE, messagesLeft: Math.floor(paise / OTP_PRICE_PAISE), entries, hasMore, nextBefore: hasMore ? last.id : null };
+}
+
+/** Asks for a Razorpay payment page (Digifyce) for `amountPaise`; returns { rechargeId, payUrl }. */
+export async function startOtpRecharge(shop, amountPaise) {
+  // Back to this page in the store's admin once paid (Digifyce only redirects to the store admin).
+  const returnUrl = `https://${shop}/admin/apps/${process.env.SHOPIFY_API_KEY}/app/cod/customize?section=sms&wallet=back`;
+  const json = await php('otp_wallet.php', { action: 'recharge_create', shop, amount_paise: amountPaise, return_url: returnUrl });
+  return { rechargeId: json.recharge_id, payUrl: json.pay_url };
 }
 
 export async function sendCodOtp(shop, phone) {
+  const secrets = await getCodSecrets(shop).catch(() => null);
+  const creds = msg91Creds(secrets);
+  const walletPaise = await walletPaiseFor(shop, secrets, { fresh: true });
+  const useWallet = smsProviderStatus(creds, walletPaise, shop).source === 'wallet';
+  // The wallet ran dry since the page was drawn: no code is sent, the sheet
+  // carries on to the address step without phone verification.
+  if (useWallet && walletPaise < OTP_PRICE_PAISE) {
+    throw new CodError('otp_not_needed', 'No code is needed for this store.');
+  }
+
   const code = String(crypto.randomInt(0, 10000)).padStart(4, '0');
   const { id, resendAfter } = await php('cod_otp.php', {
     action: 'create', shop, phone_hash: phoneHash(shop, phone), code_hash: codeHash(shop, phone, code),
   });
-  const result = await sendOtpSms(phone, code, msg91Creds(await getCodSecrets(shop).catch(() => null)));
+  const ref = `otp:${id}`;
+  // Charged before the SMS goes out (two sends at once can't both spend the last 50
+  // paise) and given back below when the SMS doesn't go out.
+  if (useWallet) {
+    try {
+      const debit = await php('otp_wallet.php', { action: 'debit', shop, amount_paise: OTP_PRICE_PAISE, ref });
+      rememberWallet(shop, Number(debit.balance_paise) || 0);
+    } catch (error) {
+      await php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
+      if (error instanceof CodError && error.code === 'wallet_empty') {
+        rememberWallet(shop, 0);
+        throw new CodError('otp_not_needed', 'No code is needed for this store.');
+      }
+      throw error;
+    }
+  }
+  const result = await sendOtpSms(phone, code, creds, { shop, ref });
   if (!result.sent) {
     await php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
+    if (useWallet) {
+      const refund = await php('otp_wallet.php', { action: 'refund', shop, amount_paise: OTP_PRICE_PAISE, ref: `refund:${ref}` }).catch((error) => {
+        console.error('[cod] OTP refund failed for', shop, ref, String(error?.message || error).slice(0, 200));
+        return null;
+      });
+      if (refund) rememberWallet(shop, Number(refund.balance_paise) || 0);
+    }
     throw new CodError('otp_send_failed', "We couldn't send the code to this number. Check it and try again, or pay online.", { status: 503 });
   }
   return { resendAfter: resendAfter || 30 };
@@ -1379,6 +1509,8 @@ export async function placeCodOrder(admin, {
   const boxes = quote.comboDiscounts || [];
   const tags = [...new Set([
     'COD', 'BRIX-COD', `brix-src-${surface}`, ...(boxes.length ? ['brix-combo-weight'] : []),
+    // The store asks for an OTP but didn't get one (OTP credit ran out): the merchant can see the phone wasn't verified.
+    ...(settings.requireOtp && !phoneVerified ? ['brix-otp-skipped'] : []),
     ...(option ? [`brix-ship-${option.kind.replace(/_/g, '-')}`] : []), ...settings.orderTags,
   ])];
   // Advanced shipping: what was booked, for the merchant and their courier.

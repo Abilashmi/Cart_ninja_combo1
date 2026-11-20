@@ -16,7 +16,7 @@ const withEnv = async (env, fn) => {
 };
 
 test('MSG91: the store\'s own keys first, then the server\'s, else nothing', () => withEnv(
-  { MSG91_AUTH_KEY: undefined, MSG91_OTP_TEMPLATE_ID: undefined, COD_OTP_DEV_LOG: undefined },
+  { MSG91_AUTH_KEY: undefined, MSG91_OTP_TEMPLATE_ID: undefined, COD_OTP_DEV_LOG: undefined, DIGIFYCE_API_URL: undefined, DIGIFYCE_API_KEY: undefined },
   async () => {
     assert.deepEqual(smsProviderStatus({}), { configured: false, provider: null, source: null });
     assert.deepEqual(smsProviderStatus({ authKey: 'abc' }), { configured: false, provider: null, source: null }, 'both keys are needed');
@@ -29,14 +29,14 @@ test('MSG91: the store\'s own keys first, then the server\'s, else nothing', () 
 ));
 
 test('MSG91: the code goes out with the store\'s key and template', () => withEnv(
-  { MSG91_AUTH_KEY: 'srv', MSG91_OTP_TEMPLATE_ID: 'srvT' },
+  { MSG91_AUTH_KEY: 'srv', MSG91_OTP_TEMPLATE_ID: 'srvT', DIGIFYCE_API_URL: undefined, DIGIFYCE_API_KEY: undefined },
   async () => {
     const realFetch = globalThis.fetch;
     const calls = [];
     globalThis.fetch = async (url, init) => { calls.push({ url: String(url), key: init.headers.authkey }); return new Response('{"type":"success"}'); };
     try {
-      assert.deepEqual(await sendOtpSms('9876543210', '1234', { authKey: 'storeKey', templateId: 'storeTpl' }), { sent: true });
-      assert.deepEqual(await sendOtpSms('9876543210', '1234', null), { sent: true });
+      assert.deepEqual(await sendOtpSms('9876543210', '1234', { authKey: 'storeKey', templateId: 'storeTpl' }), { sent: true, via: 'store' });
+      assert.deepEqual(await sendOtpSms('9876543210', '1234', null), { sent: true, via: 'server' });
     } finally { globalThis.fetch = realFetch; }
     const u0 = new URL(calls[0].url);
     assert.deepEqual([calls[0].key, u0.searchParams.get('template_id'), u0.searchParams.get('mobile'), u0.searchParams.get('otp')], ['storeKey', 'storeTpl', '919876543210', '1234']);

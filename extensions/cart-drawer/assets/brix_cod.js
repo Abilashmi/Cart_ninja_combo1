@@ -1815,6 +1815,14 @@
     api('otp', { step: 'send', phone: this.phone }).then(function (json) {
       self.setBusy(false);
       if (!json.success) {
+        // The store's OTP credit ran out since this page loaded: no code is sent and
+        // the sheet carries on to the address, without phone verification.
+        if (json.code === 'otp_not_needed') {
+          self.cfg.otpRequired = false;
+          self.token = null;
+          self.go('address');
+          return;
+        }
         if (isResend) { self.setError(errorText(json)); self.startResendTimer(); } else self.setError(errorText(json));
         return;
       }

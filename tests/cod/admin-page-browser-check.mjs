@@ -18,7 +18,7 @@ const STUBS = {
   'shopify.server': 'export const authenticate = {};',
   'plan-permissions.server': 'export const getShopPlan = () => {};',
   'currency.server': 'export const getShopCurrency = () => {};',
-  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, loadCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({}), getCodShippingStats=()=>{}, getShopTimezone=()=>{}, COD_ORDERS_VIEW_MAX=500;',
+  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, loadCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({}), getCodShippingStats=()=>{}, otpAvailableForShop=()=>false, getShopTimezone=()=>{}, COD_ORDERS_VIEW_MAX=500;',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
   'cod-sms.server': 'export const smsProviderStatus = () => {};',
   'discounts.server': 'export const listActiveDiscounts = async () => [];',

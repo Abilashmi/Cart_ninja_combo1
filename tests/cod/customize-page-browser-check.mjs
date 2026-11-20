@@ -19,9 +19,9 @@ const STUBS = {
   'plan-permissions.server': 'export const getShopPlan = () => {};',
   'currency.server': 'export const getShopCurrency = () => {};',
   'prepaid-discount-shopify.server': 'export const syncPrepaidDiscount = () => {}, prepaidRuntime = () => ({});',
-  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({}), getCodShipping=()=>{}, saveCodShipping=()=>{}, loadUnlistedBlocked=()=>{};',
+  'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({}), getCodShipping=()=>{}, saveCodShipping=()=>{}, loadUnlistedBlocked=()=>{}, getOtpWalletSummary=()=>{}, startOtpRecharge=()=>{};',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
-  'cod-sms.server': 'export const smsProviderStatus = () => {};',
+  'cod-sms.server': 'export const smsProviderStatus = () => {}, digifyceConfig = () => null, OTP_PRICE_PAISE = 50;',
   'discounts.server': 'export const listActiveDiscounts = async () => [];',
 };
 
@@ -595,8 +595,8 @@ if (scenario === 'live') {
   check('Terms link: a link without https:// is flagged', await page.getByText('Use a link starting with https://').count() === 1);
   await page.getByLabel('Terms and conditions link').fill('/pages/terms');
 
-  // OTP SMS (MSG91)
-  await openSec('OTP SMS (MSG91)');
+  // OTP SMS
+  await openSec('OTP SMS');
   check('OTP SMS: says codes go from the BRIX server until the store adds its own keys', await page.getByText("sent from the BRIX server's MSG91 account").count() === 1);
   await page.getByLabel('MSG91 auth key').fill('authKEY12345');
   await page.getByLabel('OTP template ID').fill('tmpl6789');

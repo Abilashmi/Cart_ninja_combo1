@@ -16,7 +16,7 @@ export const PACK_TEMPLATES = [
   { id: 'same_variant', name: 'Same Variant', description: 'Shoppers pick a quantity of the selected variant. Simple list of offers.', preview: 'Buy 1 · Buy 2 · Buy 3', recommended: 'Best for repeat purchases' },
   { id: 'choose_each_item', name: 'Choose Each Item', description: 'Shoppers pick a real Shopify variant for every item in the Pack.', preview: 'M · S · L', recommended: 'Best for mix and match' },
   { id: 'visual_offer', name: 'Visual Offer', description: 'Large promotional cards with product image and prominent savings.', preview: 'BEST VALUE — Save 12%', recommended: 'Best for promotions' },
-  { id: 'fixed_combo', name: 'Fixed Combo', description: 'Each pack is this product plus products you choose, e.g. a kurta + its dupatta.', preview: 'Kurta + Dupatta', recommended: 'Best for sets and outfits' },
+  { id: 'fixed_combo', name: 'Fixed Combo', description: 'Each pack is this product plus products you choose, e.g. a main product + a matching add-on.', preview: 'Main product + Add-on', recommended: 'Best for sets and outfits' },
 ];
 // Customer-facing Pack types. `template` (stored) stays the source of truth
 // for rendering/behavior family: Standard = same_variant (or visual_offer,
@@ -30,7 +30,7 @@ export const PACK_TYPES = [
   // Fixed Combo: each tier is this product (the shopper picks its variant) plus fixed
   // products the merchant chose for that tier (tier.items, exact variants). The shopper
   // picks a pack; every item goes into the cart as one Pack.
-  { id: 'combo', name: 'Fixed Combo', templates: ['fixed_combo'], defaultTemplate: 'fixed_combo', description: 'Each pack is this product plus fixed products you choose, e.g. Pack 2 = kurta + dupatta. Shoppers only pick this product\'s variant.', example: 'Kurta (M) + Dupatta (Red)' },
+  { id: 'combo', name: 'Fixed Combo', templates: ['fixed_combo'], defaultTemplate: 'fixed_combo', description: 'Each pack is this product plus fixed products you choose, e.g. Pack 2 = this product + a matching add-on. Shoppers only pick this product\'s variant.', example: 'Main product + Add-on' },
 ];
 export const VALID_PACK_TYPES = new Set(PACK_TYPES.map((type) => type.id));
 export const packTypeOf = (template) => PACK_TYPES.find((type) => type.templates.includes(template)) || PACK_TYPES[0];
