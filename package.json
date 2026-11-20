@@ -4,6 +4,7 @@
   "scripts": {
     "build": "react-router build",
     "dev": "shopify app dev",
+    "msg91:test": "node scripts/msg91-otp-tester.mjs",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",

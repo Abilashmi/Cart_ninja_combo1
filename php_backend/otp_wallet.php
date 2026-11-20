@@ -2,6 +2,7 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/cod_helpers.php';
 require_once __DIR__ . '/otp_wallet_lib.php';
+require_once __DIR__ . '/otp_sms_lib.php';
 
 /**
  * BRIX OTP wallet. Node-only (X-Brix-Internal-Secret).
@@ -11,6 +12,11 @@ require_once __DIR__ . '/otp_wallet_lib.php';
  *        402 wallet_empty when the balance is lower than the amount
  *   POST { action: 'refund', shop, amount_paise, ref }       -> { balance_paise, duplicate }
  *        (an OTP SMS that failed to send after it was charged)
+ *   POST { action: 'send', shop, mobile, otp, ref: 'otp:<id>' }
+ *        -> { sent, balance_paise, message_id?, error? }  one OTP SMS from this
+ *        server (otp_sms_lib.php): takes 50 paise, sends, gives it back when MSG91
+ *        refuses. 402 wallet_empty under 50 paise; nothing is charged while the
+ *        server has no BRIX_MSG91_* keys (sent: false, error: not_configured).
  *   POST { action: 'grant',  shop, amount_paise, ref }       -> { balance_paise, duplicate }
  *        free credit from BRIX (max Rs 1,000 a call); the same ref never credits twice.
  *        Run by scripts/otp-wallet-grant.mjs.
@@ -19,12 +25,13 @@ require_once __DIR__ . '/otp_wallet_lib.php';
  *        (next page); `type` = debit | refund | credit (else all). created_ts =
  *        Unix seconds, so Node can show the time in the shop's zone.
  *   POST { action: 'recharge_create', shop, amount_paise, return_url }
- *        -> { recharge_id, pay_url }  asks Digifyce (digifyce.global.com) for a
+ *        -> { recharge_id, pay_url }  asks Digifyce (digifyceglobal.com) for a
  *        Razorpay payment page; the money is credited only when Digifyce confirms
  *        the payment to otp_wallet_confirm.php.
  *
- * Server environment (php_backend/.htaccess): DIGIFYCE_API_URL (e.g.
- * https://digifyce.global.com), DIGIFYCE_API_KEY.
+ * Server environment (php_backend/.htaccess): the BRIX_MSG91_* keys (otp_sms_lib.php)
+ * for `send`; for `recharge_create` only: DIGIFYCE_API_URL (e.g.
+ * https://digifyceglobal.com/wallet-brix-convert), DIGIFYCE_API_KEY.
  */
 
 cod_require_secret();
@@ -44,6 +51,35 @@ if ($action === 'debit' || $action === 'refund') {
     otpw_run($pdo, function ($pdo) use ($shop, $action, $amount, $ref) {
         $result = otpw_apply($pdo, $shop, $action, $amount, $ref, $action === 'debit' ? 'OTP SMS' : 'OTP SMS not sent');
         cod_ok(['balance_paise' => $result['balance'], 'duplicate' => $result['duplicate']]);
+    });
+}
+
+if ($action === 'send') {
+    $ref = (string)($body['ref'] ?? '');
+    $mobile = (string)($body['mobile'] ?? '');
+    $otp = (string)($body['otp'] ?? '');
+    if (strpos($ref, 'otp:') !== 0 || !preg_match('/^[6-9]\d{9}$/', $mobile) || !preg_match('/^\d{4,8}$/', $otp)) {
+        cod_fail(400, 'invalid_request', 'A ref otp:<id>, a 10-digit mobile and a 4-8 digit code are needed.');
+    }
+    if (!otps_configured()) {
+        error_log('[otp_wallet] OTP SMS is not set up: add BRIX_MSG91_AUTH_KEY and BRIX_MSG91_TEMPLATE_ID to .htaccess');
+        otpw_run($pdo, function ($pdo) use ($shop) {
+            cod_ok(['sent' => false, 'error' => 'not_configured', 'balance_paise' => otpw_balance($pdo, $shop)]);
+        });
+    }
+    otpw_run($pdo, function ($pdo) use ($shop, $ref, $mobile, $otp) {
+        // The price is this server's, never the caller's.
+        $debit = otpw_apply($pdo, $shop, 'debit', OTPW_PRICE_PAISE, $ref, 'OTP SMS');
+        if ($debit['duplicate']) {
+            // A retried call: never send (or charge) twice. Sent unless it was refunded.
+            $seen = $pdo->prepare('SELECT id FROM otp_wallet_ledger WHERE shop = ? AND ref = ? LIMIT 1');
+            $seen->execute([$shop, 'refund:' . $ref]);
+            cod_ok(['sent' => $seen->fetchColumn() === false, 'duplicate' => true, 'balance_paise' => $debit['balance']]);
+        }
+        $result = otps_send($mobile, $otp);
+        if ($result['sent']) cod_ok(['sent' => true, 'message_id' => $result['message_id'], 'balance_paise' => $debit['balance']]);
+        $refund = otpw_apply($pdo, $shop, 'refund', OTPW_PRICE_PAISE, 'refund:' . $ref, 'OTP SMS not sent');
+        cod_ok(['sent' => false, 'error' => $result['error'], 'balance_paise' => $refund['balance']]);
     });
 }
 

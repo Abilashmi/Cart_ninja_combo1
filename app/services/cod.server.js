@@ -16,7 +16,7 @@
  */
 import crypto from 'node:crypto';
 import { BASE_PHP_URL } from '../utils/api-helpers';
-import { sendOtpSms, smsProviderStatus, digifyceConfig, OTP_PRICE_PAISE } from './cod-sms.server';
+import { sendOtpSms, smsProviderStatus, otpWalletOn, OTP_PRICE_PAISE } from './cod-sms.server';
 import { sendCodPurchaseEvents, sendCodRefundEvent } from './cod-tracking.server';
 import {
   DEFAULT_COD_SETTINGS, sanitizeCodSettings, checkCodRules, codCharges, isCheckoutOnlyLine,
@@ -457,7 +457,7 @@ export async function getOtpWalletPaise(shop, { fresh = false } = {}) {
  */
 async function walletPaiseFor(shop, secrets, { fresh = false } = {}) {
   if (msg91Creds(secrets).authKey && msg91Creds(secrets).templateId) return null;
-  if (!digifyceConfig(shop)) return null;
+  if (!otpWalletOn(shop)) return null;
   try {
     return await getOtpWalletPaise(shop, { fresh });
   } catch (error) {
@@ -534,33 +534,36 @@ export async function sendCodOtp(shop, phone) {
   const { id, resendAfter } = await php('cod_otp.php', {
     action: 'create', shop, phone_hash: phoneHash(shop, phone), code_hash: codeHash(shop, phone, code),
   });
-  const ref = `otp:${id}`;
-  // Charged before the SMS goes out (two sends at once can't both spend the last 50
-  // paise) and given back below when the SMS doesn't go out.
+  const unsent = () => php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
+  const sendFailed = () => new CodError('otp_send_failed', "We couldn't send the code to this number. Check it and try again, or pay online.", { status: 503 });
+
   if (useWallet) {
+    // One call to the PHP server: it takes 50 paise, sends the SMS with BRIX's MSG91
+    // account and gives the 50 paise back when MSG91 refuses (otp_wallet.php `send`).
+    let res;
     try {
-      const debit = await php('otp_wallet.php', { action: 'debit', shop, amount_paise: OTP_PRICE_PAISE, ref });
-      rememberWallet(shop, Number(debit.balance_paise) || 0);
+      res = await php('otp_wallet.php', { action: 'send', shop, mobile: phone, otp: code, ref: `otp:${id}` });
     } catch (error) {
-      await php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
+      await unsent();
       if (error instanceof CodError && error.code === 'wallet_empty') {
         rememberWallet(shop, 0);
         throw new CodError('otp_not_needed', 'No code is needed for this store.');
       }
       throw error;
     }
-  }
-  const result = await sendOtpSms(phone, code, creds, { shop, ref });
-  if (!result.sent) {
-    await php('cod_otp.php', { action: 'delete', shop, id }).catch(() => {});
-    if (useWallet) {
-      const refund = await php('otp_wallet.php', { action: 'refund', shop, amount_paise: OTP_PRICE_PAISE, ref: `refund:${ref}` }).catch((error) => {
-        console.error('[cod] OTP refund failed for', shop, ref, String(error?.message || error).slice(0, 200));
-        return null;
-      });
-      if (refund) rememberWallet(shop, Number(refund.balance_paise) || 0);
+    rememberWallet(shop, Number(res.balance_paise) || 0);
+    if (!res.sent) {
+      await unsent();
+      console.error('[cod] OTP SMS not sent by the PHP server for', shop, String(res.error || '').slice(0, 60));
+      throw sendFailed();
     }
-    throw new CodError('otp_send_failed', "We couldn't send the code to this number. Check it and try again, or pay online.", { status: 503 });
+    return { resendAfter: resendAfter || 30 };
+  }
+
+  const result = await sendOtpSms(phone, code, creds);
+  if (!result.sent) {
+    await unsent();
+    throw sendFailed();
   }
   return { resendAfter: resendAfter || 30 };
 }

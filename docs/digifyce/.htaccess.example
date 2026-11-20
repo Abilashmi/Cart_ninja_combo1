@@ -7,7 +7,12 @@ SetEnv BRIX_API_KEY              change-me-32-plus-random-characters
 # Where BRIX credits the wallet, and the shared signing secret (32+ chars; same as DIGIFYCE_CONFIRM_SECRET on BRIX).
 SetEnv BRIX_CONFIRM_URL          https://int.thebrix.io/otp_wallet_confirm.php
 SetEnv BRIX_CONFIRM_SECRET       change-me-another-32-plus-random-characters
-SetEnv DIGIFYCE_PUBLIC_URL       https://digifyce.global.com
-# Only for the example sms_gateway.php (MSG91). Replace with whatever your gateway needs.
-SetEnv DIGIFYCE_MSG91_AUTH_KEY   xxxxxxxx
-SetEnv DIGIFYCE_MSG91_TEMPLATE_ID xxxxxxxx
+SetEnv DIGIFYCE_PUBLIC_URL       https://digifyceglobal.com/wallet-brix-convert
+
+# Hostinger / LiteSpeed: pass BRIX's "Authorization: Bearer ..." header through to PHP
+# (razorpay_create_order.php answers 401 without it even with the right key).
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+# The shared file is only loaded by the others, never opened directly.
+<FilesMatch "^razorpay_helpers\.php$">
+    Require all denied
+</FilesMatch>

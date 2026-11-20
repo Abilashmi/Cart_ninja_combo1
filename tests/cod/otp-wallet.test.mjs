@@ -1,9 +1,10 @@
 /* eslint-env node */
 // Run with: node --import ./tests/packs/register.mjs --test tests/cod/otp-wallet.test.mjs
-// The OTP wallet (50 paise per SMS sent by Digifyce) against the REAL
-// php_backend/otp_wallet*.php files on a throwaway MariaDB. Digifyce itself is
-// the harness's fake app server: it answers otp_send.php and
-// razorpay_create_order.php, and the test plays Digifyce's signed confirmation.
+// The OTP wallet (50 paise per SMS, sent by the BRIX PHP server with BRIX's MSG91
+// account) against the REAL php_backend/otp_wallet*.php + otp_sms_lib.php files on a
+// throwaway MariaDB. The harness's fake app server stands in for MSG91 (/api/v5/otp)
+// and for Digifyce's razorpay_create_order.php; the test plays Digifyce's signed
+// confirmation.
 import test, { after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -16,17 +17,22 @@ if (!harnessAvailable()) {
 
 const CONFIRM_SECRET = 'confirm-secret-0123456789abcdef0123456789';
 const API_KEY = 'digifyce-api-key-0123456789abcdef0123456789';
+const MSG91_KEY = 'brix-msg91-key-0123456789';
 const harness = await startHarness({
   portOffset: 40,
-  extraFiles: ['otp_wallet.php', 'otp_wallet_lib.php', 'otp_wallet_confirm.php'],
-  extraEnv: ({ appUrl }) => ({ DIGIFYCE_API_URL: appUrl, DIGIFYCE_API_KEY: API_KEY, DIGIFYCE_CONFIRM_SECRET: CONFIRM_SECRET }),
+  extraFiles: ['otp_wallet.php', 'otp_wallet_lib.php', 'otp_wallet_confirm.php', 'otp_sms_lib.php'],
+  extraEnv: ({ appUrl }) => ({
+    DIGIFYCE_API_URL: appUrl, DIGIFYCE_API_KEY: API_KEY, DIGIFYCE_CONFIRM_SECRET: CONFIRM_SECRET,
+    BRIX_MSG91_AUTH_KEY: MSG91_KEY, BRIX_MSG91_TEMPLATE_ID: 'tmplBRIX01', BRIX_MSG91_BASE: appUrl,
+  }),
 });
 process.env.PHP_BASE_URL = harness.baseUrl;
 process.env.BRIX_INTERNAL_SECRET = harness.secret;
 delete process.env.BRIX_ACCEPT_LEGACY_SECRET;
 process.env.SHOPIFY_API_SECRET = 'test-secret';
-process.env.DIGIFYCE_API_URL = harness.appUrl;
-process.env.DIGIFYCE_API_KEY = API_KEY;
+// Node itself never talks to Digifyce or BRIX's MSG91: the PHP server sends.
+delete process.env.DIGIFYCE_API_URL;
+delete process.env.DIGIFYCE_API_KEY;
 // Rollout switch: only this test store uses the wallet (OTHER below never does).
 process.env.OTP_WALLET_SHOPS = 'demo.myshopify.com';
 delete process.env.MSG91_AUTH_KEY;
@@ -41,7 +47,7 @@ const reset = async () => {
   for (const t of ['cod_settings', 'cod_otp', 'cod_orders', 'cod_secrets', 'otp_wallet', 'otp_wallet_ledger', 'otp_recharges']) await sql(`DELETE FROM ${t}`).catch(() => {});
   harness.app.requests.length = 0;
   harness.app.reply = (entry) => {
-    if (entry.path.startsWith('/otp_send.php')) return { status: 200, body: { ok: true, messageId: 'm1' } };
+    if (entry.path.startsWith('/api/v5/otp')) return { status: 200, body: { type: 'success', request_id: 'r1' } };
     if (entry.path.startsWith('/razorpay_create_order.php')) return { status: 200, body: { ok: true, order_id: 'order_TEST1', pay_url: 'https://digifyce.example/razorpay_pay.php?order_id=order_TEST1' } };
     return { status: 404, body: {} };
   };
@@ -71,7 +77,7 @@ test('an empty wallet: no OTP step, no SMS, nothing charged', async () => {
   await cod.saveCodSettings(SHOP, { requireOtp: true });
   assert.equal(await cod.otpAvailableForShop(SHOP), false);
   await assert.rejects(() => cod.sendCodOtp(SHOP, '9876543210'), (e) => e.code === 'otp_not_needed');
-  assert.equal(harness.app.requests.length, 0, 'Digifyce was not asked to send');
+  assert.equal(harness.app.requests.length, 0, 'MSG91 was not asked to send');
   assert.equal(await balance(), 0);
   assert.equal(await runtimeFlag(), false, 'the storefront flag says no OTP');
 });
@@ -83,9 +89,10 @@ test('a funded wallet: OTP on; each SMS costs 50 paise; at 0 the OTP step switch
   assert.equal(await cod.otpAvailableForShop(SHOP), true);
 
   await cod.sendCodOtp(SHOP, '9876543210');
-  const sent = harness.app.requests.find((r) => r.path.startsWith('/otp_send.php'));
-  assert.equal(sent.headers.authorization, `Bearer ${API_KEY}`);
-  assert.deepEqual([sent.body.shop, sent.body.mobile, /^\d{4}$/.test(sent.body.otp)], [SHOP, '9876543210', true]);
+  const sent = harness.app.requests.find((r) => r.path.startsWith('/api/v5/otp'));
+  const q = new URL(sent.path, 'http://x').searchParams;
+  assert.equal(sent.headers.authkey, MSG91_KEY, "BRIX's MSG91 key, from the PHP server's environment");
+  assert.deepEqual([q.get('template_id'), q.get('mobile'), /^\d{4}$/.test(q.get('otp'))], ['tmplBRIX01', '919876543210', true]);
   assert.equal(await balance(), 50);
 
   await ageOtp();
@@ -95,12 +102,12 @@ test('a funded wallet: OTP on; each SMS costs 50 paise; at 0 the OTP step switch
 
   await ageOtp();
   await assert.rejects(() => cod.sendCodOtp(SHOP, '9876543210'), (e) => e.code === 'otp_not_needed');
-  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/otp_send.php')).length, 2);
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/otp')).length, 2);
 });
 
 test('an SMS that fails to send is refunded', async () => {
   await credit(50);
-  harness.app.reply = () => ({ status: 502, body: { ok: false, error: 'sms_failed' } });
+  harness.app.reply = () => ({ status: 200, body: { type: 'error', message: 'Template not approved' } });
   await assert.rejects(() => cod.sendCodOtp(SHOP, '9876543210'), (e) => e.code === 'otp_send_failed');
   assert.equal(await balance(), 50);
   const ledger = await sql("SELECT type, amount_paise FROM otp_wallet_ledger WHERE ref LIKE 'otp:%' OR ref LIKE 'refund:%' ORDER BY id");
@@ -157,8 +164,8 @@ test('confirmation is refused: wrong signature, stale, wrong amount, unknown rec
 
 test('a store with its own MSG91 keys never uses the wallet', async () => {
   assert.equal(smsProviderStatus({ authKey: 'a', templateId: 't' }, 0, SHOP).source, 'store');
-  assert.deepEqual(smsProviderStatus({}, 0, SHOP), { configured: false, provider: 'digifyce', source: 'wallet' });
-  assert.deepEqual(smsProviderStatus({}, 50, SHOP), { configured: true, provider: 'digifyce', source: 'wallet' });
+  assert.deepEqual(smsProviderStatus({}, 0, SHOP), { configured: false, provider: 'brix', source: 'wallet' });
+  assert.deepEqual(smsProviderStatus({}, 50, SHOP), { configured: true, provider: 'brix', source: 'wallet' });
   assert.equal(smsProviderStatus({}, 49, SHOP).configured, false);
 });
 
@@ -209,7 +216,7 @@ test('rollout: only stores in OTP_WALLET_SHOPS use the wallet; every other store
   await cod.saveCodSettings(OTHER, { requireOtp: true });
   assert.equal(await cod.otpAvailableForShop(OTHER), false);
   await assert.rejects(cod.sendCodOtp(OTHER, '9876543210'), (e) => e.code === 'otp_send_failed');
-  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/otp_send.php')).length, 0, 'Digifyce never asked');
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/')).length, 0, 'no SMS from BRIX for it');
   assert.equal((await wallet('otp_wallet.php', { action: 'balance', shop: OTHER })).json.balance_paise, 1000, 'nothing charged');
   // '*' = every store.
   process.env.OTP_WALLET_SHOPS = '*';
@@ -241,4 +248,31 @@ test('grant: free codes from BRIX, once per reference, turns the OTP step on', a
   const [entry] = (await cod.getOtpWalletLedger(SHOP, { type: 'credit' })).entries;
   assert.equal(entry.note, 'Free credit from BRIX');
   assert.equal(await cod.otpAvailableForShop(SHOP), true);
+});
+
+test('send: the PHP server charges, sends and refunds in one call; a retried call never sends twice', async () => {
+  await credit(100);
+  const body = { action: 'send', shop: SHOP, mobile: '9876543210', otp: '4321', ref: 'otp:77' };
+  const first = await wallet('otp_wallet.php', body);
+  assert.deepEqual([first.status, first.json.sent, first.json.balance_paise], [200, true, 50]);
+  const again = await wallet('otp_wallet.php', body);
+  assert.deepEqual([again.json.sent, again.json.duplicate, again.json.balance_paise], [true, true, 50], 'charged once');
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/otp')).length, 1, 'sent once');
+  // The price is the server's: an amount sent by the caller is ignored.
+  const cheap = await wallet('otp_wallet.php', { ...body, ref: 'otp:78', amount_paise: 1 });
+  assert.equal(cheap.json.balance_paise, 0);
+  // Bad input is refused before any money moves.
+  assert.equal((await wallet('otp_wallet.php', { ...body, ref: 'x:1' })).status, 400);
+  assert.equal((await wallet('otp_wallet.php', { ...body, ref: 'otp:79', mobile: '12345' })).status, 400);
+  // Empty: 402, nothing sent.
+  const empty = await wallet('otp_wallet.php', { ...body, ref: 'otp:80' });
+  assert.deepEqual([empty.status, empty.json.code], [402, 'wallet_empty']);
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/api/v5/otp')).length, 2);
+  // A refused send that is retried stays refunded and unsent.
+  await credit(50);
+  harness.app.reply = () => ({ status: 200, body: { type: 'error', message: 'DLT' } });
+  const refused = await wallet('otp_wallet.php', { ...body, ref: 'otp:81' });
+  assert.deepEqual([refused.json.sent, refused.json.balance_paise], [false, 50]);
+  const retried = await wallet('otp_wallet.php', { ...body, ref: 'otp:81' });
+  assert.deepEqual([retried.json.sent, retried.json.duplicate, retried.json.balance_paise], [false, true, 50]);
 });

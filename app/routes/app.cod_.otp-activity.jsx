@@ -8,7 +8,7 @@ import { boundary } from '@shopify/shopify-app-react-router/server';
 import { Page, Card, BlockStack, InlineStack, Text, Banner, Button, ButtonGroup, Box, Divider } from '@shopify/polaris';
 import { authenticate } from '../shopify.server';
 import { getOtpWalletLedger, getShopTimezone, OTP_WALLET_TYPES } from '../services/cod.server';
-import { digifyceConfig } from '../services/cod-sms.server';
+import { otpWalletOn, otpWalletRechargeOn } from '../services/cod-sms.server';
 
 const PAGE_SIZE = 25;
 
@@ -39,7 +39,7 @@ export async function loader({ request }) {
   const url = new URL(request.url);
   const type = OTP_WALLET_TYPES.includes(url.searchParams.get('type')) ? url.searchParams.get('type') : '';
   const beforeId = Number(url.searchParams.get('before')) || 0;
-  if (!digifyceConfig(shop)) return { available: false, type, beforeId };
+  if (!otpWalletOn(shop)) return { available: false, type, beforeId };
   try {
     const [ledger, timeZone] = await Promise.all([
       getOtpWalletLedger(shop, { type, beforeId, limit: PAGE_SIZE }),
@@ -47,6 +47,8 @@ export async function loader({ request }) {
     ]);
     return {
       available: true, type, beforeId, ...ledger,
+      // Same switch as the wallet card's "Add money" (app.cod_.customize.jsx).
+      rechargeOn: otpWalletRechargeOn(),
       entries: ledger.entries.map((e) => ({ ...e, when: shopTime(e.atMs, timeZone) })),
     };
   } catch (error) {
@@ -152,7 +154,7 @@ export default function OtpActivityPage() {
       backAction={{ content: 'Customize COD', onAction: back }}
       title="OTP activity"
       subtitle="Every code sent, refund and recharge of your OTP wallet."
-      primaryAction={{ content: 'Add money', onAction: back }}
+      primaryAction={data.rechargeOn ? { content: 'Add money', onAction: back } : undefined}
     >
       <BlockStack gap="400">
         {data.error && <Banner tone="critical">The OTP wallet could not be loaded. Reload the page.</Banner>}

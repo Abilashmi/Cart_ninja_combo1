@@ -34,7 +34,7 @@ import {
 import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discount-shopify.server';
 import { syncPartialCodPaymentRule } from '../services/partial-cod.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
-import { smsProviderStatus, digifyceConfig, OTP_PRICE_PAISE } from '../services/cod-sms.server';
+import { smsProviderStatus, otpWalletOn, otpWalletRechargeOn, OTP_PRICE_PAISE } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
 import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags, codCharges } from '../utils/cod.shared';
 import { partialCodSplit } from '../utils/partial-cod.shared.js';
@@ -94,11 +94,13 @@ export async function loader({ request }) {
     // Only "set / last 4" — the GA4 secret and Meta token never reach the browser.
     secretsStatus = await getCodSecretsStatus(shop);
     const ownKeys = msg91Creds(await getCodSecrets(shop));
-    if (digifyceConfig(shop) && !(ownKeys.authKey && ownKeys.templateId)) {
+    if (otpWalletOn(shop) && !(ownKeys.authKey && ownKeys.templateId)) {
       wallet = await getOtpWalletSummary(shop).catch((error) => {
         console.warn('[app.cod.customize] OTP wallet could not be loaded:', String(error?.message || error).slice(0, 200));
         return { error: true, balancePaise: 0, pricePaise: OTP_PRICE_PAISE, messagesLeft: 0 };
       });
+      // "Add money" only where switched on (otpWalletRechargeOn).
+      wallet = { ...wallet, rechargeOn: otpWalletRechargeOn() };
     }
     sms = smsProviderStatus(ownKeys, wallet?.balancePaise ?? null, shop);
     couponOptions = (await listActiveDiscounts(admin).catch(() => []))
@@ -138,6 +140,7 @@ export async function action({ request }) {
       return { success: true, intent: 'test_tracking', result: await sendCodTestEvents({ settings, secrets }) };
     }
     if (body.intent === 'wallet_recharge') {
+      if (!otpWalletRechargeOn()) return { success: false, intent: 'wallet_recharge', error: 'Adding money here is not open yet. Message the BRIX team in the chat.' };
       // Any amount, paid by Razorpay on Digifyce's page; the wallet is credited when Digifyce confirms the payment.
       const rupees = Math.round(Number(body.amount) || 0);
       if (rupees < 100 || rupees > 50000) return { success: false, intent: 'wallet_recharge', error: 'Enter an amount between ₹100 and ₹50,000.' };
@@ -1286,6 +1289,11 @@ export default function CodCustomizePage() {
                 </InlineStack>
                 <Text as="p" tone="subdued">Each code costs {rupees(wallet.pricePaise)}. Codes are sent only while there is money in the wallet.</Text>
                 {wallet.error && <Banner tone="critical">The wallet could not be loaded. Reload the page.</Banner>}
+                {/* Recharge (Razorpay on Digifyce) only where switched on; else the team adds codes. */}
+                {!wallet.rechargeOn && (
+                  <Text as="p" variant="bodySm" tone="subdued">Need more codes? Message the BRIX team in the chat (bottom right).</Text>
+                )}
+                {wallet.rechargeOn && (<>
                 <InlineStack gap="200" blockAlign="end" wrap={false}>
                   <div style={{ flex: 1 }}>
                     <TextField
@@ -1329,6 +1337,7 @@ export default function CodCustomizePage() {
                     <Text as="p">If you paid, the balance above is already updated. If it is not, refresh in a minute.</Text>
                   </Banner>
                 )}
+                </>)}
                 {/* The full history (every code sent, refund and recharge) has its own page. */}
                 <InlineStack>
                   <Button variant="plain" onClick={() => navigate('/app/cod/otp-activity')}>View OTP activity</Button>

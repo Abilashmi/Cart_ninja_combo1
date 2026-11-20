@@ -1,6 +1,6 @@
 <?php
 /**
- * Shared code for the BRIX OTP wallet on digifyce.global.com.
+ * Shared code for the BRIX OTP wallet on digifyceglobal.com/wallet-brix-convert.
  * Upload every file in docs/digifyce/ to the same folder on the Digifyce server.
  *
  * Server environment (SetEnv in .htaccess, see .htaccess.example). Nothing secret is in the code:
@@ -9,7 +9,7 @@
  *                         (same value as DIGIFYCE_API_KEY on the BRIX side)
  *   BRIX_CONFIRM_URL      https://<BRIX PHP server>/otp_wallet_confirm.php
  *   BRIX_CONFIRM_SECRET   32+ characters, same as DIGIFYCE_CONFIRM_SECRET on the BRIX PHP server
- *   DIGIFYCE_PUBLIC_URL   https://digifyce.global.com (this server, no trailing slash)
+ *   DIGIFYCE_PUBLIC_URL   https://digifyceglobal.com/wallet-brix-convert (this folder, no trailing slash)
  */
 
 function dg_json($status, $body) {
@@ -24,7 +24,7 @@ function dg_env($name) {
     return (string)getenv($name);
 }
 
-/** Only BRIX may call create-order and send-OTP. */
+/** Only BRIX may call create-order. */
 function dg_require_brix() {
     $key = dg_env('BRIX_API_KEY');
     if (strlen($key) < 32) dg_json(503, ['ok' => false, 'error' => 'not_configured']);

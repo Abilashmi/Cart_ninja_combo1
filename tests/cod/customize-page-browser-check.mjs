@@ -21,7 +21,7 @@ const STUBS = {
   'prepaid-discount-shopify.server': 'export const syncPrepaidDiscount = () => {}, prepaidRuntime = () => ({});',
   'cod.server': 'export class CodError extends Error {}; export const getCodSettings=()=>{}, getCodSettingsWithRuntime=()=>{}, saveCodSettings=()=>{}, syncCodRuntime=()=>{}, listCodOrders=()=>{}, summarizeCodOrders=()=>({}), getCodSecrets=()=>{}, getCodSecretsStatus=()=>{}, saveCodSecrets=()=>{}, msg91Creds=()=>({}), getCodShipping=()=>{}, saveCodShipping=()=>{}, loadUnlistedBlocked=()=>{}, getOtpWalletSummary=()=>{}, startOtpRecharge=()=>{};',
   'cod-tracking.server': 'export const sendCodTestEvents = () => {};',
-  'cod-sms.server': 'export const smsProviderStatus = () => {}, digifyceConfig = () => null, OTP_PRICE_PAISE = 50;',
+  'cod-sms.server': 'export const smsProviderStatus = () => {}, otpWalletOn = () => false, otpWalletRechargeOn = () => false, OTP_PRICE_PAISE = 50;',
   'discounts.server': 'export const listActiveDiscounts = async () => [];',
 };
 
