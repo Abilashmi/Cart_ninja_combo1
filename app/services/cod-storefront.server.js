@@ -13,7 +13,7 @@ import { getFeatureState } from '../config/plans';
 import { getShopPlan } from './plan-permissions.server';
 import { isStorefrontPaused } from './billing.server';
 import { getShopCurrency } from '../utils/currency.server';
-import { CodError, getCodSettings, getCodSecrets, getCodShipping, otpAvailable, rateLimit, clientIp } from './cod.server';
+import { CodError, getCodSettings, getCodShipping, otpAvailableForShop, rateLimit, clientIp } from './cod.server';
 import { COD_SURFACES } from '../utils/cod.shared.js';
 import { BOX_PRICING_FEATURES } from '../utils/combo-weight.shared.js';
 
@@ -86,8 +86,9 @@ export async function loadCodContext(shop, { needAdmin = true, withShipping = fa
     // pauses with the other storefront features, as cod_storefront.php does.
     paused,
     live: settings.enabled && planState === 'enabled' && !paused,
-    // The store's own MSG91 keys, else the BRIX server's.
-    otpRequired: settings.requireOtp && otpAvailable(await getCodSecrets(shop).catch(() => null)),
+    // The store's own MSG91 keys, else BRIX's SMS paid from the store's OTP wallet
+    // (an empty wallet = no OTP step), else the BRIX server's MSG91.
+    otpRequired: settings.requireOtp && await otpAvailableForShop(shop),
     currencyCode: currency?.code || 'INR',
     // Box-priced combos get their box price in COD only on a plan that publishes
     // some box pricing (Quantity Box on Starter+, Weight / Value Box on Growth+).

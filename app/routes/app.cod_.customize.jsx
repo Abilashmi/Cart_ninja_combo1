@@ -23,7 +23,7 @@ import { formatMoney } from '../utils/currency.shared';
 import { useScrollOpenSectionToTop } from '../utils/accordion-scroll';
 import {
   CodError, getCodSettings, getCodSettingsWithRuntime, saveCodSettings, syncCodRuntime, getCodSecrets, getCodSecretsStatus, saveCodSecrets, msg91Creds,
-  getCodShipping, saveCodShipping, loadUnlistedBlocked,
+  getCodShipping, saveCodShipping, loadUnlistedBlocked, getOtpWalletSummary, startOtpRecharge,
 } from '../services/cod.server';
 import { quoteShipping, shippingErrors, shippingFromSimple } from '../utils/shipping.shared';
 import {
@@ -34,7 +34,7 @@ import {
 import { syncPrepaidDiscount, prepaidRuntime } from '../services/prepaid-discount-shopify.server';
 import { syncPartialCodPaymentRule } from '../services/partial-cod.server';
 import { sendCodTestEvents } from '../services/cod-tracking.server';
-import { smsProviderStatus } from '../services/cod-sms.server';
+import { smsProviderStatus, digifyceConfig, OTP_PRICE_PAISE } from '../services/cod-sms.server';
 import { listActiveDiscounts } from '../services/discounts.server';
 import { sanitizeCodSettings, DEFAULT_COD_SETTINGS, COD_PRODUCT_BUTTON_LIMITS, COD_FEE_LABEL_DEFAULT, COD_FEE_PERCENT_MAX, COD_PICK_MAX, codButtonLook, hasPriceTags, codCharges } from '../utils/cod.shared';
 import { partialCodSplit } from '../utils/partial-cod.shared.js';
@@ -68,6 +68,9 @@ export async function loader({ request }) {
   let prepaidStatus = null;
   let loadError = null;
   let sms = smsProviderStatus();
+  // OTP wallet (BRIX's SMS, 50 paise a message): balance + recent entries; null when this
+  // server doesn't use Digifyce or the store sends with its own MSG91 keys.
+  let wallet = null;
   // Dynamic shipping: the saved config, else one that charges what the simple
   // settings charge (the starting point when a store switches).
   let shipping = null;
@@ -90,7 +93,14 @@ export async function loader({ request }) {
     await syncCodRuntime(shop, { admin });
     // Only "set / last 4" — the GA4 secret and Meta token never reach the browser.
     secretsStatus = await getCodSecretsStatus(shop);
-    sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
+    const ownKeys = msg91Creds(await getCodSecrets(shop));
+    if (digifyceConfig() && !(ownKeys.authKey && ownKeys.templateId)) {
+      wallet = await getOtpWalletSummary(shop).catch((error) => {
+        console.warn('[app.cod.customize] OTP wallet could not be loaded:', String(error?.message || error).slice(0, 200));
+        return { error: true, balancePaise: 0, pricePaise: OTP_PRICE_PAISE, messagesLeft: 0, entries: [] };
+      });
+    }
+    sms = smsProviderStatus(ownKeys, wallet?.balancePaise ?? null);
     couponOptions = (await listActiveDiscounts(admin).catch(() => []))
       .filter((d) => !d.isAutomatic && d.code && d.status === 'ACTIVE')
       .map((d) => ({ code: d.code, title: d.title || '', summary: d.summary || '' }));
@@ -108,6 +118,7 @@ export async function loader({ request }) {
     planState: getFeatureState(planKey, 'cod_checkout'),
     currencyCode: currency.code,
     sms,
+    wallet,
     couponOptions,
     secretsStatus,
     prepaidStatus,
@@ -125,6 +136,13 @@ export async function action({ request }) {
       // Uses the saved IDs and keys (the page asks to save first).
       const [settings, secrets] = await Promise.all([getCodSettings(session.shop), getCodSecrets(session.shop)]);
       return { success: true, intent: 'test_tracking', result: await sendCodTestEvents({ settings, secrets }) };
+    }
+    if (body.intent === 'wallet_recharge') {
+      // Any amount, paid by Razorpay on Digifyce's page; the wallet is credited when Digifyce confirms the payment.
+      const rupees = Math.round(Number(body.amount) || 0);
+      if (rupees < 100 || rupees > 50000) return { success: false, intent: 'wallet_recharge', error: 'Enter an amount between ₹100 and ₹50,000.' };
+      const { payUrl } = await startOtpRecharge(session.shop, rupees * 100);
+      return { success: true, intent: 'wallet_recharge', payUrl };
     }
     if (body.secrets && typeof body.secrets === 'object') await saveCodSecrets(session.shop, body.secrets);
     // Dynamic shipping is stored on its own, before the settings that switch it on.
@@ -386,6 +404,8 @@ export default function CodCustomizePage() {
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const testFetcher = useFetcher();
+  const walletFetcher = useFetcher();
+  const [rechargeAmount, setRechargeAmount] = useState('');
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState(() => (data.settings ? toForm(data.settings) : null));
   const [saved, setSaved] = useState(() => (data.settings ? toForm(data.settings) : null));
@@ -589,7 +609,9 @@ export default function CodCustomizePage() {
                 <CodFlow otpOn={otpOn} />
                 {!otpOn && (
                   <Text as="p" variant="bodySm" tone="subdued">
-                    {form.requireOtp ? 'Phone verification starts once you add your MSG91 keys (Advanced → OTP SMS (MSG91)).' : 'Phone verification is off (Fraud protection).'}
+                    {form.requireOtp
+                      ? (data.sms.source === 'wallet' ? 'Phone verification is paused: your OTP wallet is empty (Advanced → OTP SMS (MSG91)).' : 'Phone verification starts once you add your MSG91 keys (Advanced → OTP SMS (MSG91)).')
+                      : 'Phone verification is off (Fraud protection).'}
                   </Text>
                 )}
               </BlockStack>
@@ -1070,7 +1092,9 @@ export default function CodCustomizePage() {
             <FormLayout>
               <Checkbox
                 label="Verify phone with an SMS code (OTP)"
-                helpText={data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS (MSG91)).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS (MSG91).'}
+                helpText={data.sms.source === 'wallet'
+                  ? (data.sms.configured ? 'Each code is one SMS sent by BRIX, paid from your OTP wallet (Advanced → OTP SMS).' : 'Your OTP wallet is empty, so no code is asked for. Add money in Advanced → OTP SMS.')
+                  : (data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS (MSG91)).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS (MSG91).')}
                 checked={form.requireOtp}
                 onChange={set('requireOtp')}
               />
@@ -1237,14 +1261,88 @@ export default function CodCustomizePage() {
     if (id === 'sms') {
       const st = data.secretsStatus || {};
       const own = st.msg91AuthKey?.set && st.msg91TemplateId?.set;
+      const wallet = data.wallet;
+      const rupees = (paise) => `₹${((Number(paise) || 0) / 100).toFixed(2)}`;
       let status;
       if (own) status = <Banner tone="success">Connected: OTP codes are sent from your MSG91 account.</Banner>;
+      else if (wallet && wallet.balancePaise >= wallet.pricePaise) status = <Banner tone="success">OTP codes are sent by BRIX. {rupees(wallet.balancePaise)} left, enough for about {wallet.messagesLeft} codes.</Banner>;
+      else if (wallet) status = <Banner tone="warning">Your OTP wallet is empty, so shoppers are not asked for a code and phone numbers are not verified. Add money below to turn OTP back on.</Banner>;
       else if (data.sms.source === 'server') status = <Banner tone="info">OTP codes are sent from the BRIX server&apos;s MSG91 account. Add your own keys to send from yours.</Banner>;
       else status = <Banner tone="warning">No SMS provider yet, so shoppers aren&apos;t asked for an OTP. Add both keys and save.</Banner>;
       return (
         <BlockStack gap="400">
           <Text as="p" tone="subdued">The SMS account that sends the 4-digit code shoppers enter to verify their phone (Fraud protection → Verify phone with an SMS code).</Text>
           {status}
+          {wallet && !own && (
+            <Card>
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center" wrap>
+                  <BlockStack gap="050">
+                    <Text as="h3" variant="headingMd">OTP wallet</Text>
+                    <Text as="p" tone="subdued">Each code costs {rupees(wallet.pricePaise)}. Codes are sent only while there is money in the wallet.</Text>
+                  </BlockStack>
+                  <BlockStack gap="050" inlineAlign="end">
+                    <Text as="p" variant="headingLg">{rupees(wallet.balancePaise)}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">about {wallet.messagesLeft} codes</Text>
+                  </BlockStack>
+                </InlineStack>
+                {wallet.error && <Banner tone="critical">The wallet could not be loaded. Reload the page.</Banner>}
+                <InlineStack gap="200" blockAlign="end" wrap={false}>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Amount to add"
+                      type="number"
+                      prefix="₹"
+                      value={rechargeAmount}
+                      onChange={setRechargeAmount}
+                      min={100}
+                      max={50000}
+                      autoComplete="off"
+                      helpText="Any amount from ₹100 to ₹50,000. You pay by Razorpay on a secure page."
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    loading={walletFetcher.state !== 'idle'}
+                    disabled={!(Number(rechargeAmount) >= 100 && Number(rechargeAmount) <= 50000)}
+                    onClick={() => walletFetcher.submit(JSON.stringify({ intent: 'wallet_recharge', amount: Number(rechargeAmount) }), { method: 'post', encType: 'application/json' })}
+                  >
+                    Add money
+                  </Button>
+                </InlineStack>
+                {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.success === false && (
+                  <Banner tone="critical">{walletFetcher.data.error || 'The payment page could not be opened. Please try again.'}</Banner>
+                )}
+                {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.payUrl && (
+                  <Banner tone="info" title="Your payment page is ready">
+                    <BlockStack gap="200">
+                      <Text as="p">Pay on the Razorpay page, then come back here. The money shows in the wallet within a minute.</Text>
+                      <InlineStack gap="200">
+                        <Button url={walletFetcher.data.payUrl} target="_blank" external>Open payment page</Button>
+                        <Button onClick={() => navigate('.', { replace: true })}>I have paid, refresh balance</Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Banner>
+                )}
+                {searchParams.get('wallet') === 'back' && !walletFetcher.data && (
+                  <Banner tone="info" title="Welcome back">
+                    <Text as="p">If you paid, the balance above is already updated. If it is not, refresh in a minute.</Text>
+                  </Banner>
+                )}
+                {wallet.entries.length > 0 && (
+                  <BlockStack gap="100">
+                    <Text as="h4" variant="headingSm">Recent activity</Text>
+                    {wallet.entries.map((e, i) => (
+                      <InlineStack key={`${e.at}-${i}`} align="space-between" wrap={false}>
+                        <Text as="span" variant="bodySm" tone="subdued">{String(e.at || '').slice(0, 16)} · {e.type === 'debit' ? 'OTP sent' : e.type === 'refund' ? 'OTP not sent, refunded' : 'Money added'}</Text>
+                        <Text as="span" variant="bodySm" tone={e.type === 'debit' ? 'subdued' : 'success'}>{e.type === 'debit' ? '−' : '+'}{rupees(e.amountPaise)}</Text>
+                      </InlineStack>
+                    ))}
+                  </BlockStack>
+                )}
+              </BlockStack>
+            </Card>
+          )}
           <Card>
             <FormLayout>
               <SecretField
