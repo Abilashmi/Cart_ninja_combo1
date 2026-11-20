@@ -11,7 +11,13 @@ require_once __DIR__ . '/otp_wallet_lib.php';
  *        402 wallet_empty when the balance is lower than the amount
  *   POST { action: 'refund', shop, amount_paise, ref }       -> { balance_paise, duplicate }
  *        (an OTP SMS that failed to send after it was charged)
- *   POST { action: 'ledger', shop, limit? }                  -> { balance_paise, entries: [...] }
+ *   POST { action: 'grant',  shop, amount_paise, ref }       -> { balance_paise, duplicate }
+ *        free credit from BRIX (max Rs 1,000 a call); the same ref never credits twice.
+ *        Run by scripts/otp-wallet-grant.mjs.
+ *   POST { action: 'ledger', shop, limit?, before_id?, type? } -> { balance_paise, entries: [...], has_more }
+ *        newest first, `limit` 1-100 (default 20); `before_id` = the last id shown
+ *        (next page); `type` = debit | refund | credit (else all). created_ts =
+ *        Unix seconds, so Node can show the time in the shop's zone.
  *   POST { action: 'recharge_create', shop, amount_paise, return_url }
  *        -> { recharge_id, pay_url }  asks Digifyce (digifyce.global.com) for a
  *        Razorpay payment page; the money is credited only when Digifyce confirms
@@ -41,12 +47,31 @@ if ($action === 'debit' || $action === 'refund') {
     });
 }
 
+if ($action === 'grant') {
+    $ref = (string)($body['ref'] ?? '');
+    if ($amount > OTPW_MAX_GRANT_PAISE) cod_fail(400, 'invalid_amount', 'A grant can be at most Rs ' . (OTPW_MAX_GRANT_PAISE / 100) . '.');
+    if (strpos($ref, 'grant:') !== 0) cod_fail(400, 'invalid_ref', 'A grant reference starts with grant:');
+    otpw_run($pdo, function ($pdo) use ($shop, $amount, $ref) {
+        $result = otpw_apply($pdo, $shop, 'credit', $amount, $ref, 'Free credit from BRIX');
+        cod_ok(['balance_paise' => $result['balance'], 'duplicate' => $result['duplicate']]);
+    });
+}
+
 if ($action === 'ledger') {
-    $limit = max(1, min(50, (int)($body['limit'] ?? 20)));
-    otpw_run($pdo, function ($pdo) use ($shop, $limit) {
-        $stmt = $pdo->prepare('SELECT type, amount_paise, balance_after, note, created_at FROM otp_wallet_ledger WHERE shop = ? ORDER BY id DESC LIMIT ' . $limit);
-        $stmt->execute([$shop]);
-        cod_ok(['balance_paise' => otpw_balance($pdo, $shop), 'entries' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    $limit = max(1, min(100, (int)($body['limit'] ?? 20)));
+    $before = max(0, (int)($body['before_id'] ?? 0));
+    $type = in_array($body['type'] ?? '', ['debit', 'refund', 'credit'], true) ? $body['type'] : '';
+    otpw_run($pdo, function ($pdo) use ($shop, $limit, $before, $type) {
+        $sql = 'SELECT id, type, amount_paise, balance_after, note, created_at, UNIX_TIMESTAMP(created_at) AS created_ts FROM otp_wallet_ledger WHERE shop = ?';
+        $params = [$shop];
+        if ($before > 0) { $sql .= ' AND id < ?'; $params[] = $before; }
+        if ($type !== '') { $sql .= ' AND type = ?'; $params[] = $type; }
+        // One extra row tells whether there is a next page.
+        $stmt = $pdo->prepare($sql . ' ORDER BY id DESC LIMIT ' . ($limit + 1));
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $hasMore = count($rows) > $limit;
+        cod_ok(['balance_paise' => otpw_balance($pdo, $shop), 'entries' => array_slice($rows, 0, $limit), 'has_more' => $hasMore]);
     });
 }
 

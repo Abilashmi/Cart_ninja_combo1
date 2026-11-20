@@ -19,6 +19,7 @@
 const OTPW_PRICE_PAISE = 50;
 const OTPW_MIN_RECHARGE_PAISE = 10000;     // Rs 100
 const OTPW_MAX_RECHARGE_PAISE = 5000000;   // Rs 50,000
+const OTPW_MAX_GRANT_PAISE = 100000;      // Rs 1,000 of free credit per grant
 
 class OtpWalletError extends Exception {
     public $httpStatus;

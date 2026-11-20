@@ -18,7 +18,7 @@ import { getFeatureState } from '../config/plans';
 import { getShopCurrency } from '../utils/currency.server';
 import { formatMoney } from '../utils/currency.shared';
 import {
-  CodError, getCodSettings, getCodSecrets, msg91Creds, syncCodRuntime, loadCodOrders, summarizeCodOrders, getCodShippingStats, getShopTimezone,
+  CodError, getCodSettings, getCodSecrets, msg91Creds, otpAvailableForShop, syncCodRuntime, loadCodOrders, summarizeCodOrders, getCodShippingStats, getShopTimezone,
   COD_ORDERS_VIEW_MAX,
 } from '../services/cod.server';
 import { loadPartialCodOrders } from '../services/partial-cod.server';
@@ -45,7 +45,8 @@ export async function loader({ request }) {
   try {
     settings = await getCodSettings(shop);
     await syncCodRuntime(shop, { admin });
-    sms = smsProviderStatus(msg91Creds(await getCodSecrets(shop)));
+    // With the OTP wallet, "set up" = the wallet covers a code (otpAvailableForShop reads the balance).
+    sms = { ...smsProviderStatus(msg91Creds(await getCodSecrets(shop)), null, shop), configured: await otpAvailableForShop(shop) };
     ({ orders, total: ordersTotal } = await loadCodOrders(admin, shop, { limit: COD_ORDERS_VIEW_MAX, startMs: range.startMs, endMs: range.endMs }));
     // Partial COD orders (paid in part in Shopify checkout) count as COD orders too.
     const partial = await loadPartialCodOrders(admin, shop, { startMs: range.startMs, endMs: range.endMs, limit: COD_ORDERS_VIEW_MAX })

@@ -68,7 +68,7 @@ export async function loader({ request }) {
   let prepaidStatus = null;
   let loadError = null;
   let sms = smsProviderStatus();
-  // OTP wallet (BRIX's SMS, 50 paise a message): balance + recent entries; null when this
+  // OTP wallet (BRIX's SMS, 50 paise a message): the balance (history: /app/cod/otp-activity); null when this
   // server doesn't use Digifyce or the store sends with its own MSG91 keys.
   let wallet = null;
   // Dynamic shipping: the saved config, else one that charges what the simple
@@ -94,13 +94,13 @@ export async function loader({ request }) {
     // Only "set / last 4" — the GA4 secret and Meta token never reach the browser.
     secretsStatus = await getCodSecretsStatus(shop);
     const ownKeys = msg91Creds(await getCodSecrets(shop));
-    if (digifyceConfig() && !(ownKeys.authKey && ownKeys.templateId)) {
+    if (digifyceConfig(shop) && !(ownKeys.authKey && ownKeys.templateId)) {
       wallet = await getOtpWalletSummary(shop).catch((error) => {
         console.warn('[app.cod.customize] OTP wallet could not be loaded:', String(error?.message || error).slice(0, 200));
-        return { error: true, balancePaise: 0, pricePaise: OTP_PRICE_PAISE, messagesLeft: 0, entries: [] };
+        return { error: true, balancePaise: 0, pricePaise: OTP_PRICE_PAISE, messagesLeft: 0 };
       });
     }
-    sms = smsProviderStatus(ownKeys, wallet?.balancePaise ?? null);
+    sms = smsProviderStatus(ownKeys, wallet?.balancePaise ?? null, shop);
     couponOptions = (await listActiveDiscounts(admin).catch(() => []))
       .filter((d) => !d.isAutomatic && d.code && d.status === 'ACTIVE')
       .map((d) => ({ code: d.code, title: d.title || '', summary: d.summary || '' }));
@@ -1276,16 +1276,15 @@ export default function CodCustomizePage() {
           {wallet && !own && (
             <Card>
               <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center" wrap>
-                  <BlockStack gap="050">
-                    <Text as="h3" variant="headingMd">OTP wallet</Text>
-                    <Text as="p" tone="subdued">Each code costs {rupees(wallet.pricePaise)}. Codes are sent only while there is money in the wallet.</Text>
-                  </BlockStack>
-                  <BlockStack gap="050" inlineAlign="end">
+                {/* Title left, balance right on one line (the sidebar is narrow, so the description goes under both). */}
+                <InlineStack align="space-between" blockAlign="start" gap="400" wrap={false}>
+                  <Text as="h3" variant="headingMd">OTP wallet</Text>
+                  <div style={{ textAlign: 'right' }}>
                     <Text as="p" variant="headingLg">{rupees(wallet.balancePaise)}</Text>
                     <Text as="p" variant="bodySm" tone="subdued">about {wallet.messagesLeft} codes</Text>
-                  </BlockStack>
+                  </div>
                 </InlineStack>
+                <Text as="p" tone="subdued">Each code costs {rupees(wallet.pricePaise)}. Codes are sent only while there is money in the wallet.</Text>
                 {wallet.error && <Banner tone="critical">The wallet could not be loaded. Reload the page.</Banner>}
                 <InlineStack gap="200" blockAlign="end" wrap={false}>
                   <div style={{ flex: 1 }}>
@@ -1298,7 +1297,6 @@ export default function CodCustomizePage() {
                       min={100}
                       max={50000}
                       autoComplete="off"
-                      helpText="Any amount from ₹100 to ₹50,000. You pay by Razorpay on a secure page."
                     />
                   </div>
                   <Button
@@ -1310,6 +1308,8 @@ export default function CodCustomizePage() {
                     Add money
                   </Button>
                 </InlineStack>
+                {/* Under the row, not the field's helpText: the button then lines up with the amount box. */}
+                <Text as="p" variant="bodySm" tone="subdued">Any amount from ₹100 to ₹50,000. You pay by Razorpay on a secure page.</Text>
                 {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.success === false && (
                   <Banner tone="critical">{walletFetcher.data.error || 'The payment page could not be opened. Please try again.'}</Banner>
                 )}
@@ -1329,17 +1329,10 @@ export default function CodCustomizePage() {
                     <Text as="p">If you paid, the balance above is already updated. If it is not, refresh in a minute.</Text>
                   </Banner>
                 )}
-                {wallet.entries.length > 0 && (
-                  <BlockStack gap="100">
-                    <Text as="h4" variant="headingSm">Recent activity</Text>
-                    {wallet.entries.map((e, i) => (
-                      <InlineStack key={`${e.at}-${i}`} align="space-between" wrap={false}>
-                        <Text as="span" variant="bodySm" tone="subdued">{String(e.at || '').slice(0, 16)} · {e.type === 'debit' ? 'OTP sent' : e.type === 'refund' ? 'OTP not sent, refunded' : 'Money added'}</Text>
-                        <Text as="span" variant="bodySm" tone={e.type === 'debit' ? 'subdued' : 'success'}>{e.type === 'debit' ? '−' : '+'}{rupees(e.amountPaise)}</Text>
-                      </InlineStack>
-                    ))}
-                  </BlockStack>
-                )}
+                {/* The full history (every code sent, refund and recharge) has its own page. */}
+                <InlineStack>
+                  <Button variant="plain" onClick={() => navigate('/app/cod/otp-activity')}>View OTP activity</Button>
+                </InlineStack>
               </BlockStack>
             </Card>
           )}

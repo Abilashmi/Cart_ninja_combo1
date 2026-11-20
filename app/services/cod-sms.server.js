@@ -39,8 +39,22 @@ function hasOwnMsg91(creds) {
   return Boolean(creds?.authKey && creds?.templateId);
 }
 
-/** Digifyce's address and key, or null when this server isn't set up for it. */
-export function digifyceConfig() {
+/**
+ * Which stores use the OTP wallet (rollout switch): OTP_WALLET_SHOPS = '*' (every
+ * store) or a comma list of myshopify domains; unset / empty = none, so every
+ * other store keeps sending as before (its own MSG91 keys, else the server's).
+ */
+export function otpWalletShopAllowed(shop) {
+  const raw = String(process.env.OTP_WALLET_SHOPS || '').trim().toLowerCase();
+  if (!raw) return false;
+  if (raw === '*') return true;
+  const want = String(shop || '').trim().toLowerCase();
+  return Boolean(want) && raw.split(',').map((s) => s.trim()).includes(want);
+}
+
+/** Digifyce's address and key for `shop`, or null when this server isn't set up for it or the store isn't in OTP_WALLET_SHOPS. */
+export function digifyceConfig(shop) {
+  if (!otpWalletShopAllowed(shop)) return null;
   const base = String(process.env.DIGIFYCE_API_URL || '').trim().replace(/\/+$/, '');
   const key = String(process.env.DIGIFYCE_API_KEY || '').trim();
   // https only; plain http to this machine is allowed outside production, for local testing.
@@ -53,9 +67,9 @@ export function digifyceConfig() {
  * balance (null when not known / not needed). source: 'store' | 'wallet' | 'server' | 'dev-log' | null.
  * With source 'wallet', `configured` is whether the balance covers one more OTP.
  */
-export function smsProviderStatus(creds, walletPaise = null) {
+export function smsProviderStatus(creds, walletPaise = null, shop = null) {
   if (hasOwnMsg91(creds)) return { configured: true, provider: 'msg91', source: 'store' };
-  if (digifyceConfig()) {
+  if (digifyceConfig(shop)) {
     return { configured: Number(walletPaise) >= OTP_PRICE_PAISE, provider: 'digifyce', source: 'wallet' };
   }
   const account = msg91Account(creds);
@@ -92,7 +106,7 @@ async function sendViaMsg91(phone10, code, { authKey, templateId }) {
 
 // Digifyce: POST <base>/otp_send.php { shop, mobile, otp, ref } → { ok, messageId } | { ok: false, error }.
 async function sendViaDigifyce(phone10, code, { shop, ref }) {
-  const config = digifyceConfig();
+  const config = digifyceConfig(shop);
   if (!config) return { sent: false, reason: 'not_configured' };
   try {
     const res = await fetch(`${config.base}/otp_send.php`, {
@@ -122,7 +136,7 @@ export async function sendOtpSms(phone10, code, creds, context = {}) {
     const result = await sendViaMsg91(phone10, code, creds);
     return result.sent ? { ...result, via: 'store' } : result;
   }
-  if (digifyceConfig()) {
+  if (digifyceConfig(context.shop)) {
     const result = await sendViaDigifyce(phone10, code, context);
     return result.sent ? { ...result, via: 'wallet' } : result;
   }

@@ -106,8 +106,8 @@ export async function getCodSettingsWithRuntime(shop) {
 // storefront can read everything from php_backend/cod_storefront.php.
 // `prepaid` (from prepaid-discount-shopify.server.js) is kept until the next
 // prepaid sync replaces it; `unlisted` (loadUnlistedBlocked) likewise.
-function runtimeFacts(previous, secrets, walletPaise = null) {
-  const facts = { otpAvailable: otpAvailable(secrets, walletPaise) };
+function runtimeFacts(previous, secrets, walletPaise = null, shop = null) {
+  const facts = { otpAvailable: otpAvailable(secrets, walletPaise, shop) };
   if (previous?.prepaid && typeof previous.prepaid === 'object') facts.prepaid = previous.prepaid;
   if (previous?.unlisted && typeof previous.unlisted === 'object') facts.unlisted = previous.unlisted;
   return facts;
@@ -126,7 +126,7 @@ export async function saveCodSettings(shop, patch, { syncPrepaid, syncUnlisted }
   const current = sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS);
   const next = sanitizeCodSettings(patch, current);
   const secrets = await getCodSecrets(shop);
-  const runtime = runtimeFacts(raw?._runtime, secrets, await walletPaiseFor(shop, secrets, { fresh: true }));
+  const runtime = runtimeFacts(raw?._runtime, secrets, await walletPaiseFor(shop, secrets, { fresh: true }), shop);
   if (typeof syncPrepaid === 'function') runtime.prepaid = await syncPrepaid(next);
   if (typeof syncUnlisted === 'function') {
     runtime.unlisted = await syncUnlisted(next);
@@ -166,7 +166,7 @@ export async function syncCodRuntime(shop, { admin = null } = {}) {
   if (!raw) return;
   const settings = sanitizeCodSettings(raw, DEFAULT_COD_SETTINGS);
   const secrets = await getCodSecrets(shop);
-  const facts = runtimeFacts(raw._runtime, secrets, await walletPaiseFor(shop, secrets, { fresh: true }));
+  const facts = runtimeFacts(raw._runtime, secrets, await walletPaiseFor(shop, secrets, { fresh: true }), shop);
   if (admin && Date.now() - (unlistedCheckedAt.get(shop) || 0) > UNLISTED_REFRESH_MS) {
     unlistedCheckedAt.set(shop, Date.now());
     const fresh = await loadUnlistedBlocked(admin, settings);
@@ -425,8 +425,8 @@ export function clientUa(request) {
  * Digifyce SMS (paid from the OTP wallet: `walletPaise` must cover one OTP),
  * else the server's MSG91.
  */
-export function otpAvailable(secrets, walletPaise = null) {
-  return smsProviderStatus(msg91Creds(secrets), walletPaise).configured;
+export function otpAvailable(secrets, walletPaise = null, shop = null) {
+  return smsProviderStatus(msg91Creds(secrets), walletPaise, shop).configured;
 }
 
 /* ───────────────────────── OTP wallet ───────────────────────── */
@@ -457,7 +457,7 @@ export async function getOtpWalletPaise(shop, { fresh = false } = {}) {
  */
 async function walletPaiseFor(shop, secrets, { fresh = false } = {}) {
   if (msg91Creds(secrets).authKey && msg91Creds(secrets).templateId) return null;
-  if (!digifyceConfig()) return null;
+  if (!digifyceConfig(shop)) return null;
   try {
     return await getOtpWalletPaise(shop, { fresh });
   } catch (error) {
@@ -469,21 +469,46 @@ async function walletPaiseFor(shop, secrets, { fresh = false } = {}) {
 /** Does this store ask shoppers for an OTP right now (own keys, or wallet with credit)? */
 export async function otpAvailableForShop(shop) {
   const secrets = await getCodSecrets(shop).catch(() => null);
-  return otpAvailable(secrets, await walletPaiseFor(shop, secrets));
+  return otpAvailable(secrets, await walletPaiseFor(shop, secrets), shop);
 }
 
-/** { balance, price, messagesLeft, entries[] } for the admin wallet card. */
+const walletEntry = (e) => ({
+  id: Number(e.id) || null,
+  type: e.type, amountPaise: Number(e.amount_paise) || 0, balanceAfterPaise: Number(e.balance_after) || 0, note: e.note || '', at: e.created_at,
+  // The exact moment (an older otp_wallet.php sends only created_at, in the database's clock).
+  atMs: Number(e.created_ts) > 0 ? Number(e.created_ts) * 1000 : null,
+});
+
+/** { balancePaise, pricePaise, messagesLeft } for the admin wallet card (the history has its own page). */
 export async function getOtpWalletSummary(shop) {
-  const { balance_paise: paise, entries } = await php('otp_wallet.php', { action: 'ledger', shop, limit: 10 });
+  const { balance_paise: paise } = await php('otp_wallet.php', { action: 'balance', shop });
   rememberWallet(shop, Number(paise) || 0);
   return {
     balancePaise: Number(paise) || 0,
     pricePaise: OTP_PRICE_PAISE,
     messagesLeft: Math.floor((Number(paise) || 0) / OTP_PRICE_PAISE),
-    entries: (entries || []).map((e) => ({
-      type: e.type, amountPaise: Number(e.amount_paise) || 0, balanceAfterPaise: Number(e.balance_after) || 0, note: e.note || '', at: e.created_at,
-    })),
   };
+}
+
+export const OTP_WALLET_TYPES = ['debit', 'refund', 'credit'];
+
+/**
+ * One page of the OTP wallet history, newest first: { balancePaise, entries[], hasMore, nextBefore }.
+ * `type` = debit | refund | credit (else all); `beforeId` = the last entry's id already shown.
+ */
+export async function getOtpWalletLedger(shop, { type = '', beforeId = 0, limit = 25 } = {}) {
+  const json = await php('otp_wallet.php', {
+    action: 'ledger', shop, limit: Math.max(1, Math.min(100, Number(limit) || 25)),
+    ...(Number(beforeId) > 0 ? { before_id: Number(beforeId) } : {}),
+    ...(OTP_WALLET_TYPES.includes(type) ? { type } : {}),
+  });
+  const paise = Number(json.balance_paise) || 0;
+  rememberWallet(shop, paise);
+  const entries = (json.entries || []).map(walletEntry);
+  const last = entries[entries.length - 1];
+  // An older otp_wallet.php sends no ids or has_more: one page only.
+  const hasMore = Boolean(json.has_more && last?.id);
+  return { balancePaise: paise, pricePaise: OTP_PRICE_PAISE, messagesLeft: Math.floor(paise / OTP_PRICE_PAISE), entries, hasMore, nextBefore: hasMore ? last.id : null };
 }
 
 /** Asks for a Razorpay payment page (Digifyce) for `amountPaise`; returns { rechargeId, payUrl }. */
@@ -498,7 +523,7 @@ export async function sendCodOtp(shop, phone) {
   const secrets = await getCodSecrets(shop).catch(() => null);
   const creds = msg91Creds(secrets);
   const walletPaise = await walletPaiseFor(shop, secrets, { fresh: true });
-  const useWallet = smsProviderStatus(creds, walletPaise).source === 'wallet';
+  const useWallet = smsProviderStatus(creds, walletPaise, shop).source === 'wallet';
   // The wallet ran dry since the page was drawn: no code is sent, the sheet
   // carries on to the address step without phone verification.
   if (useWallet && walletPaise < OTP_PRICE_PAISE) {

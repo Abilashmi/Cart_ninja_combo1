@@ -27,6 +27,8 @@ delete process.env.BRIX_ACCEPT_LEGACY_SECRET;
 process.env.SHOPIFY_API_SECRET = 'test-secret';
 process.env.DIGIFYCE_API_URL = harness.appUrl;
 process.env.DIGIFYCE_API_KEY = API_KEY;
+// Rollout switch: only this test store uses the wallet (OTHER below never does).
+process.env.OTP_WALLET_SHOPS = 'demo.myshopify.com';
 delete process.env.MSG91_AUTH_KEY;
 delete process.env.COD_OTP_DEV_LOG;
 
@@ -154,8 +156,89 @@ test('confirmation is refused: wrong signature, stale, wrong amount, unknown rec
 });
 
 test('a store with its own MSG91 keys never uses the wallet', async () => {
-  assert.equal(smsProviderStatus({ authKey: 'a', templateId: 't' }, 0).source, 'store');
-  assert.deepEqual(smsProviderStatus({}, 0), { configured: false, provider: 'digifyce', source: 'wallet' });
-  assert.deepEqual(smsProviderStatus({}, 50), { configured: true, provider: 'digifyce', source: 'wallet' });
-  assert.equal(smsProviderStatus({}, 49).configured, false);
+  assert.equal(smsProviderStatus({ authKey: 'a', templateId: 't' }, 0, SHOP).source, 'store');
+  assert.deepEqual(smsProviderStatus({}, 0, SHOP), { configured: false, provider: 'digifyce', source: 'wallet' });
+  assert.deepEqual(smsProviderStatus({}, 50, SHOP), { configured: true, provider: 'digifyce', source: 'wallet' });
+  assert.equal(smsProviderStatus({}, 49, SHOP).configured, false);
+});
+
+test('activity page: newest first, pages by id, filter by kind, exact times', async () => {
+  // 1 recharge, then 30 codes sent, every 5th one refunded.
+  await wallet('otp_wallet.php', { action: 'refund', shop: SHOP, amount_paise: 10000, ref: 'seed:recharge' });
+  for (let i = 1; i <= 30; i += 1) {
+    await wallet('otp_wallet.php', { action: 'debit', shop: SHOP, amount_paise: 50, ref: `otp:${i}` });
+    if (i % 5 === 0) await wallet('otp_wallet.php', { action: 'refund', shop: SHOP, amount_paise: 50, ref: `refund:otp:${i}` });
+  }
+  const first = await cod.getOtpWalletLedger(SHOP, { limit: 25 });
+  assert.equal(first.entries.length, 25);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.balancePaise, 10000 - 30 * 50 + 6 * 50);
+  assert.equal(first.entries[0].type, 'refund'); // refund of code 30 is the newest
+  assert.ok(first.entries.every((e, i, all) => i === 0 || e.id < all[i - 1].id), 'newest first');
+  assert.ok(Math.abs(first.entries[0].atMs - Date.now()) < 120000, 'atMs is the real moment');
+
+  const second = await cod.getOtpWalletLedger(SHOP, { limit: 25, beforeId: first.nextBefore });
+  assert.equal(second.entries.length, 37 - 25);
+  assert.equal(second.hasMore, false);
+  assert.equal(second.nextBefore, null);
+  assert.equal(second.entries.at(-1).type, 'refund'); // the seed recharge (made with refund here), oldest
+  assert.equal(new Set([...first.entries, ...second.entries].map((e) => e.id)).size, 37, 'no entry twice');
+
+  const refunds = await cod.getOtpWalletLedger(SHOP, { type: 'refund', limit: 25 });
+  assert.equal(refunds.entries.length, 7);
+  assert.ok(refunds.entries.every((e) => e.type === 'refund'));
+  const sent = await cod.getOtpWalletLedger(SHOP, { type: 'debit', limit: 20 });
+  assert.equal(sent.entries.length, 20);
+  assert.equal(sent.hasMore, true);
+  const sentRest = await cod.getOtpWalletLedger(SHOP, { type: 'debit', limit: 20, beforeId: sent.nextBefore });
+  assert.equal(sentRest.entries.length, 10);
+  assert.ok(sentRest.entries.every((e) => e.type === 'debit'));
+  // An unknown kind = everything.
+  assert.equal((await cod.getOtpWalletLedger(SHOP, { type: 'x', limit: 100 })).entries.length, 37);
+});
+
+test('rollout: only stores in OTP_WALLET_SHOPS use the wallet; every other store is as before', async () => {
+  const OTHER = 'other-store.myshopify.com';
+  const { otpWalletShopAllowed } = await import('../../app/services/cod-sms.server.js');
+  assert.equal(otpWalletShopAllowed(SHOP), true);
+  assert.equal(otpWalletShopAllowed('DEMO.myshopify.com'), true, 'any case');
+  assert.equal(otpWalletShopAllowed(OTHER), false);
+  assert.equal(smsProviderStatus({}, 5000, OTHER).source, null, 'no wallet, no server MSG91 here = no provider, as before');
+  // The other store: no OTP step, no SMS, no money moved, even with credit in its wallet.
+  await wallet('otp_wallet.php', { action: 'grant', shop: OTHER, amount_paise: 1000, ref: 'grant:test' });
+  await cod.saveCodSettings(OTHER, { requireOtp: true });
+  assert.equal(await cod.otpAvailableForShop(OTHER), false);
+  await assert.rejects(cod.sendCodOtp(OTHER, '9876543210'), (e) => e.code === 'otp_send_failed');
+  assert.equal(harness.app.requests.filter((r) => r.path.startsWith('/otp_send.php')).length, 0, 'Digifyce never asked');
+  assert.equal((await wallet('otp_wallet.php', { action: 'balance', shop: OTHER })).json.balance_paise, 1000, 'nothing charged');
+  // '*' = every store.
+  process.env.OTP_WALLET_SHOPS = '*';
+  try {
+    assert.equal(otpWalletShopAllowed(OTHER), true);
+  } finally {
+    process.env.OTP_WALLET_SHOPS = SHOP;
+  }
+  delete process.env.OTP_WALLET_SHOPS;
+  try {
+    assert.equal(otpWalletShopAllowed(SHOP), false, 'unset = no store');
+  } finally {
+    process.env.OTP_WALLET_SHOPS = SHOP;
+  }
+});
+
+test('grant: free codes from BRIX, once per reference, turns the OTP step on', async () => {
+  await cod.saveCodSettings(SHOP, { requireOtp: true });
+  assert.equal(await runtimeFlag(), false, 'empty wallet = no OTP step');
+  const first = await wallet('otp_wallet.php', { action: 'grant', shop: SHOP, amount_paise: 20 * 50, ref: 'grant:20-codes' });
+  assert.equal(first.status, 200);
+  assert.equal(first.json.balance_paise, 1000);
+  assert.equal(await runtimeFlag(), true, 'PHP switches the OTP step on with the credit');
+  const again = await wallet('otp_wallet.php', { action: 'grant', shop: SHOP, amount_paise: 20 * 50, ref: 'grant:20-codes' });
+  assert.equal(again.json.duplicate, true);
+  assert.equal(await balance(), 1000, 'same ref never credits twice');
+  assert.equal((await wallet('otp_wallet.php', { action: 'grant', shop: SHOP, amount_paise: 100001, ref: 'grant:big' })).status, 400, 'max Rs 1,000');
+  assert.equal((await wallet('otp_wallet.php', { action: 'grant', shop: SHOP, amount_paise: 100, ref: 'otp:1' })).status, 400, 'refs start with grant:');
+  const [entry] = (await cod.getOtpWalletLedger(SHOP, { type: 'credit' })).entries;
+  assert.equal(entry.note, 'Free credit from BRIX');
+  assert.equal(await cod.otpAvailableForShop(SHOP), true);
 });
