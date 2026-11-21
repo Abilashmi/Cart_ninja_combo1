@@ -1,3 +1,4 @@
+/* eslint-env node */
 // Run with: node --test tests/cod/saved-addresses.test.mjs
 // Saved shopper addresses (services/saved-addresses.server.js): what is kept
 // from an order, that nothing readable is stored, one row per place, at most
@@ -166,4 +167,40 @@ test('expired rows are purged; no key = nothing collected', async () => {
     process.env.CUSTOMER_DATA_KEY = saved;
     sa.resetSavedAddressState();
   }
+});
+
+test('COD popup autofill: the phone\'s saved addresses in the popup\'s shape, this store only, never in the way', async () => {
+  sa.resetSavedAddressState();
+  const db = fakeDb();
+  await sa.saveAddressFromOrder(db, SHOP, order({ id: 1 }), { now: new Date('2026-11-01T10:00:00Z') });
+  await sa.saveAddressFromOrder(db, SHOP, order({ id: 2, shipping_address: { ...order().shipping_address, address1: '5, Anna Salai', address2: '', zip: '600002' } }), { now: new Date('2026-11-10T10:00:00Z') });
+  await sa.saveAddressFromOrder(db, 'other.myshopify.com', order({ id: 3, shipping_address: { ...order().shipping_address, address1: 'Other store road' } }));
+
+  const list = await sa.savedAddressesForShopper(db, SHOP, '+91 98765 43210');
+  assert.deepEqual(list, [
+    { name: 'Asha Rao', address1: '5, Anna Salai', address2: '', city: 'Chennai', state: 'Tamil Nadu', pincode: '600002', email: 'asha@example.com' },
+    { name: 'Asha Rao', address1: '12, MG Road', address2: 'Flat 4B', city: 'Chennai', state: 'Tamil Nadu', pincode: '600001', email: 'asha@example.com' },
+  ], 'newest first, popup field names');
+  assert.ok(!list.some((a) => a.address1 === 'Other store road'), "another store's addresses never show");
+  assert.deepEqual(await sa.savedAddressesForShopper(db, SHOP, '9123456780'), [], 'another phone gets nothing');
+
+  // A slow or broken database never holds the OTP step up: the shopper types the address.
+  const slow = { execute: () => new Promise(() => {}) };
+  const t0 = Date.now();
+  assert.deepEqual(await sa.savedAddressesForShopper(slow, SHOP, '9876543210', { timeoutMs: 50 }), []);
+  assert.ok(Date.now() - t0 < 1000);
+  const broken = { execute: async () => { throw new Error('db down'); } };
+  sa.resetSavedAddressState();
+  assert.deepEqual(await sa.savedAddressesForShopper(broken, SHOP, '9876543210'), []);
+  // No key on the server = nothing.
+  const key = process.env.CUSTOMER_DATA_KEY;
+  delete process.env.CUSTOMER_DATA_KEY;
+  sa.resetSavedAddressState();
+  try {
+    assert.deepEqual(await sa.savedAddressesForShopper(db, SHOP, '9876543210'), []);
+  } finally {
+    process.env.CUSTOMER_DATA_KEY = key;
+    sa.resetSavedAddressState();
+  }
+  assert.equal(sa.addressForPopup({ address1: 'x', zip: '12' }), null, 'no PIN code = not offered');
 });

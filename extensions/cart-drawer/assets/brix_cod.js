@@ -48,6 +48,28 @@
     'Mizoram', 'Nagaland', 'Odisha', 'Puducherry', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
     'Uttar Pradesh', 'Uttarakhand', 'West Bengal'];
 
+  // Saved addresses the server sends with a verified OTP (api.cod.otp.jsx, from this
+  // store's past orders): kept in memory only, never in the browser's storage.
+  function savedAddresses(list) {
+    if (!Array.isArray(list)) return [];
+    var text = function (v, max) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max || 200); };
+    return list.slice(0, 3).map(function (a) {
+      a = a || {};
+      var want = text(a.state, 100).toLowerCase();
+      var state = '';
+      for (var i = 0; i < STATES.length; i += 1) if (STATES[i].toLowerCase() === want) state = STATES[i];
+      return {
+        name: text(a.name, 120), address1: text(a.address1), address2: text(a.address2), city: text(a.city, 100),
+        state: state, pincode: String(a.pincode || '').replace(/\D/g, '').slice(0, 6), email: text(a.email, 254),
+      };
+    }).filter(function (a) { return a.address1 && /^[1-9]\d{5}$/.test(a.pincode); });
+  }
+
+  // Same place, however it was typed.
+  function addressKey(a) {
+    return (String((a && a.address1) || '') + '|' + String((a && a.pincode) || '')).toLowerCase().replace(/[^a-z0-9|]/g, '');
+  }
+
   /* ---------- small utils ---------- */
 
   function esc(value) {
@@ -672,6 +694,9 @@
     '.card .cb{flex:1;min-width:0}',
     '.card .cb b{display:block;font-size:14.5px;margin-bottom:2px}',
     '.card.plain{border:1px solid #eef0f3;background:#fff}',
+    '.card.sv{width:100%;text-align:left;font:inherit;color:#374151;cursor:pointer;line-height:1.45}',
+    '.card.sv:hover,.card.sv:focus-visible{border-color:var(--cod-bg,#111827)}',
+    '.card.sv .ic{color:#9ca3af}',
     '.ttl{font-size:12px;font-weight:750;letter-spacing:.06em;text-transform:uppercase;color:#6b7280;margin:2px 0 -6px}',
     '.fm{display:flex;flex-direction:column;gap:12px}',
     '.fm[hidden]{display:none}',
@@ -1239,9 +1264,18 @@
       (this.otpFlow() ? '' : '<br>+91 ' + esc(prettyPhone(this.phone))) + '</div>' +
       '<button type="button" class="lk" data-act="edit-addr">' + esc(bxT('storefront.common.change', 'Change')) + '</button></div>';
     var pinSlot = '<div data-pin></div>';
+    var current = addressKey(a);
+    var others = (this.saved || []).map(function (s, i) { return { s: s, i: i }; }).filter(function (o) { return addressKey(o.s) !== current; });
+    var savedList = others.length
+      ? '<div class="ttl">' + esc(bxT('storefront.cod.saved_addresses', 'Your saved addresses')) + '</div>' + others.map(function (o) {
+        return '<button type="button" class="card plain sv" data-act="use-saved" data-i="' + o.i + '">' + icon('home', 20, ' class="ic"') +
+          '<span class="cb"><b>' + esc(o.s.name) + '</b>' + esc(o.s.address1) + (o.s.address2 ? ', ' + esc(o.s.address2) : '') + '<br>' +
+          esc(o.s.city) + (o.s.state ? ', ' + esc(o.s.state) : '') + ' ' + esc(o.s.pincode) + '</span></button>';
+      }).join('')
+      : '';
     this.frame(bxT('storefront.cod.delivery_address', 'Delivery address'), this.otpFlow() ? 'phone' : null, 'address',
       this.summary() + (this.otpFlow() ? phoneBlock : '') +
-      '<div class="ttl">' + esc(bxT('storefront.cod.deliver_to', 'Deliver to')) + '</div>' + card + (editing ? '' : pinSlot) +
+      '<div class="ttl">' + esc(bxT('storefront.cod.deliver_to', 'Deliver to')) + '</div>' + card + (editing ? '' : pinSlot) + savedList +
       '<div class="fm"' + (editing ? '' : ' hidden') + '>' + (this.otpFlow() ? '' : phoneBlock) +
       '<div class="f"><label for="cod-name">' + esc(bxT('storefront.cod.full_name', 'Full name')) + '</label><input id="cod-name" name="name" autocomplete="name" value="' + esc(a.name || '') + '"' + (editing ? ' data-autofocus' : '') + '></div>' +
       '<div class="f"><label for="cod-a1">' + esc(bxT('storefront.cod.address1', 'House no., building, street, area')) + '</label><input id="cod-a1" name="address1" autocomplete="address-line1" value="' + esc(a.address1 || '') + '"></div>' +
@@ -1723,6 +1757,16 @@
       return;
     }
     if (act === 'edit-addr') { this.editAddress(); return; }
+    if (act === 'use-saved') {
+      var pick = (this.saved || [])[Number(t.getAttribute('data-i'))];
+      if (pick) {
+        this.addr = Object.assign({}, pick, { email: pick.email || this.addr.email || '' });
+        this.editAddr = null;
+        this.setError('');
+        this.viewAddress();
+      }
+      return;
+    }
     if (act === 'coupon-open') {
       this.couponOpen = true;
       this.renderReview();
@@ -1855,6 +1899,12 @@
       }
       self.token = { shop: SHOP, phone: self.phone, token: json.token, expiresAt: Date.now() + 25 * 60000 };
       writeStore('sessionStorage', TOKEN_KEY, self.token);
+      // This phone's saved addresses: the newest fills the form when this browser has none.
+      self.saved = savedAddresses(json.addresses);
+      if (self.saved.length && !self.addrComplete(self.addr)) {
+        self.addr = Object.assign({}, self.saved[0], { email: self.saved[0].email || self.addr.email || '' });
+        self.editAddr = null;
+      }
       self.track('otp_verified');
       clearInterval(self.resendTimer);
       if (w) w.classList.add('good');

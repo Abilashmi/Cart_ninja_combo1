@@ -331,6 +331,7 @@
   "storefront.cod.resend_in": "{time} में कोड फिर से भेजें",
   "storefront.cod.review_title": "अपना ऑर्डर जाँचें",
   "storefront.cod.save_percent": "{percent}% बचाएँ",
+  "storefront.cod.saved_addresses": "आपके सेव किए गए पते",
   "storefront.cod.saving_order": "इस ऑर्डर पर आप {amount} बचा रहे हैं",
   "storefront.cod.select_state": "राज्य चुनें",
   "storefront.cod.send_code": "कोड भेजें",

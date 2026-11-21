@@ -1,6 +1,6 @@
 // Saved shopper addresses, so the COD popup can fill in the address after the
-// shopper verifies their phone with an OTP (the autofill itself comes later,
-// once BRIX's own SMS template is approved).
+// shopper verifies their phone with an OTP (savedAddressesForShopper, sent with
+// the OTP verify answer by api.cod.otp.jsx; stores in OTP_WALLET_SHOPS only).
 //
 // Collected from every store's orders/create webhook (that includes BRIX COD
 // orders, which are real Shopify orders). Indian mobile numbers only: COD and
@@ -263,6 +263,46 @@ export async function findAddresses(db, shop, phone10) {
   return (rows || [])
     .map((r) => decryptAddress(r.payload_enc, { shop, scope: r.scope, phoneHash }))
     .filter(Boolean);
+}
+
+const AUTOFILL_TIMEOUT_MS = 2500;
+
+/** A saved address in the COD popup's own shape (brix_cod.js `addr`). */
+export function addressForPopup(a) {
+  if (!a) return null;
+  const out = {
+    name: clean([a.firstName, a.lastName].filter(Boolean).join(' '), 120),
+    address1: clean(a.address1),
+    address2: clean(a.address2),
+    city: clean(a.city, 100),
+    state: clean(a.province, 100),
+    pincode: clean(a.zip, 12).replace(/\s/g, ''),
+    email: clean(a.email, 254),
+  };
+  return out.address1 && /^\d{6}$/.test(out.pincode) ? out : null;
+}
+
+/**
+ * The COD popup's saved addresses for a phone that has JUST passed the OTP check
+ * (newest first, this store's orders only). Never throws and never holds the OTP
+ * step up: no key, a DB error or a slow DB = [] (the shopper types it as before).
+ */
+export async function savedAddressesForShopper(db, shop, phone10, { timeoutMs = AUTOFILL_TIMEOUT_MS } = {}) {
+  if (!keys()) return [];
+  let timer;
+  try {
+    const found = await Promise.race([
+      findAddresses(db, shop, phone10),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), timeoutMs); }),
+    ]);
+    if (found === null) console.warn('[saved-addresses] lookup took over', timeoutMs, 'ms; the shopper types the address');
+    return (found || []).map(addressForPopup).filter(Boolean);
+  } catch (error) {
+    console.error('[saved-addresses] lookup failed:', String(error?.message || error).slice(0, 200));
+    return [];
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** customers/redact: everything this store holds for that customer. */

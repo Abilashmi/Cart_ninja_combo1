@@ -331,6 +331,7 @@
   "storefront.cod.resend_in": "Reenviar código en {time}",
   "storefront.cod.review_title": "Revisa tu pedido",
   "storefront.cod.save_percent": "Ahorra {percent}%",
+  "storefront.cod.saved_addresses": "Tus direcciones guardadas",
   "storefront.cod.saving_order": "Ahorras {amount} en este pedido",
   "storefront.cod.select_state": "Elige el estado",
   "storefront.cod.send_code": "Enviar código",

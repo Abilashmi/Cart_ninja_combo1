@@ -339,6 +339,7 @@
   "storefront.cod.resend_in": "Resend code in {time}",
   "storefront.cod.review_title": "Review your order",
   "storefront.cod.save_percent": "Save {percent}%",
+  "storefront.cod.saved_addresses": "Your saved addresses",
   "storefront.cod.saving_order": "You're saving {amount} on this order",
   "storefront.cod.select_state": "Select state",
   "storefront.cod.send_code": "Send code",

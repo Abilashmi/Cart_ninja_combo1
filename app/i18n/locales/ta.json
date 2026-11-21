@@ -331,6 +331,7 @@
   "storefront.cod.resend_in": "{time} இல் மீண்டும் அனுப்பலாம்",
   "storefront.cod.review_title": "உங்கள் ஆர்டரைச் சரிபார்க்கவும்",
   "storefront.cod.save_percent": "{percent}% சேமிக்கவும்",
+  "storefront.cod.saved_addresses": "நீங்கள் சேமித்த முகவரிகள்",
   "storefront.cod.saving_order": "இந்த ஆர்டரில் நீங்கள் {amount} சேமிக்கிறீர்கள்",
   "storefront.cod.select_state": "மாநிலத்தைத் தேர்ந்தெடுக்கவும்",
   "storefront.cod.send_code": "குறியீட்டை அனுப்பு",

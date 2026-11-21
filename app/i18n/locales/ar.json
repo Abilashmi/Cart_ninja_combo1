@@ -331,6 +331,7 @@
   "storefront.cod.resend_in": "إعادة إرسال الرمز خلال {time}",
   "storefront.cod.review_title": "راجع طلبك",
   "storefront.cod.save_percent": "وفّر {percent}%",
+  "storefront.cod.saved_addresses": "عناوينك المحفوظة",
   "storefront.cod.saving_order": "ستوفّر {amount} في هذا الطلب",
   "storefront.cod.select_state": "اختر الولاية",
   "storefront.cod.send_code": "إرسال الرمز",

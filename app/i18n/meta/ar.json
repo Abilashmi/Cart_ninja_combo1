@@ -1359,6 +1359,10 @@
     "status": "ai",
     "srcHash": "b3314f8c"
   },
+  "storefront.cod.saved_addresses": {
+    "status": "ai",
+    "srcHash": "d4b581c9"
+  },
   "storefront.cod.saving_order": {
     "status": "ai",
     "srcHash": "040cc1fd"
