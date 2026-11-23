@@ -100,7 +100,7 @@ export async function loader({ request }) {
         return { error: true, balancePaise: 0, pricePaise: OTP_PRICE_PAISE, messagesLeft: 0 };
       });
       // "Add money" only where switched on (otpWalletRechargeOn).
-      wallet = { ...wallet, rechargeOn: otpWalletRechargeOn() };
+      wallet = { ...wallet, rechargeOn: otpWalletRechargeOn(shop) };
     }
     sms = smsProviderStatus(ownKeys, wallet?.balancePaise ?? null, shop);
     couponOptions = (await listActiveDiscounts(admin).catch(() => []))
@@ -140,7 +140,7 @@ export async function action({ request }) {
       return { success: true, intent: 'test_tracking', result: await sendCodTestEvents({ settings, secrets }) };
     }
     if (body.intent === 'wallet_recharge') {
-      if (!otpWalletRechargeOn()) return { success: false, intent: 'wallet_recharge', error: 'Adding money here is not open yet. Message the BRIX team in the chat.' };
+      if (!otpWalletRechargeOn(session.shop)) return { success: false, intent: 'wallet_recharge', error: 'Adding money here is not open yet. Message the BRIX team in the chat.' };
       // Any amount, paid by Razorpay on Digifyce's page; the wallet is credited when Digifyce confirms the payment.
       const rupees = Math.round(Number(body.amount) || 0);
       if (!Number.isInteger(rupees) || rupees < 1 || rupees > 1000) return { success: false, intent: 'wallet_recharge', error: 'Enter a whole amount between ₹1 and ₹1,000.' };

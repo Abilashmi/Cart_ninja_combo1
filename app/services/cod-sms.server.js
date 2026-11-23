@@ -45,7 +45,12 @@ function hasOwnMsg91(creds) {
  * other store keeps sending as before (its own MSG91 keys, else the server's).
  */
 export function otpWalletShopAllowed(shop) {
-  const raw = String(process.env.OTP_WALLET_SHOPS || '').trim().toLowerCase();
+  return shopInList(process.env.OTP_WALLET_SHOPS, shop);
+}
+
+// A store switch: '*' = every store, else a comma list of myshopify domains; unset = none.
+function shopInList(list, shop) {
+  const raw = String(list || '').trim().toLowerCase();
   if (!raw) return false;
   if (raw === '*') return true;
   const want = String(shop || '').trim().toLowerCase();
@@ -53,12 +58,14 @@ export function otpWalletShopAllowed(shop) {
 }
 
 /**
- * "Add money" (Razorpay on Digifyce) is shown only with OTP_WALLET_RECHARGE=1: it is
- * off-platform billing (App Store 1.2.1), so until it moves to Shopify billing the BRIX
- * team adds codes with scripts/otp-wallet-grant.mjs.
+ * "Recharge" (Razorpay on Digifyce) is shown only to the stores in OTP_WALLET_RECHARGE
+ * ('*' or '1' = every wallet store, else a comma list of myshopify domains; unset =
+ * none): it is off-platform billing (App Store 1.2.1), so until it moves to Shopify
+ * billing the BRIX team adds codes with scripts/otp-wallet-grant.mjs.
  */
-export function otpWalletRechargeOn() {
-  return process.env.OTP_WALLET_RECHARGE === '1';
+export function otpWalletRechargeOn(shop) {
+  const raw = String(process.env.OTP_WALLET_RECHARGE || '').trim();
+  return shopInList(raw === '1' ? '*' : raw, shop);
 }
 
 /** Does this store's OTP go through the wallet (BRIX's SMS from the PHP server)? */

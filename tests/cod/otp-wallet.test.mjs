@@ -282,3 +282,21 @@ test('send: the PHP server charges, sends and refunds in one call; a retried cal
   const retried = await wallet('otp_wallet.php', { ...body, ref: 'otp:81' });
   assert.deepEqual([retried.json.sent, retried.json.duplicate, retried.json.balance_paise], [false, true, 50]);
 });
+
+test('Recharge: only the stores in OTP_WALLET_RECHARGE (a list, * or 1 = every wallet store)', async () => {
+  const { otpWalletRechargeOn } = await import('../../app/services/cod-sms.server.js');
+  const before = process.env.OTP_WALLET_RECHARGE;
+  try {
+    delete process.env.OTP_WALLET_RECHARGE;
+    assert.equal(otpWalletRechargeOn(SHOP), false, 'unset = no store');
+    process.env.OTP_WALLET_RECHARGE = 'demo.myshopify.com';
+    assert.equal(otpWalletRechargeOn(SHOP), true);
+    assert.equal(otpWalletRechargeOn('other-store.myshopify.com'), false);
+    for (const all of ['*', '1']) {
+      process.env.OTP_WALLET_RECHARGE = all;
+      assert.equal(otpWalletRechargeOn('other-store.myshopify.com'), true, all);
+    }
+  } finally {
+    if (before === undefined) delete process.env.OTP_WALLET_RECHARGE; else process.env.OTP_WALLET_RECHARGE = before;
+  }
+});

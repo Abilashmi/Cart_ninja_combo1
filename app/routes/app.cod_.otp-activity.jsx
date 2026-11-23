@@ -48,7 +48,7 @@ export async function loader({ request }) {
     return {
       available: true, type, beforeId, ...ledger,
       // Same switch as the wallet card's "Add money" (app.cod_.customize.jsx).
-      rechargeOn: otpWalletRechargeOn(),
+      rechargeOn: otpWalletRechargeOn(shop),
       entries: ledger.entries.map((e) => ({ ...e, when: shopTime(e.atMs, timeZone) })),
     };
   } catch (error) {
