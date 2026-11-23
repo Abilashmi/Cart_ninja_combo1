@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { canPublishFeature } from '../../app/config/plans.js';
 import {
   boxPricingFeature, fixedMeasureFor, layoutAllowsMeasures, offerLabel, computeBox, normalizeWeightPricing, progressOf, boxMessage,
-  usesQuickShop, isWeightCombo, comboCollectionHandles,
+  usesQuickShop, isWeightCombo, comboCollectionHandles, requiresFirstTier, canCheckoutBox,
 } from '../../app/utils/combo-weight.shared.js';
 import { CLASSIC_DESIGNS, isClassicLayout, designCollections, switchComboDesign } from '../../app/utils/combo-design.shared.js';
 
@@ -112,4 +112,32 @@ test('value tiers: progress and message in money', () => {
   assert.equal(progress.marks[0].hit, true);
   assert.equal(progress.marks[1].hit, false);
   assert.match(boxMessage(view, box).text, /₹799/, 'what is still needed, in the shop currency');
+});
+
+test('checkout below Tier 1: Classic designs need it unless switched off; box templates only when ticked', () => {
+  const tiers = [{ min_grams: 1000 }];
+  const below = { tier: null, overMax: false };
+  const reached = { tier: { min_grams: 1000 }, overMax: false };
+  // Classic (layout1/2/4): required by default, as every live page was.
+  for (const layout of ['layout1', 'layout2', 'layout4', undefined]) {
+    assert.equal(requiresFirstTier({ layout }), true, String(layout));
+    assert.equal(canCheckoutBox({ layout }, below, 2, tiers), false);
+    assert.equal(canCheckoutBox({ layout }, reached, 2, tiers), true);
+    assert.equal(canCheckoutBox({ layout }, reached, 2, []), false, 'a Classic page with no tiers stays shut, as before');
+    for (const off of [false, 'false', 0]) {
+      assert.equal(requiresFirstTier({ layout, require_first_tier: off }), false);
+      assert.equal(canCheckoutBox({ layout, require_first_tier: off }, below, 2, tiers), true, 'switched off: any box');
+    }
+  }
+  // Box templates: off unless ticked; Classic's key never affects them.
+  for (const layout of ['layout5', 'layout6', 'layout7']) {
+    assert.equal(requiresFirstTier({ layout }), false, layout);
+    assert.equal(requiresFirstTier({ layout, require_first_tier: true }), false);
+    assert.equal(canCheckoutBox({ layout }, below, 1, tiers), true);
+    for (const on of [true, 'true', 1]) assert.equal(canCheckoutBox({ layout, qs_require_first_tier: on }, below, 1, tiers), false);
+    assert.equal(canCheckoutBox({ layout, qs_require_first_tier: true }, reached, 1, tiers), true);
+  }
+  // Never: an empty box or one over the max.
+  assert.equal(canCheckoutBox({ layout: 'layout1', require_first_tier: false }, below, 0, tiers), false);
+  assert.equal(canCheckoutBox({ layout: 'layout1', require_first_tier: false }, { tier: null, overMax: true }, 3, tiers), false);
 });

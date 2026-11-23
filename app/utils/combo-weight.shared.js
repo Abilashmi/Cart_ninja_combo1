@@ -636,11 +636,35 @@ export function createComboWeightCore() {
     return layout === QUICK_SHOP_LAYOUT || layout === WEIGHT_BOX_LAYOUT || layout === QUANTITY_BOX_LAYOUT;
   }
 
+  /**
+   * Must a priced box reach the first tier before checkout? Box templates: only
+   * when the merchant ticks it (qs_require_first_tier, default off). Classic
+   * designs (layout1/2/4): yes unless switched off (require_first_tier: false),
+   * as they always did before the switch existed. Below the first tier the box
+   * simply has no discount (checkout, COD and the Function give none).
+   */
+  function requiresFirstTier(config) {
+    var c = config || {};
+    if (usesQuickShop(c.layout)) return c.qs_require_first_tier === true || c.qs_require_first_tier === 'true' || c.qs_require_first_tier === 1;
+    return c.require_first_tier !== false && c.require_first_tier !== 'false' && c.require_first_tier !== 0;
+  }
+
+  /** May this priced box go to checkout? Something in it, not over the max, and the first tier when required. */
+  function canCheckoutBox(config, box, items, tiers) {
+    if (!(items > 0) || !box || box.overMax) return false;
+    if (!requiresFirstTier(config)) return true;
+    // Box templates with no tiers have nothing to unlock; a Classic page with none stays shut (as before).
+    if (usesQuickShop((config || {}).layout)) return !!box.tier || !(tiers && tiers.length);
+    return !!(tiers && tiers.length) && !!box.tier;
+  }
+
   return {
     WEIGHT_BOX_LAYOUT: WEIGHT_BOX_LAYOUT,
     QUICK_SHOP_LAYOUT: QUICK_SHOP_LAYOUT,
     QUANTITY_BOX_LAYOUT: QUANTITY_BOX_LAYOUT,
     usesQuickShop: usesQuickShop,
+    requiresFirstTier: requiresFirstTier,
+    canCheckoutBox: canCheckoutBox,
     MEASURES: MEASURES,
     measureOf: measureOf,
     formatItems: formatItems,
@@ -674,7 +698,7 @@ export function createComboWeightCore() {
 const core = createComboWeightCore();
 
 export const {
-  WEIGHT_BOX_LAYOUT, QUICK_SHOP_LAYOUT, QUANTITY_BOX_LAYOUT, usesQuickShop, MEASURES, measureOf, formatItems, formatMoney, formatAmount, formatThreshold, progressOf,
+  WEIGHT_BOX_LAYOUT, QUICK_SHOP_LAYOUT, QUANTITY_BOX_LAYOUT, usesQuickShop, requiresFirstTier, canCheckoutBox, MEASURES, measureOf, formatItems, formatMoney, formatAmount, formatThreshold, progressOf,
   TIER_TYPES, LIMITS, DEFAULT_MESSAGES,
   toGrams, decimalsFor, toMinor, fromMinor, allocateMinor, pickTier, nextTierAfter, formatWeight,
   tierLabel, offerLabel, fillMessage, pricingHash, defaultWeightPricing, normalizeWeightPricing, computeBox,

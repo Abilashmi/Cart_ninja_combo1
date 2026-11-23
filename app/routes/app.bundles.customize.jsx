@@ -3384,11 +3384,13 @@ function CustomizeEditor({ onDiscard }) {
         return;
       }
     }
+    // A box needs something to sell: a collection, or products picked by hand (no collection needed).
     if (usesQuickShop(config.layout)
-      && !Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).some(Boolean)) {
+      && !Array.from({ length: Number(config.tab_count || 1) }, (_, i) => config[`col_${i + 1}`]).some(Boolean)
+      && !(config.weight_pricing?.qualify?.extra_product_ids || []).length) {
       setActiveCategory('layout');
       setExpandedSections((prev) => ({ ...prev, general: true }));
-      shopify.toast.show('Choose at least one collection for the box', { isError: true });
+      shopify.toast.show('Choose at least one collection or product for the box', { isError: true });
       return;
     }
     if (config.layout === 'layout1') {

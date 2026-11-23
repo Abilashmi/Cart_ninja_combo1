@@ -384,12 +384,12 @@ const SCRIPT_BODY = String.raw`
     state.selectedDiscount = null;
     state.discountApplicable = discount > 0;
     state.finalPrice = Math.max(0, totalPrice - discount);
-    // A Classic Combo box can be checked out once it reaches the first tier
-    // (by weight, items or value), and not over the max; Quick Shop and the
-    // Weight Box let any box through unless the merchant requires the first tier.
+    // Something in the box, not over the max, and the first tier only when the
+    // merchant requires it: box templates opt in (qs_require_first_tier), Classic
+    // designs require it unless switched off (require_first_tier: false).
     state.canCheckout = WeightCore.usesQuickShop(state.config.layout)
       ? QuickShop.canCheckout(state.config, box, totalSelected, tiers)
-      : totalSelected > 0 && !box.overMax && tiers.length > 0 && !!box.tier;
+      : WeightCore.canCheckoutBox(state.config, box, totalSelected, tiers);
   }
 
   // Would this selection be over the max weight? Shows the merchant's message if so.

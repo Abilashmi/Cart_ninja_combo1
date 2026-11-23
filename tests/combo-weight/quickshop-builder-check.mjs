@@ -175,7 +175,7 @@ const plus = (page, n) => page.click(`.bxq-card[data-product-id="${P(n)}"] [data
   await page.screenshot({ path: path.join(SHOTS, 'quickshop-builder-new.png') });
   await page.click('button:has-text("Save Template")');
   await page.waitForTimeout(300);
-  check('save needs a collection', (await page.evaluate(() => (window.__toasts || []).map((t) => t.message))).some((m) => m.includes('Choose at least one collection for the box')));
+  check('save needs a collection or a picked product', (await page.evaluate(() => (window.__toasts || []).map((t) => t.message))).some((m) => m.includes('Choose at least one collection or product for the box')));
   await page.close();
 
   const qty = await open({ fresh: true, quickShop: null });

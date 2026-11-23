@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types -- internal component props; JS codebase does not use PropTypes */
 // Sidebar sections of the box combo templates (Quantity / Weight / Value Box). Every setting
 // is a flat qs_* key on the combo config; a missing key shows the default
 // from the shared kit (app/utils/combo-quickshop.shared.js), which is also
@@ -334,8 +335,12 @@ function PickedList({ title, help, items, type, onChange, shopify, max = PICK_MA
  * checkout discount syncs them); hidden products / collections only change
  * the page (box_hide_product_ids, box_hide_collections).
  */
-function ProductsSectionComponent({ config, updateConfig, expanded, onToggle }) {
-  const shopify = useAppBridge();
+/**
+ * The box's own product picks (weight_pricing.qualify.extra_product_ids): shown on
+ * the page and counted toward the box. Used by Box Collections ("Or pick specific
+ * products", a box may have no collection at all) and Products on the page.
+ */
+function useBoxProducts(config, updateConfig) {
   const titles = config.weight_qualify_titles || {};
   const named = (ids) => (ids || []).map((id) => ({ id, title: titles[id] || '' }));
   const pricing = config.weight_pricing || defaultWeightPricing(fixedMeasureFor(config.layout) || 'weight');
@@ -345,7 +350,24 @@ function ProductsSectionComponent({ config, updateConfig, expanded, onToggle }) 
     updateConfig('weight_pricing', { ...pricing, qualify: { ...qualify, [key]: list.map((x) => x.id) } });
     remember(list);
   };
-  const extra = named(qualify.extra_product_ids);
+  return { named, qualify, remember, setQualify, extra: named(qualify.extra_product_ids) };
+}
+
+export function BoxProductsPicker({ config, updateConfig, title = 'Or pick specific products', help }) {
+  const shopify = useAppBridge();
+  const { extra, setQualify } = useBoxProducts(config, updateConfig);
+  return (
+    <PickedList
+      title={title} type="product" items={extra} shopify={shopify}
+      help={help || 'Use these with collections or on their own: a box needs at least one collection or one product. They count toward the box offer.'}
+      onChange={(list) => setQualify('extra_product_ids', list)}
+    />
+  );
+}
+
+function ProductsSectionComponent({ config, updateConfig, expanded, onToggle }) {
+  const shopify = useAppBridge();
+  const { named, qualify, remember, setQualify, extra } = useBoxProducts(config, updateConfig);
   const noOffer = named(qualify.exclude_product_ids);
   const hidden = named(config.box_hide_product_ids);
   const hiddenCols = Array.isArray(config.box_hide_collections) ? config.box_hide_collections : [];

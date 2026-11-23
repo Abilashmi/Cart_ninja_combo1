@@ -129,6 +129,21 @@ const checkoutBtn = '[data-combo-action="checkout"]';
   await page.close();
 }
 
+// ── Classic design with "Only allow checkout once Tier 1 is unlocked" switched off ──
+{
+  const { page, log } = await openCombo({ ...baseConfig, require_first_tier: false });
+  check('switched off: checkout disabled only while the box is empty', await page.$eval(checkoutBtn, (b) => b.disabled));
+  await add(page, 1); // 300 g, below the 1 kg Tier 1
+  check('switched off: checkout enabled below Tier 1', !(await page.$eval(checkoutBtn, (b) => b.disabled)));
+  check('switched off: the meter still says what Tier 1 needs', (await meterText(page)).includes('Add 0.7 kg more to unlock 10% off'));
+  const bar = await page.evaluate(() => document.body.innerText);
+  check('switched off: no box discount below Tier 1 (full price)', bar.includes('Final: ₹110.00') || !bar.includes('Final:'), bar.split('\n').filter((l) => /Final|Total/.test(l)).join(' | '));
+  await page.click(checkoutBtn);
+  await page.waitForTimeout(600);
+  check('switched off: the box goes to the cart and checkout', log.add.length === 1 && log.navigations.includes('/checkout'), JSON.stringify(log.add[0]?.items?.length));
+  await page.close();
+}
+
 // ── checkout: one box per combo in the real cart, no Shiprocket ──
 {
   const old = { key: 'old-line-1', properties: { _brix_combo_id: '7', _brix_combo_group: 'old' } };

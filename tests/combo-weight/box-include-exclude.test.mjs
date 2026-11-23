@@ -44,6 +44,24 @@ test('synced Function config: extras count, no-offer products are listed', () =>
   assert.equal('exclude_ids' in plain.config.templates['3'], false, 'unchanged config without them');
 });
 
+test('a box of picked products only, no collection: synced and discounted at checkout', () => {
+  const pricing = normalizeWeightPricing({ ...BASE, qualify: { mode: 'layout_collections', extra_product_ids: [P(5), P(6)] } }).value;
+  const built = buildComboWeightFunctionConfig({
+    templates: [{ id: 4, active: true, config: { layout: 'layout7', tab_count: 1, col_1: '' }, pricing, errors: [] }],
+    planLive: true, collectionIdsByHandle: {},
+  });
+  const entry = built.config.templates['4'];
+  assert.ok(entry, 'not skipped for having no collection');
+  assert.deepEqual(entry.product_ids, ['5', '6']);
+  assert.deepEqual(entry.collection_ids, []);
+  // Nothing picked and no collection = nothing to sell: left out, as before.
+  const empty = buildComboWeightFunctionConfig({
+    templates: [{ id: 4, active: true, config: { layout: 'layout7', tab_count: 1, col_1: '' }, pricing: normalizeWeightPricing(BASE).value, errors: [] }],
+    planLive: true, collectionIdsByHandle: {},
+  });
+  assert.equal(empty.config.templates['4'], undefined);
+});
+
 test('checkout Function: a no-offer product never counts, an extra one does', () => {
   const template = { id: 3, hash: 'h', measure: 'quantity', max_grams: 10, product_ids: ['5'], collection_ids: ['900'], exclude_ids: ['7'], tiers: [{ min_grams: 2, type: 'percentage', value: 10, label: '10% off' }] };
   let n = 0;

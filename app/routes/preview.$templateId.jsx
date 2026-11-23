@@ -4,7 +4,7 @@ import { getCurrencySymbol } from '../utils/currency.shared';
 import { loadComboPageData } from '../services/combo-page.server';
 import { CdoPreviewBar, ComboCodContext } from '../components/CdoPreviewBar';
 import WeightMeter from '../components/customization/WeightMeter';
-import { boxMessage, computeBox, decimalsFor, fillMessage, formatItems, formatWeight, isWeightCombo, toMinor } from '../utils/combo-weight.shared.js';
+import { boxMessage, canCheckoutBox as canCheckoutBoxRule, computeBox, decimalsFor, fillMessage, formatItems, formatWeight, isWeightCombo, toMinor } from '../utils/combo-weight.shared.js';
 import { comboAlign } from '../utils/combo-align.shared.js';
 
 // Small inline SVG icons in place of plain-text Unicode glyphs (✓ ✕ ‹ › ← →
@@ -1558,8 +1558,8 @@ export default function ComboPreviewPage() {
     weight: byItems ? formatItems(box.items) : formatWeight(box.grams, weight.unit),
   });
   const box = weight ? weightBoxFor(selectedMap) : null;
-  // Checkout once the first tier is reached, whatever the box is measured by.
-  const canCheckoutBox = Boolean(weight && totalSelected > 0 && !box.overMax && weight.tiers.length && box.tier);
+  // Same rule as the storefront (combo-weight.shared.js canCheckoutBox): the first tier only when required.
+  const canCheckoutBox = Boolean(weight && canCheckoutBoxRule(savedConfig, box, totalSelected, weight.tiers));
   // The layouts' own count-based bar is hidden; the preview bar gets the meter's words.
   const config = weight
     ? (() => {

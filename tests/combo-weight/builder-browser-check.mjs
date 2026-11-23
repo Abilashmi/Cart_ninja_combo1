@@ -156,7 +156,17 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   check('Layout tab: "Box Collections" section', (await sidebar(page)).includes('Box Collections'));
   await page.click('button:has-text("Save Template")');
   await page.waitForTimeout(300);
-  check('save needs a collection for the box', (await toasts(page)).some((t) => t.startsWith('!Choose at least one collection for the box')));
+  check('save needs a collection or a picked product for the box', (await toasts(page)).some((t) => t.startsWith('!Choose at least one collection or product for the box')));
+  check('Box Collections offers "Or pick specific products"', (await sidebar(page)).includes('Or pick specific products'));
+  await page.locator('.cst-sidebar-content').screenshot({ path: path.join(SHOTS, 'builder-box-collections.png') });
+  // The Offer section is still open from above: switch tabs, open it only if closed.
+  await page.click('.cst-sidebar-tab:has-text("Advanced")');
+  if (!(await page.isVisible('text=Only allow checkout once Tier 1 is unlocked'))) await page.click('.cst-section-header:has-text("Offer")');
+  await page.waitForSelector('text=Only allow checkout once Tier 1 is unlocked');
+  check('Offer: "Only allow checkout once Tier 1 is unlocked", off by default on a box', await page.isChecked('input[type="checkbox"]:near(:text("Only allow checkout once Tier 1 is unlocked"))') === false);
+  await page.locator('.cst-section-header:has-text("Offer")').scrollIntoViewIfNeeded();
+  await page.locator('text=Only allow checkout once Tier 1 is unlocked').scrollIntoViewIfNeeded();
+  await page.locator('.cst-sidebar-content').screenshot({ path: path.join(SHOTS, 'builder-offer-tier1.png') });
   await page.close();
 
   const free = await open({ fresh: true, plan: 'free' });

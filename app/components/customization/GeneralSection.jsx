@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button } from '@shopify/polaris';
 import { MagicIcon } from '@shopify/polaris-icons';
 import { SectionCard } from './SectionCard';
+import { BoxProductsPicker } from './QuickShopSections';
 import { useCurrency } from '../CurrencyContext';
 
 // 1em/currentColor so it inherits each button's own font-size/color inline
@@ -195,7 +196,7 @@ function GeneralSectionComponent({
         <FormLayout>
           {isQuickShop ? (
             <Text as="p" variant="bodySm" tone="subdued">
-              Products from these collections fill the box. With more than one, each becomes a filter chip (see Filters). The tiers are under Advanced → Offer.
+              Products from these collections fill the box, plus any products you pick below (or only those: no collection needed). With more than one collection, each becomes a filter chip (see Filters). The tiers are under Advanced → Offer.
             </Text>
           ) : (
             <>
@@ -297,6 +298,9 @@ function GeneralSectionComponent({
               <Text as="p" variant="bodySm" tone="subdued">
                 The order here is the order of the filter chips (and of the sections below). A name on the page replaces the collection&apos;s Shopify name on the page only; empty = the Shopify name.
               </Text>
+              <div style={{ borderTop: '1px solid #e1e3e5', paddingTop: 12 }}>
+                <BoxProductsPicker config={config} updateConfig={updateConfig} />
+              </div>
               <Checkbox
                 label="Show products by collection"
                 helpText="One section per collection, in this order, under its name. A product in two collections shows in the first. Off = one grid, as now."

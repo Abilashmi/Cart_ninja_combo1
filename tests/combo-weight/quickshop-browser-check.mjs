@@ -941,6 +941,25 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+// ── a box of hand-picked products only, no collection (Box Collections → "Or pick specific products") ──
+{
+  const picked = [productsByHandle.chicken[1], productsByHandle.mutton[0]]; // Breast, Drumstick
+  const config = { ...baseConfig, tab_count: 1, col_1: '', col_2: '', weight_pricing: { ...QUANTITY, qualify: { mode: 'layout_collections', extra_product_ids: picked.map((p) => p.id) } } };
+  const { page, log } = await openCombo(config, wp(QUANTITY, { qualifyingProductIds: picked.map((p) => p.id) }), {
+    data: { productsByHandle: { __brix_extra: picked }, collectionNameMap: {} },
+  });
+  const shownTitles = await titles(page);
+  check('no collection: the picked products fill the page', shownTitles.length === 2 && shownTitles.includes('Nandus Chicken Breast Boneless') && shownTitles.includes('Mutton Drumstick Pack'), JSON.stringify(shownTitles));
+  await plus(page, 2); await plus(page, 2); await plus(page, 4);
+  check('no collection: the picks count toward the box (3 items unlock 5% OFF)', (await text(page, '.bxq-bar')).includes('You unlocked 5% OFF'), await text(page, '.bxq-bar'));
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(400);
+  const lines = log.add[0]?.items || [];
+  check('no collection: Go to Cart adds the box and goes to checkout', lines.length === 2 && lines.every((l) => l.properties?._brix_combo_id === '9') && log.navigations.includes('/checkout'), JSON.stringify(log.add[0]));
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-products-only.png'), fullPage: true });
+  await page.close();
+}
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

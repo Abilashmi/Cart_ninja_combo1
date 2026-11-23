@@ -10,7 +10,7 @@ import { usePlan } from '../PlanContext';
 import { useCurrency } from '../CurrencyContext';
 import {
   DEFAULT_MESSAGES, LIMITS, QUANTITY_BOX_LAYOUT, QUICK_SHOP_LAYOUT, WEIGHT_BOX_LAYOUT, boxPricingFeature, defaultWeightPricing, fixedMeasureFor, formatItems, formatMoney, formatWeight, isWeightCombo,
-  measureOf, normalizeWeightPricing, tierLabel, usesQuickShop,
+  measureOf, normalizeWeightPricing, requiresFirstTier, tierLabel, usesQuickShop,
 } from '../../utils/combo-weight.shared.js';
 import { PLANS, getMinPlanForFeature } from '../../config/plans';
 
@@ -389,6 +389,17 @@ function OfferSectionComponent({
           </InlineStack>
         )}
       </BlockStack>
+
+      {/* Checkout below Tier 1 (the box then just has no discount). Box templates: the same
+          switch as Bottom bar's; Classic designs: on unless switched off (as they always were). */}
+      <Checkbox
+        label="Only allow checkout once Tier 1 is unlocked"
+        checked={requiresFirstTier(config)}
+        onChange={(v) => updateConfig(qsDesign ? 'qs_require_first_tier' : 'require_first_tier', v)}
+        helpText={requiresFirstTier(config)
+          ? 'Checkout stays locked until the box reaches Tier 1.'
+          : 'Shoppers can check out any box. The discount starts at Tier 1; below it they pay the full price.'}
+      />
 
       {qsDesign && (
         <Button variant="plain" disclosure={showMore ? 'up' : 'down'} onClick={() => setShowMore((v) => !v)}>
