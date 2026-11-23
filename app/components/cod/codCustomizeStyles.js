@@ -22,6 +22,11 @@ export const COD_CUSTOMIZE_CSS = `
 .bcz-pill span{width:6px;height:6px;border-radius:50%;background:currentColor}
 .bcz-pill.is-on{background:#aee9d1;color:#005e46}
 .bcz-pill:focus-visible{outline:2px solid #005bd3;outline-offset:2px}
+.bcz-credits{display:flex;align-items:center;gap:8px;width:100%;margin:10px 0 0;padding:8px 10px;border:1px solid #e1e3e5;border-radius:10px;background:#fff;color:#1a1a1a;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.bcz-credits:hover{background:#f6f6f7}
+.bcz-credits-l{flex:1;min-width:0}.bcz-credits-l b{font-weight:650}.bcz-credits-l span{color:#6d7175}
+.bcz-credits-add{display:inline-flex;align-items:center;gap:4px;flex:none;background:#000;color:#fff;border-radius:8px;padding:3px 9px;font-size:12px;font-weight:600}
+.bcz-credits.is-low{border-color:#000}
 .bcz-note{margin:6px 0 0;font-size:11.5px;color:#8a6116}
 
 /* sections */

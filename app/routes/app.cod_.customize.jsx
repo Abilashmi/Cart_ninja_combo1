@@ -1487,6 +1487,17 @@ export default function CodCustomizePage() {
                 <span />{isActive ? 'Active' : 'Inactive'}
               </button>
             </div>
+            {data.wallet && !data.wallet.error && (() => {
+              const w = data.wallet;
+              const low = Number(w.messagesLeft) <= 20;
+              const amount = (Number(w.balancePaise) || 0) / 100;
+              return (
+                <button type="button" className={`bcz-credits${low ? ' is-low' : ''}`} onClick={() => { if (open !== 'sms') toggleSection('sms'); }} title="Open OTP SMS to recharge">
+                  <span className="bcz-credits-l"><b>OTP credits ₹{Number.isInteger(amount) ? amount : amount.toFixed(2)}</b> <span>{Number(w.messagesLeft) > 0 ? `· ${w.messagesLeft} codes` : '· empty, recharge'}</span></span>
+                  <span className="bcz-credits-add">+ Recharge</span>
+                </button>
+              );
+            })()}
             {data.planState !== 'enabled' && <p className="bcz-note">Shoppers see COD on the Starter or Pro plan.</p>}
           </div>
           <div ref={listRef} className="bcz-list">

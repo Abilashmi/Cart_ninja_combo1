@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
-// Reminder of the store's OTP credits, top right of every admin page (mounted
+// Reminder of the store's OTP credits, top left corner of Home and the COD module pages only (dashboard, OTP activity); not on Customize, whose OTP SMS section has its own wallet card (mounted
 // once in routes/app.jsx). Shows the balance and how many codes it covers;
-// amber when running low, red when empty (shoppers then skip phone
+// blinking dot when running low, white when empty (shoppers then skip phone
 // verification). A tap opens COD → Customize → OTP SMS, where "Recharge" is.
 // Loads from /api/otp-credits (nothing shows for stores that use their own MSG91
 // keys), refreshes when the tab is visible again and every 2 minutes.
@@ -13,12 +13,16 @@ const REFRESH_MS = 120000;
 const LOW_CODES = 20;
 
 const CSS = `
-.bxoc{position:fixed;top:6px;right:14px;z-index:400;display:flex;align-items:center;gap:6px;border:1px solid #d5dae1;background:#fff;color:#1a1d23;border-radius:999px;padding:3px 11px 3px 9px;font:600 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;box-shadow:0 1px 3px rgba(15,23,42,.12)}
-.bxoc:hover{background:#f6f7f9}
-.bxoc-dot{width:8px;height:8px;border-radius:50%;background:#14a05a;flex:none}
-.bxoc--low{border-color:#e0b24a;background:#fff8e6}.bxoc--low .bxoc-dot{background:#e09b00}
-.bxoc--empty{border-color:#e07b73;background:#fff1f0;color:#8e1f14}.bxoc--empty .bxoc-dot{background:#d72c0d}
-.bxoc-sub{font-weight:500;opacity:.75}
+.bxoc{position:fixed;top:0;left:14px;z-index:400;display:flex;align-items:center;gap:6px;border:1px solid #000;border-top:0;background:#000;color:#fff;border-radius:0 0 8px 8px;padding:5px 14px 6px;font:600 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.bxoc:hover{background:#222}
+.bxoc-dot{width:7px;height:7px;border-radius:50%;background:#fff;flex:none}
+.bxoc--low .bxoc-dot{animation:bxoc-blink 1.4s ease-in-out infinite}
+.bxoc--empty{background:#fff;color:#000}.bxoc--empty:hover{background:#f1f1f1}.bxoc--empty .bxoc-dot{background:#000}
+.bxoc-plus{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#fff;color:#000;font-size:14px;font-weight:700;line-height:1;margin-left:2px;flex:none}
+.bxoc--empty .bxoc-plus{background:#000;color:#fff}
+.bxoc-sub{font-weight:500;opacity:.7}
+@keyframes bxoc-blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.bxoc--low .bxoc-dot{animation:none}}
 @media (max-width:480px){.bxoc-sub{display:none}}
 `;
 
@@ -47,7 +51,9 @@ export default function OtpCreditsBadge() {
     return () => { alive = false; clearInterval(timer); document.removeEventListener('visibilitychange', load); };
   }, [pathname]);
 
-  if (!data || !data.show) return null;
+  // Only on Home and the COD module (dashboard, Customize incl. OTP SMS, OTP activity).
+  const onPage = pathname === '/app' || pathname === '/app/' || (pathname.startsWith('/app/cod') && !pathname.startsWith('/app/cod/customize'));
+  if (!onPage || !data || !data.show) return null;
   const codes = Number(data.messagesLeft) || 0;
   const level = codes <= 0 ? 'empty' : codes <= LOW_CODES ? 'low' : '';
   const label = codes <= 0 ? 'OTP credits: ₹0, recharge' : `OTP credits ${rupees(data.balancePaise)}`;
@@ -64,6 +70,7 @@ export default function OtpCreditsBadge() {
         <span className="bxoc-dot" />
         <span>{label}</span>
         {codes > 0 && <span className="bxoc-sub">· {codes} codes</span>}
+        <span className="bxoc-plus" aria-hidden="true">+</span>
       </button>
     </>
   );
