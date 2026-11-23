@@ -300,7 +300,7 @@ export function createComboWeightCore() {
     }
 
     var rawTiers = Array.isArray(src.tiers) ? src.tiers : [];
-    if (rawTiers.length === 0) errors.push({ field: 'tiers', message: 'Add at least one tier.' });
+    // No tiers = no offer: the box sells at full price (no discount is set up in checkout).
     if (rawTiers.length > LIMITS.tiers) errors.push({ field: 'tiers', message: 'You can add up to ' + LIMITS.tiers + ' tiers.' });
     var tiers = [];
     var usedIds = {};
@@ -653,9 +653,8 @@ export function createComboWeightCore() {
   function canCheckoutBox(config, box, items, tiers) {
     if (!(items > 0) || !box || box.overMax) return false;
     if (!requiresFirstTier(config)) return true;
-    // Box templates with no tiers have nothing to unlock; a Classic page with none stays shut (as before).
-    if (usesQuickShop((config || {}).layout)) return !!box.tier || !(tiers && tiers.length);
-    return !!(tiers && tiers.length) && !!box.tier;
+    // No tiers (no offer) = nothing to unlock. Before tiers could be removed, no saved box had none.
+    return !!box.tier || !(tiers && tiers.length);
   }
 
   return {

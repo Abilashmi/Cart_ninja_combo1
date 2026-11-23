@@ -960,6 +960,24 @@ const text = (page, sel) => page.textContent(sel).then((s) => (s || '').replace(
   await page.close();
 }
 
+// ── no tiers (Offer → Remove the last tier): the box sells at full price ──
+{
+  const NONE = { measure: 'quantity', tiers: [] };
+  // Nothing is set up in checkout for it, so the server sends it as not live.
+  const { page, log } = await openCombo({ ...baseConfig, layout: 'layout7', weight_pricing: NONE }, wp(NONE, { enabled: false, reason: 'not_synced' }));
+  check('no tiers: products show', (await titles(page)).length === 5);
+  const top = await text(page, '.bxq-top');
+  check('no tiers: no tier progress (nothing to unlock)', !/unlock|OFF|Tier/i.test(top), top);
+  await plus(page, 1);
+  const bar = await text(page, '.bxq-bar');
+  check('no tiers: the bar shows the box at full price, no "unlock" message', bar.includes('1 Item') && !/unlock/i.test(bar), bar);
+  await page.screenshot({ path: path.join(SHOTS, 'quickshop-no-tiers.png') });
+  await page.click('[data-combo-action="checkout"]');
+  await page.waitForTimeout(400);
+  check('no tiers: Go to Cart goes to checkout with one item', (log.add[0]?.items || []).length === 1 && log.navigations.includes('/checkout'), JSON.stringify(log.add[0]));
+  await page.close();
+}
+
 await browser.close();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);

@@ -123,7 +123,7 @@ test('checkout below Tier 1: Classic designs need it unless switched off; box te
     assert.equal(requiresFirstTier({ layout }), true, String(layout));
     assert.equal(canCheckoutBox({ layout }, below, 2, tiers), false);
     assert.equal(canCheckoutBox({ layout }, reached, 2, tiers), true);
-    assert.equal(canCheckoutBox({ layout }, reached, 2, []), false, 'a Classic page with no tiers stays shut, as before');
+    assert.equal(canCheckoutBox({ layout }, below, 2, []), true, 'no tiers = no offer, nothing to unlock');
     for (const off of [false, 'false', 0]) {
       assert.equal(requiresFirstTier({ layout, require_first_tier: off }), false);
       assert.equal(canCheckoutBox({ layout, require_first_tier: off }, below, 2, tiers), true, 'switched off: any box');
@@ -140,4 +140,14 @@ test('checkout below Tier 1: Classic designs need it unless switched off; box te
   // Never: an empty box or one over the max.
   assert.equal(canCheckoutBox({ layout: 'layout1', require_first_tier: false }, below, 0, tiers), false);
   assert.equal(canCheckoutBox({ layout: 'layout1', require_first_tier: false }, { tier: null, overMax: true }, 3, tiers), false);
+});
+
+test('no tiers = no offer: valid, nothing set up in checkout', () => {
+  const { value, errors } = normalizeWeightPricing({ measure: 'quantity', tiers: [] });
+  assert.deepEqual(errors, [], 'removing the last tier is allowed');
+  assert.deepEqual(value.tiers, []);
+  const box = computeBox({ pricing: value, lines: [{ quantity: 2, grams: 0, subtotalMinor: 20000, qualifies: true }] });
+  assert.equal(box.tier, null);
+  assert.equal(box.discountMinor, 0, 'full price');
+  for (const layout of ['layout7', 'layout1']) assert.equal(canCheckoutBox({ layout, qs_require_first_tier: true }, box, 2, value.tiers), true, layout);
 });

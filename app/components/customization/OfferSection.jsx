@@ -298,13 +298,19 @@ function OfferSectionComponent({
 
   const weightEditor = (
     <BlockStack gap="400">
-      {weightStatus && isWeight && (
+      {/* No tiers = no offer: nothing to set up in checkout. */}
+      {isWeight && !tiers.length && (
+        <Banner tone="info" title="No offer">
+          <p>Shoppers build the box and pay the full price. Add a tier to give a discount.</p>
+        </Banner>
+      )}
+      {weightStatus && isWeight && tiers.length > 0 && (
         <Banner tone={statusTone(weightStatus)} title={weightStatus.verified ? 'Box discount is live in checkout' : 'Box discount is not live yet'}>
           <p>{weightStatus.message}</p>
           {unsaved && <p>You have changed the pricing. Save to send it to checkout.</p>}
         </Banner>
       )}
-      {!weightStatus && isWeight && (
+      {!weightStatus && isWeight && tiers.length > 0 && (
         <Banner tone="info"><p>Save this combo to set up its box discount in Shopify checkout.</p></Banner>
       )}
 
@@ -334,7 +340,7 @@ function OfferSectionComponent({
             <BlockStack gap="200">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="span" variant="bodySm" fontWeight="semibold">Tier {index + 1}</Text>
-                {tiers.length > 1 && <Button variant="plain" tone="critical" onClick={() => removeTier(index)}>Remove</Button>}
+                <Button variant="plain" tone="critical" onClick={() => removeTier(index)}>Remove</Button>
               </InlineStack>
               <div className="cst-grid-2">
                 {byWeight ? (
@@ -392,14 +398,14 @@ function OfferSectionComponent({
 
       {/* Checkout below Tier 1 (the box then just has no discount). Box templates: the same
           switch as Bottom bar's; Classic designs: on unless switched off (as they always were). */}
-      <Checkbox
+      {tiers.length > 0 && <Checkbox
         label="Only allow checkout once Tier 1 is unlocked"
         checked={requiresFirstTier(config)}
         onChange={(v) => updateConfig(qsDesign ? 'qs_require_first_tier' : 'require_first_tier', v)}
         helpText={requiresFirstTier(config)
           ? 'Checkout stays locked until the box reaches Tier 1.'
           : 'Shoppers can check out any box. The discount starts at Tier 1; below it they pay the full price.'}
-      />
+      />}
 
       {qsDesign && (
         <Button variant="plain" disclosure={showMore ? 'up' : 'down'} onClick={() => setShowMore((v) => !v)}>

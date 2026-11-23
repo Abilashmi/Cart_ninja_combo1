@@ -151,7 +151,7 @@ test('normalize: valid config, defaults and a stable hash', () => {
 
 test('normalize: the validation rules', () => {
   const errorsFor = (raw) => normalizeWeightPricing(raw).errors.map((e) => e.field);
-  assert.deepEqual(errorsFor({ tiers: [] }), ['tiers']);
+  assert.deepEqual(errorsFor({ tiers: [] }), [], 'no tiers = no offer (the box sells at full price)');
   assert.ok(errorsFor({ tiers: Array.from({ length: 6 }, (_, i) => ({ min_grams: (i + 1) * 100, type: 'percentage', value: 5 })) }).includes('tiers'));
   assert.deepEqual(errorsFor({ tiers: [{ min_grams: 1000.5, type: 'percentage', value: 10 }] }), ['tiers.0.min_grams']);
   assert.deepEqual(errorsFor({ tiers: [{ min_grams: 1000, type: 'percentage', value: 0 }] }), ['tiers.0.value']);

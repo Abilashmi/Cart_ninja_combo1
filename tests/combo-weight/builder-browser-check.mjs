@@ -167,6 +167,17 @@ const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => 
   await page.locator('.cst-section-header:has-text("Offer")').scrollIntoViewIfNeeded();
   await page.locator('text=Only allow checkout once Tier 1 is unlocked').scrollIntoViewIfNeeded();
   await page.locator('.cst-sidebar-content').screenshot({ path: path.join(SHOTS, 'builder-offer-tier1.png') });
+  // Remove every tier: no offer, the box sells at full price.
+  while (await page.locator('.cst-sidebar-content button:has-text("Remove")').count()) {
+    await page.locator('.cst-sidebar-content button:has-text("Remove")').first().click();
+    await page.waitForTimeout(100);
+  }
+  const noOffer = await sidebar(page);
+  check('Offer: the last tier can be removed → "No offer", full price', noOffer.includes('No offer') && noOffer.includes('pay the full price') && !noOffer.includes('Tier 1'), noOffer.slice(0, 200));
+  check('Offer: no Tier 1 switch without tiers', !noOffer.includes('Only allow checkout once Tier 1 is unlocked'));
+  check('Offer: no "Box discount is not live yet" warning without tiers', !noOffer.includes('Box discount is not live yet'));
+  await page.locator('text=No offer').scrollIntoViewIfNeeded();
+  await page.locator('.cst-sidebar-content').screenshot({ path: path.join(SHOTS, 'builder-offer-no-tiers.png') });
   await page.close();
 
   const free = await open({ fresh: true, plan: 'free' });

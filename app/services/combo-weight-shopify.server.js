@@ -97,6 +97,8 @@ export function buildComboWeightFunctionConfig({ templates, planLive, currencyCo
     if (!template.active) { skipped.push({ id: template.id, reason: 'inactive' }); continue; }
     if (template.errors?.length) { skipped.push({ id: template.id, reason: 'invalid' }); continue; }
     const { pricing } = template;
+    // No tiers = no offer: nothing to discount, the box sells at full price.
+    if (!pricing.tiers.length) { skipped.push({ id: template.id, reason: 'no_offer' }); continue; }
     let collectionGids;
     let productIds = [];
     if (pricing.qualify.mode === 'selected') {
@@ -419,6 +421,7 @@ const TEMPLATE_REASONS = {
   inactive: 'This combo is turned off, so its box discount is not active.',
   invalid: 'This combo\'s box pricing has errors. Fix them and save again.',
   no_products: 'None of this combo\'s collections could be found in Shopify, so no product would count toward the box.',
+  no_offer: 'No tiers, so no box discount: shoppers build the box and pay the full price.',
 };
 
 /**

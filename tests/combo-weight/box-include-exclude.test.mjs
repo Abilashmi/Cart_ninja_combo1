@@ -62,6 +62,16 @@ test('a box of picked products only, no collection: synced and discounted at che
   assert.equal(empty.config.templates['4'], undefined);
 });
 
+test('no tiers: the sync leaves the box out of checkout and says why', () => {
+  const pricing = normalizeWeightPricing({ ...BASE, tiers: [] }).value;
+  const built = buildComboWeightFunctionConfig({
+    templates: [{ id: 5, active: true, config: { layout: 'layout7', tab_count: 1, col_1: 'books' }, pricing, errors: [] }],
+    planLive: true, collectionIdsByHandle: { books: 'gid://shopify/Collection/900' },
+  });
+  assert.equal(built.config.templates['5'], undefined);
+  assert.deepEqual(built.skipped, [{ id: 5, reason: 'no_offer' }]);
+});
+
 test('checkout Function: a no-offer product never counts, an extra one does', () => {
   const template = { id: 3, hash: 'h', measure: 'quantity', max_grams: 10, product_ids: ['5'], collection_ids: ['900'], exclude_ids: ['7'], tiers: [{ min_grams: 2, type: 'percentage', value: 10, label: '10% off' }] };
   let n = 0;
