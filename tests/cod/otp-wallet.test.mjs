@@ -300,3 +300,14 @@ test('Recharge: only the stores in OTP_WALLET_RECHARGE (a list, * or 1 = every w
     if (before === undefined) delete process.env.OTP_WALLET_RECHARGE; else process.env.OTP_WALLET_RECHARGE = before;
   }
 });
+
+test('Recharge when the payment server is not set up: the real reason, never a silent or generic failure', async () => {
+  // Digifyce answers as it does before its .htaccess is filled in.
+  harness.app.reply = (entry) => (entry.path.startsWith('/razorpay_create_order.php')
+    ? { status: 503, body: { ok: false, error: 'not_configured' } }
+    : { status: 404, body: {} });
+  await assert.rejects(cod.startOtpRecharge(SHOP, 50000), (e) => e.code === 'payment_unavailable');
+  // A refused amount comes back with int's own message.
+  await assert.rejects(cod.startOtpRecharge(SHOP, 50), (e) => e.code === 'invalid_amount' && /Rs 1/.test(e.message));
+  assert.equal(await balance(), 0, 'nothing credited');
+});

@@ -130,6 +130,17 @@ export async function loader({ request }) {
   };
 }
 
+// What the merchant sees when Recharge can't open the payment page (codes from php_backend/otp_wallet.php).
+function rechargeError(error) {
+  const code = error instanceof CodError ? error.code : '';
+  if (code === 'digifyce_not_configured' || code === 'payment_unavailable') {
+    return 'Recharge isn\'t set up on the payment server yet, so the payment page could not be opened. Message the BRIX team in the chat.';
+  }
+  if (code === 'invalid_amount') return error.message || 'Enter a whole amount between ₹1 and ₹1,000.';
+  if (!(error instanceof CodError)) console.error('[app.cod.customize] recharge failed:', String(error?.message || error).slice(0, 300));
+  return 'The payment page could not be opened. Please try again in a minute.';
+}
+
 export async function action({ request }) {
   const { admin, session } = await authenticate.admin(request);
   try {
@@ -144,8 +155,13 @@ export async function action({ request }) {
       // Any amount, paid by Razorpay on Digifyce's page; the wallet is credited when Digifyce confirms the payment.
       const rupees = Math.round(Number(body.amount) || 0);
       if (!Number.isInteger(rupees) || rupees < 1 || rupees > 1000) return { success: false, intent: 'wallet_recharge', error: 'Enter a whole amount between ₹1 and ₹1,000.' };
-      const { payUrl } = await startOtpRecharge(session.shop, rupees * 100);
-      return { success: true, intent: 'wallet_recharge', payUrl };
+      try {
+        const { payUrl } = await startOtpRecharge(session.shop, rupees * 100);
+        return { success: true, intent: 'wallet_recharge', payUrl };
+      } catch (error) {
+        // Always answered as a recharge, so the page shows why (it used to fail silently).
+        return { success: false, intent: 'wallet_recharge', error: rechargeError(error) };
+      }
     }
     if (body.secrets && typeof body.secrets === 'object') await saveCodSecrets(session.shop, body.secrets);
     // Dynamic shipping is stored on its own, before the settings that switch it on.

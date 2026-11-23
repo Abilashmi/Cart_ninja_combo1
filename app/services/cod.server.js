@@ -61,7 +61,9 @@ const PHP_TIMEOUT_MS = 15_000;
  * success; throws a CodError otherwise. Expected refusals (409 duplicate,
  * 429 OTP limits) keep the PHP code and message so callers can react.
  */
-async function php(file, body) {
+// passCodes: PHP's own refusal (code + message) comes back as the CodError instead of the
+// generic "temporarily unavailable" (the OTP wallet's recharge says why it can't start).
+async function php(file, body, { passCodes = false } = {}) {
   let res;
   let json;
   try {
@@ -84,6 +86,7 @@ async function php(file, body) {
   // 402 = otp_wallet.php: not enough OTP credit.
   if ([402, 409, 429].includes(res.status) && json?.code) throw new CodError(json.code, json.error, { status: res.status });
   console.error(`[cod] ${file} ${body.action} failed:`, res.status, JSON.stringify(json).slice(0, 300));
+  if (passCodes && json?.code) throw new CodError(json.code, String(json.error || ''), { status: res.status });
   throw new CodError('database_error', 'Cash on Delivery is temporarily unavailable. Please try again, or pay online.', { status: 503 });
 }
 
@@ -515,7 +518,7 @@ export async function getOtpWalletLedger(shop, { type = '', beforeId = 0, limit 
 export async function startOtpRecharge(shop, amountPaise) {
   // Back to this page in the store's admin once paid (Digifyce only redirects to the store admin).
   const returnUrl = `https://${shop}/admin/apps/${process.env.SHOPIFY_API_KEY}/app/cod/customize?section=sms&wallet=back`;
-  const json = await php('otp_wallet.php', { action: 'recharge_create', shop, amount_paise: amountPaise, return_url: returnUrl });
+  const json = await php('otp_wallet.php', { action: 'recharge_create', shop, amount_paise: amountPaise, return_url: returnUrl }, { passCodes: true });
   return { rechargeId: json.recharge_id, payUrl: json.pay_url };
 }
 
