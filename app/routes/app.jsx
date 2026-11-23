@@ -13,6 +13,7 @@ import { getFeatureState } from "../config/plans";
 import { adminMessages, getAdminLanguage, resolveAdminLocale, shopifyLocaleFor } from "../i18n/admin.server";
 import { I18nProvider, useT } from "../i18n/admin";
 import SupportChat from "../components/support/SupportChat";
+import OtpCreditsBadge from "../components/shared/OtpCreditsBadge";
 
 // Polaris's own texts (date pickers, pagination, …) where Polaris has the language.
 const POLARIS_TEXTS = { en: enTranslations, es: esTranslations };
@@ -116,6 +117,7 @@ export default function App() {
                         <AppNav planKey={planKey} />
                         <Outlet context={{ currencySymbol, currencyCode, shop }} />
                         {/* "Need help setting up?" chat, BRIX AI first then the team (/internal/chat) */}
+                        <OtpCreditsBadge />
                         <SupportChat />
                     </PlanProvider>
                 </CurrencyProvider>

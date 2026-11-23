@@ -154,7 +154,7 @@ export default function OtpActivityPage() {
       backAction={{ content: 'Customize COD', onAction: back }}
       title="OTP activity"
       subtitle="Every code sent, refund and recharge of your OTP wallet."
-      primaryAction={data.rechargeOn ? { content: 'Add money', onAction: back } : undefined}
+      primaryAction={data.rechargeOn ? { content: 'Recharge', onAction: back } : undefined}
     >
       <BlockStack gap="400">
         {data.error && <Banner tone="critical">The OTP wallet could not be loaded. Reload the page.</Banner>}

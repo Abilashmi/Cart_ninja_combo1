@@ -143,7 +143,7 @@ export async function action({ request }) {
       if (!otpWalletRechargeOn()) return { success: false, intent: 'wallet_recharge', error: 'Adding money here is not open yet. Message the BRIX team in the chat.' };
       // Any amount, paid by Razorpay on Digifyce's page; the wallet is credited when Digifyce confirms the payment.
       const rupees = Math.round(Number(body.amount) || 0);
-      if (rupees < 100 || rupees > 50000) return { success: false, intent: 'wallet_recharge', error: 'Enter an amount between ₹100 and ₹50,000.' };
+      if (!Number.isInteger(rupees) || rupees < 1 || rupees > 1000) return { success: false, intent: 'wallet_recharge', error: 'Enter a whole amount between ₹1 and ₹1,000.' };
       const { payUrl } = await startOtpRecharge(session.shop, rupees * 100);
       return { success: true, intent: 'wallet_recharge', payUrl };
     }
@@ -409,6 +409,16 @@ export default function CodCustomizePage() {
   const testFetcher = useFetcher();
   const walletFetcher = useFetcher();
   const [rechargeAmount, setRechargeAmount] = useState('');
+  // Open Digifyce's Razorpay page as soon as the link is ready (the banner's button is the fallback if the browser blocks it).
+  const openedPayUrl = useRef('');
+  useEffect(() => {
+    const url = walletFetcher.data?.intent === 'wallet_recharge' ? walletFetcher.data.payUrl : '';
+    if (url && openedPayUrl.current !== url) {
+      openedPayUrl.current = url;
+      // Go to Digifyce's Razorpay page (top window: the admin is an iframe). The banner's button is the fallback.
+      try { window.open(url, '_top'); } catch { /* the banner's button still works */ }
+    }
+  }, [walletFetcher.data]);
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState(() => (data.settings ? toForm(data.settings) : null));
   const [saved, setSaved] = useState(() => (data.settings ? toForm(data.settings) : null));
@@ -1096,7 +1106,7 @@ export default function CodCustomizePage() {
               <Checkbox
                 label="Verify phone with an SMS code (OTP)"
                 helpText={data.sms.source === 'wallet'
-                  ? (data.sms.configured ? 'Each code is one SMS sent by BRIX, paid from your OTP wallet (Advanced → OTP SMS).' : 'Your OTP wallet is empty, so no code is asked for. Add money in Advanced → OTP SMS.')
+                  ? (data.sms.configured ? 'Each code is one SMS sent by BRIX, paid from your OTP wallet (Advanced → OTP SMS).' : 'Your OTP wallet is empty, so no code is asked for. Recharge in Advanced → OTP SMS.')
                   : (data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS.')}
                 checked={form.requireOtp}
                 onChange={set('requireOtp')}
@@ -1269,7 +1279,7 @@ export default function CodCustomizePage() {
       let status;
       if (own) status = <Banner tone="success">Connected: OTP codes are sent from your MSG91 account.</Banner>;
       else if (wallet && wallet.balancePaise >= wallet.pricePaise) status = <Banner tone="success">OTP codes are sent by BRIX. {rupees(wallet.balancePaise)} left, enough for about {wallet.messagesLeft} codes.</Banner>;
-      else if (wallet) status = <Banner tone="warning">Your OTP wallet is empty, so shoppers are not asked for a code and phone numbers are not verified. Add money below to turn OTP back on.</Banner>;
+      else if (wallet) status = <Banner tone="warning">Your OTP wallet is empty, so shoppers are not asked for a code and phone numbers are not verified. Recharge below to turn OTP back on.</Banner>;
       else if (data.sms.source === 'server') status = <Banner tone="info">OTP codes are sent from the BRIX server&apos;s MSG91 account. Add your own keys to send from yours.</Banner>;
       else status = <Banner tone="warning">No SMS provider yet, so shoppers aren&apos;t asked for an OTP. Add both keys and save.</Banner>;
       return (
@@ -1302,31 +1312,31 @@ export default function CodCustomizePage() {
                       prefix="₹"
                       value={rechargeAmount}
                       onChange={setRechargeAmount}
-                      min={100}
-                      max={50000}
+                      min={1}
+                      max={1000}
                       autoComplete="off"
                     />
                   </div>
                   <Button
                     variant="primary"
                     loading={walletFetcher.state !== 'idle'}
-                    disabled={!(Number(rechargeAmount) >= 100 && Number(rechargeAmount) <= 50000)}
+                    disabled={!(Number.isInteger(Number(rechargeAmount)) && Number(rechargeAmount) >= 1 && Number(rechargeAmount) <= 1000)}
                     onClick={() => walletFetcher.submit(JSON.stringify({ intent: 'wallet_recharge', amount: Number(rechargeAmount) }), { method: 'post', encType: 'application/json' })}
                   >
-                    Add money
+                    Recharge
                   </Button>
                 </InlineStack>
                 {/* Under the row, not the field's helpText: the button then lines up with the amount box. */}
-                <Text as="p" variant="bodySm" tone="subdued">Any amount from ₹100 to ₹50,000. You pay by Razorpay on a secure page.</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Any amount from ₹1 to ₹1,000. You go to digifyceglobal.com, where the Razorpay QR code for this amount is shown.</Text>
                 {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.success === false && (
                   <Banner tone="critical">{walletFetcher.data.error || 'The payment page could not be opened. Please try again.'}</Banner>
                 )}
                 {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.payUrl && (
                   <Banner tone="info" title="Your payment page is ready">
                     <BlockStack gap="200">
-                      <Text as="p">Pay on the Razorpay page, then come back here. The money shows in the wallet within a minute.</Text>
+                      <Text as="p">Scan the QR code on the Razorpay page (or pick another way to pay), then come back here. The credits show in your wallet within a minute.</Text>
                       <InlineStack gap="200">
-                        <Button url={walletFetcher.data.payUrl} target="_blank" external>Open payment page</Button>
+                        <Button url={walletFetcher.data.payUrl} target="_blank" external>Open payment page (QR)</Button>
                         <Button onClick={() => navigate('.', { replace: true })}>I have paid, refresh balance</Button>
                       </InlineStack>
                     </BlockStack>
