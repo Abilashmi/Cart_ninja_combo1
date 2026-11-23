@@ -136,7 +136,7 @@ function rechargeError(error) {
   if (code === 'digifyce_not_configured' || code === 'payment_unavailable') {
     return 'Recharge isn\'t set up on the payment server yet, so the payment page could not be opened. Message the BRIX team in the chat.';
   }
-  if (code === 'invalid_amount') return error.message || 'Enter a whole amount between ₹1 and ₹1,000.';
+  if (code === 'invalid_amount') return error.message || 'Enter a whole amount of at least ₹1.';
   if (!(error instanceof CodError)) console.error('[app.cod.customize] recharge failed:', String(error?.message || error).slice(0, 300));
   return 'The payment page could not be opened. Please try again in a minute.';
 }
@@ -154,7 +154,7 @@ export async function action({ request }) {
       if (!otpWalletRechargeOn(session.shop)) return { success: false, intent: 'wallet_recharge', error: 'Adding money here is not open yet. Message the BRIX team in the chat.' };
       // Any amount, paid by Razorpay on Digifyce's page; the wallet is credited when Digifyce confirms the payment.
       const rupees = Math.round(Number(body.amount) || 0);
-      if (!Number.isInteger(rupees) || rupees < 1 || rupees > 1000) return { success: false, intent: 'wallet_recharge', error: 'Enter a whole amount between ₹1 and ₹1,000.' };
+      if (!Number.isInteger(rupees) || rupees < 1) return { success: false, intent: 'wallet_recharge', error: 'Enter a whole amount of at least ₹1.' };
       try {
         const { payUrl } = await startOtpRecharge(session.shop, rupees * 100);
         return { success: true, intent: 'wallet_recharge', payUrl };
@@ -1329,30 +1329,29 @@ export default function CodCustomizePage() {
                       value={rechargeAmount}
                       onChange={setRechargeAmount}
                       min={1}
-                      max={1000}
                       autoComplete="off"
                     />
                   </div>
                   <Button
                     variant="primary"
                     loading={walletFetcher.state !== 'idle'}
-                    disabled={!(Number.isInteger(Number(rechargeAmount)) && Number(rechargeAmount) >= 1 && Number(rechargeAmount) <= 1000)}
+                    disabled={!(Number.isInteger(Number(rechargeAmount)) && Number(rechargeAmount) >= 1)}
                     onClick={() => walletFetcher.submit(JSON.stringify({ intent: 'wallet_recharge', amount: Number(rechargeAmount) }), { method: 'post', encType: 'application/json' })}
                   >
                     Recharge
                   </Button>
                 </InlineStack>
                 {/* Under the row, not the field's helpText: the button then lines up with the amount box. */}
-                <Text as="p" variant="bodySm" tone="subdued">Any amount from ₹1 to ₹1,000. You go to digifyceglobal.com, where the Razorpay QR code for this amount is shown.</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Any amount from ₹1. You pay on a secure Razorpay page (UPI, cards, net banking).</Text>
                 {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.success === false && (
                   <Banner tone="critical">{walletFetcher.data.error || 'The payment page could not be opened. Please try again.'}</Banner>
                 )}
                 {walletFetcher.data?.intent === 'wallet_recharge' && walletFetcher.data.payUrl && (
                   <Banner tone="info" title="Your payment page is ready">
                     <BlockStack gap="200">
-                      <Text as="p">Scan the QR code on the Razorpay page (or pick another way to pay), then come back here. The credits show in your wallet within a minute.</Text>
+                      <Text as="p">Pay on the Razorpay page, then come back here. The credits show in your wallet within a minute.</Text>
                       <InlineStack gap="200">
-                        <Button url={walletFetcher.data.payUrl} target="_blank" external>Open payment page (QR)</Button>
+                        <Button url={walletFetcher.data.payUrl} target="_blank" external>Open payment page</Button>
                         <Button onClick={() => navigate('.', { replace: true })}>I have paid, refresh balance</Button>
                       </InlineStack>
                     </BlockStack>

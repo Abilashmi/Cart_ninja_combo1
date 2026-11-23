@@ -129,11 +129,9 @@ test('the same debit reference never charges twice', async () => {
   assert.equal(await balance(), 150, 'a refused debit takes nothing');
 });
 
-test('recharge: any amount (₹1 to ₹1,000), Razorpay order from Digifyce, credited once on a signed confirmation', async () => {
+test('recharge: any amount from ₹1 (no upper limit), Razorpay order from Digifyce, credited once on a signed confirmation', async () => {
   const bad = await wallet('otp_wallet.php', { action: 'recharge_create', shop: SHOP, amount_paise: 50, return_url: 'https://demo.myshopify.com/admin' });
   assert.equal(bad.json.code, 'invalid_amount', 'under ₹1');
-  const tooBig = await wallet('otp_wallet.php', { action: 'recharge_create', shop: SHOP, amount_paise: 100100, return_url: 'https://demo.myshopify.com/admin' });
-  assert.equal(tooBig.json.code, 'invalid_amount', 'over ₹1,000');
   const evil = await wallet('otp_wallet.php', { action: 'recharge_create', shop: SHOP, amount_paise: 12345, return_url: 'https://evil.example/' });
   assert.equal(evil.json.code, 'invalid_return_url');
 
@@ -152,6 +150,9 @@ test('recharge: any amount (₹1 to ₹1,000), Razorpay order from Digifyce, cre
   assert.deepEqual([again.status, again.json.balance_paise, again.json.duplicate], [200, 12345, true]);
   assert.equal(await balance(), 12345);
   assert.equal((await sql('SELECT status FROM otp_recharges'))[0].status, 'paid');
+  // No upper limit: a big recharge opens its payment page too.
+  const big = await wallet('otp_wallet.php', { action: 'recharge_create', shop: SHOP, amount_paise: 25000000, return_url: 'https://demo.myshopify.com/admin/apps/x/app/cod/customize' });
+  assert.equal(big.status, 200, 'no upper limit: ₹2,50,000 is fine');
 });
 
 test('confirmation is refused: wrong signature, stale, wrong amount, unknown recharge, wrong order', async () => {

@@ -20,7 +20,7 @@ $rechargeId = (int)($body['recharge_id'] ?? 0);
 $returnUrl = (string)($body['return_url'] ?? '');
 
 if ($shop === '' || $rechargeId < 1) dg_json(400, ['ok' => false, 'error' => 'invalid_request']);
-if ($amount < 100 || $amount > 100000) dg_json(400, ['ok' => false, 'error' => 'invalid_amount']);
+if ($amount < 100) dg_json(400, ['ok' => false, 'error' => 'invalid_amount']); // at least Rs 1, no upper limit
 if (!dg_return_url_ok($returnUrl)) dg_json(400, ['ok' => false, 'error' => 'invalid_return_url']);
 if (dg_env('RAZORPAY_KEY_ID') === '' || dg_env('RAZORPAY_KEY_SECRET') === '' || dg_env('DIGIFYCE_PUBLIC_URL') === '') {
     dg_json(503, ['ok' => false, 'error' => 'not_configured']);

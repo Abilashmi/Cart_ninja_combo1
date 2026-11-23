@@ -18,7 +18,7 @@
 
 const OTPW_PRICE_PAISE = 50;
 const OTPW_MIN_RECHARGE_PAISE = 100;       // Rs 1
-const OTPW_MAX_RECHARGE_PAISE = 100000;    // Rs 1,000
+// No upper limit on a recharge (Razorpay's own limits apply).
 const OTPW_MAX_GRANT_PAISE = 100000;      // Rs 1,000 of free credit per grant
 
 class OtpWalletError extends Exception {

@@ -112,8 +112,8 @@ if ($action === 'ledger') {
 }
 
 if ($action === 'recharge_create') {
-    if ($amount < OTPW_MIN_RECHARGE_PAISE || $amount > OTPW_MAX_RECHARGE_PAISE) {
-        cod_fail(400, 'invalid_amount', 'Enter an amount between Rs ' . (OTPW_MIN_RECHARGE_PAISE / 100) . ' and Rs ' . number_format(OTPW_MAX_RECHARGE_PAISE / 100) . '.');
+    if ($amount < OTPW_MIN_RECHARGE_PAISE) {
+        cod_fail(400, 'invalid_amount', 'Enter an amount of at least Rs ' . (OTPW_MIN_RECHARGE_PAISE / 100) . '.');
     }
     $returnUrl = (string)($body['return_url'] ?? '');
     $host = strtolower((string)parse_url($returnUrl, PHP_URL_HOST));

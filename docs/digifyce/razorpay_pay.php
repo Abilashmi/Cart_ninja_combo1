@@ -26,8 +26,7 @@ p{color:#5b6475}</style></head><body><div class="card">
   <h2>Add OTP credit</h2>
   <p>Store: <?= $h($shop) ?></p>
   <h1>₹<?= $h(number_format($amount / 100, 2)) ?></h1>
-  <p><b>Scan the QR code with any UPI app</b> (Google Pay, PhonePe, Paytm, BHIM). Prefer another way? Use the button.</p>
-  <button id="pay">Show payment options</button>
+  <button id="pay">Pay with Razorpay</button>
   <p id="msg"></p>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <script>
@@ -40,13 +39,7 @@ p{color:#5b6475}</style></head><body><div class="card">
       description: 'Prepaid OTP SMS wallet',
       callback_url: <?= json_encode(rtrim(dg_env('DIGIFYCE_PUBLIC_URL'), '/') . '/razorpay_return.php') ?>,
       redirect: true,
-      theme: { color: '#1d5fd1' },
-      // UPI QR first (Razorpay shows the QR on desktop; on phones it lists UPI apps), the other methods stay below it.
-      config: { display: {
-        blocks: { upi_qr: { name: 'Scan QR code to pay', instruments: [{ method: 'upi', flows: ['qr'] }] } },
-        sequence: ['block.upi_qr'],
-        preferences: { show_default_blocks: true }
-      } }
+      theme: { color: '#1d5fd1' }
     };
     document.getElementById('pay').onclick = function () { new Razorpay(options).open(); };
     new Razorpay(options).open();
