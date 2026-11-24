@@ -1122,15 +1122,17 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
             <Button size="slim" onClick={() => updateCheckoutButton({ sectionOrder: null })}>Reset order</Button>
           )}
           <Button onClick={onDiscard} disabled={saveStatus === 'saving' || !isDirty} size="slim">Discard</Button>
-          <Button
-            variant="primary"
-            onClick={onSave}
-            disabled={saveStatus === 'saving' || saveStatus === 'saved' || !isDirty}
-            loading={saveStatus === 'saving'}
-            size="slim"
-          >
-            Save
-          </Button>
+          <span data-tour="cart-save" style={{ display: 'inline-flex' }}>
+            <Button
+              variant="primary"
+              onClick={onSave}
+              disabled={saveStatus === 'saving' || saveStatus === 'saved' || !isDirty}
+              loading={saveStatus === 'saving'}
+              size="slim"
+            >
+              Save
+            </Button>
+          </span>
         </div>
       </div>
 

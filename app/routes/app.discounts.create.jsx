@@ -1107,6 +1107,8 @@ export default function CreateDiscount() {
                 titleMetadata={isEditMode ? <Badge tone="info">Editing</Badge> : null}
             >
                 <Box paddingBlockEnd="400">
+                    {/* data-tour: points for the guided setup (components/guide/) */}
+                    <div data-tour="discounts-steps">
                     <Card>
                         <InlineStack gap="0" blockAlign="center">
                             {steps.map((key, i) => {
@@ -1148,6 +1150,7 @@ export default function CreateDiscount() {
                             })}
                         </InlineStack>
                     </Card>
+                    </div>
                 </Box>
 
                 <Layout>
@@ -1182,7 +1185,7 @@ export default function CreateDiscount() {
                                     </InlineStack>
 
                                     {/* Solaris 2×2 type selector */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div data-tour="discounts-type" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                         {[
                                             { id: 'pct',   label: 'Percentage',   icon: DiscountIcon,  desc: '% off products or order',        t: 'amount_off_products', vt: 'percentage'  },
                                             { id: 'fixed', label: 'Fixed amount', icon: DiscountIcon,  desc: 'Fixed amount off products',       t: 'amount_off_products', vt: 'fixed_amount' },
@@ -1229,6 +1232,7 @@ export default function CreateDiscount() {
                                     <Divider />
 
                                     {type[0] !== "bxgy" && (
+                                        <div data-tour="discounts-method">
                                         <BlockStack gap="200">
                                             <Text as="p" variant="bodyMd" fontWeight="medium">Method</Text>
                                             <ButtonGroup segmented>
@@ -1241,6 +1245,7 @@ export default function CreateDiscount() {
                                                     : "Customers enter a code at checkout to unlock this discount."}
                                             </Text>
                                         </BlockStack>
+                                        </div>
                                     )}
 
                                     {method[0] === "code" && (
@@ -1797,6 +1802,7 @@ export default function CreateDiscount() {
                             )}
 
                             {/* ── Step navigation ── */}
+                            <div data-tour="discounts-nav">
                             <InlineStack align="space-between">
                                 {currentStep > 0 ? (
                                     <Button onClick={() => setCurrentStep((s) => s - 1)}>Back</Button>
@@ -1804,6 +1810,7 @@ export default function CreateDiscount() {
                                 {currentStep < steps.length - 1 ? (
                                     <Button variant="primary" disabled={!isCurrentStepValid} onClick={() => setCurrentStep((s) => s + 1)}>Next</Button>
                                 ) : (
+                                    <span data-tour="discounts-save" style={{ display: "inline-flex" }}>
                                     <Button
                                         variant="primary"
                                         loading={isSubmitting}
@@ -1812,8 +1819,10 @@ export default function CreateDiscount() {
                                     >
                                         {isEditMode ? "Save changes" : "Save discount"}
                                     </Button>
+                                    </span>
                                 )}
                             </InlineStack>
+                            </div>
 
                             {/* Bottom error repeat */}
                             {actionData?.errors && (

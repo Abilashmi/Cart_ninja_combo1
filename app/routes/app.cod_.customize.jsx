@@ -1483,7 +1483,7 @@ export default function CodCustomizePage() {
             <div className="bcz-head-row">
               <button type="button" className="bcz-back" onClick={goBack} aria-label="Back to COD Checkout"><Icon source={ArrowLeftIcon} /></button>
               <span className="bcz-title">Customize COD</span>
-              <button type="button" className={`bcz-pill${isActive ? ' is-on' : ''}`} onClick={() => set('enabled')(!isActive)} aria-pressed={isActive} title={isActive ? 'Click to turn COD off' : 'Click to turn COD on'}>
+              <button type="button" className={`bcz-pill${isActive ? ' is-on' : ''}`} onClick={() => set('enabled')(!isActive)} aria-pressed={isActive} title={isActive ? 'Click to turn COD off' : 'Click to turn COD on'} data-tour="cod-active">
                 <span />{isActive ? 'Active' : 'Inactive'}
               </button>
             </div>
@@ -1509,8 +1509,8 @@ export default function CodCustomizePage() {
                   const n = item.fields.filter((f) => errors[f]).length + (item.ship ? countShipErrors(shipErrs, item.ship) : 0);
                   const toggled = typeof item.toggle === 'function' ? item.toggle(form) : form[item.toggle];
                   return (
-                    <div key={item.id} className="bcz-item" data-section={item.id}>
-                      <button type="button" className={`bcz-row${isOpen ? ' is-open' : ''}`} aria-expanded={isOpen} onClick={() => toggleSection(item.id)}>
+                    <div key={item.id} className="bcz-item" data-section={item.id} data-tour={`cod-section-${item.id}`}>
+                      <button type="button" className={`bcz-row${isOpen ? ' is-open' : ''}`} aria-expanded={isOpen} onClick={() => toggleSection(item.id)} data-tour={`cod-section-${item.id}-toggle`}>
                         <span className="bcz-row-ic"><Icon source={item.icon} /></span>
                         <span className="bcz-row-l">{item.label}</span>
                         {n ? <span className="bcz-badge is-err">{n === 1 ? '1 error' : `${n} errors`}</span>
@@ -1543,7 +1543,7 @@ export default function CodCustomizePage() {
             </div>
             <div className="bcz-actions">
               <Button size="slim" onClick={discard} disabled={!dirty || saving}>Discard</Button>
-              <Button size="slim" variant="primary" onClick={save} loading={saving} disabled={!dirty}>Save</Button>
+              <span data-tour="cod-save" style={{ display: 'inline-flex' }}><Button size="slim" variant="primary" onClick={save} loading={saving} disabled={!dirty}>Save</Button></span>
             </div>
           </div>
           <div className="bcz-stage">

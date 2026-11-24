@@ -298,14 +298,16 @@ const SECTION_TIPS = {
 
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
 function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
+    // data-tour: the guided setup opens a section by its row (components/guide/).
     return (
-        <div style={{
+        <div data-tour={`coupon-section-${id}`} style={{
             border: `1px solid ${isOpen ? '#b5e3d8' : '#e5e7eb'}`,
             borderRadius: "10px", overflow: "hidden",
             transition: "border-color 0.15s, box-shadow 0.15s",
             boxShadow: isOpen ? "0 0 0 2px rgba(0,128,96,0.06)" : "none",
         }}>
             <button
+                data-tour={`coupon-section-${id}-toggle`}
                 onClick={() => onToggle(id)}
                 style={{
                     width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -1137,6 +1139,7 @@ function ProductWidgetEditor({ onDiscard }) {
                                 submitCouponConfig({ isEnabled: next });
                             }}
                             aria-label="Toggle Coupon Banner"
+                            data-tour="coupon-toggle"
                             disabled={!couponPublishable}
                             title={!couponPublishable ? "Upgrade to Starter to enable this on your storefront" : undefined}
                             style={{ width: "48px", height: "26px", borderRadius: "13px", border: "none", background: effectiveEnabled ? "#008060" : "#babec3", position: "relative", cursor: couponPublishable ? "pointer" : "not-allowed", opacity: couponPublishable ? 1 : 0.5, transition: "background 0.2s ease", flexShrink: 0, padding: 0 }}
@@ -1147,7 +1150,7 @@ function ProductWidgetEditor({ onDiscard }) {
                         <Button icon={ThemeIcon} url={`https://${shop}/admin/themes/current/editor?context=apps`} target="_blank" size="slim">Customize in Store</Button>
                         <div style={{ width: 1, height: 24, background: "#e1e3e5" }} />
                         <Button onClick={() => setHasChanges(false)} disabled={!hasChanges} size="slim">Discard</Button>
-                        <Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
+                        <span data-tour="coupon-save" style={{ display: "inline-flex" }}><Button variant="primary" onClick={handleSave} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button></span>
                     </div>
                 </div>
 
@@ -1172,6 +1175,7 @@ function ProductWidgetEditor({ onDiscard }) {
                                     <p>Go to <strong>App embeds</strong> and turn on <em>Coupon Banner</em>.</p>
                                 </Banner>
                             )}
+                            <div data-tour="coupon-template">
                             <Card>
                                 <BlockStack gap="300">
                                     <Text as="h2" variant="headingMd">Select Template</Text>
@@ -1179,6 +1183,7 @@ function ProductWidgetEditor({ onDiscard }) {
                                         {TEMPLATES.map(t => (
                                             <button
                                                 key={t.id}
+                                                data-tour="coupon-template-option"
                                                 onClick={() => applyTemplate(t.id)}
                                                 style={{ padding: "8px 20px", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: 500, border: `1.5px solid ${selectedTemplate === t.id ? "#008060" : "#c9cccf"}`, background: selectedTemplate === t.id ? "#f1f8f5" : "#ffffff", color: selectedTemplate === t.id ? "#008060" : "#202223", transition: "all 0.15s", outline: "none" }}
                                             >
@@ -1188,6 +1193,7 @@ function ProductWidgetEditor({ onDiscard }) {
                                     </div>
                                 </BlockStack>
                             </Card>
+                            </div>
 
                             <Card>
                                 <BlockStack gap="300">

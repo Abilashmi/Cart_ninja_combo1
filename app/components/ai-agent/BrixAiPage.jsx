@@ -347,7 +347,8 @@ export default function BrixAiPage() {
 
         {/* Body */}
         <div className="bai-body">
-          <div className={`bai-msgs-wrap${hasThread ? " visible" : ""}`} ref={scrollRef}>
+          {/* data-tour (guided setup): only once there is a conversation; before that the area is see-through */}
+          <div className={`bai-msgs-wrap${hasThread ? " visible" : ""}`} ref={scrollRef} data-tour={hasThread ? "ai-messages" : undefined}>
             <div className="bai-msgs-inner">
               {messages.map((msg) => <MessageRow key={msg.id} msg={msg} onChoice={handleSend} onApplyWidget={applyWidget} loading={loading} />)}
               {loading && (
@@ -400,7 +401,7 @@ export default function BrixAiPage() {
                 </div>
               )}
 
-              <div className="bai-bar">
+              <div className="bai-bar" data-tour="ai-input">
                 <svg className="bai-search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round">
                   <circle cx="11" cy="11" r="7" /><path d="M21 21l-4-4" />
                 </svg>
@@ -427,6 +428,7 @@ export default function BrixAiPage() {
                 </button>
                 <button
                   className="bai-send"
+                  data-tour="ai-send"
                   onClick={() => handleSend()}
                   disabled={!input.trim() || !!loading}
                 >
@@ -444,7 +446,7 @@ export default function BrixAiPage() {
 
             <div className={`bai-chips-row${hasThread ? " hidden" : ""}`}>
               {QUICK_CHIPS.map((chip) => (
-                <button key={chip} className="bai-chip" onClick={() => { setInput(chip); setTimeout(() => inputRef.current?.focus(), 0); }}>
+                <button key={chip} className="bai-chip" data-tour={chip === "Build a bundle" ? "ai-chip-build-a-bundle" : undefined} onClick={() => { setInput(chip); setTimeout(() => inputRef.current?.focus(), 0); }}>
                   {chip}
                 </button>
               ))}

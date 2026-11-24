@@ -10,6 +10,7 @@ import {
     useIndexResourceState,
     EmptyState,
     Banner,
+    Button,
 } from "@shopify/polaris";
 import { useLoaderData, useNavigate, useSubmit, useActionData } from "react-router";
 import { useState, useMemo, useEffect } from "react";
@@ -300,11 +301,12 @@ export default function CouponsPage() {
     return (
         <Page
             fullWidth
-            primaryAction={{
-                content: "Create Discount",
-                icon: PlusIcon,
-                onAction: () => navigate("/app/discounts/create"),
-            }}
+            // A node, so the guided setup can point at it (data-tour).
+            primaryAction={
+                <span data-tour="discounts-create" style={{ display: "inline-flex" }}>
+                    <Button variant="primary" icon={PlusIcon} onClick={() => navigate("/app/discounts/create")}>Create Discount</Button>
+                </span>
+            }
             secondaryActions={[{ content: "Export", disabled: true }]}
         >
             <BlockStack gap="400">

@@ -7,21 +7,19 @@ import {
 } from '@shopify/polaris-icons';
 import VideoTutorialCard, { VIDEO_CARD_STYLES } from '../VideoTutorialCard';
 import { useT } from '../../i18n/admin';
+import { TUTORIAL_VIDEOS } from '../../utils/tutorial-videos';
 
 // Video tutorials, the Academy intro and tips. They used to be the Home page; they now live on
 // the Account page (/app/additional#tutorials), which the Home page's Help link opens.
 
-// TODO: paste the embed URL (YouTube/Vimeo/CDN) here once the intro video is published
-const WELCOME_VIDEO_URL = 'https://www.youtube.com/embed/Ap1wvi6FN9I';
-
-// Each step's real tutorial video (previously all six reused WELCOME_VIDEO_URL
-// as a placeholder).
-const ENABLE_APP_EMBED_VIDEO_URL = 'https://www.youtube.com/embed/xIogTy1RM-0';
-const CART_DRAWER_VIDEO_URL = 'https://www.youtube.com/embed/QmiqbSUgDrw';
-const FBT_VIDEO_URL = 'https://www.youtube.com/embed/o70b1FMW4v4';
-const COUPON_BANNER_VIDEO_URL = 'https://www.youtube.com/embed/l6_m_kGPx9M';
-const COMBO_BUILDER_VIDEO_URL = 'https://www.youtube.com/embed/f7RGtknTVO4';
-const ANALYTICS_VIDEO_URL = 'https://www.youtube.com/embed/FfVLZMmE1PM';
+// The video links live in utils/tutorial-videos.js (the guided setup panel shows them too).
+const WELCOME_VIDEO_URL = TUTORIAL_VIDEOS.intro.url;
+const ENABLE_APP_EMBED_VIDEO_URL = TUTORIAL_VIDEOS.brixAi.url;
+const CART_DRAWER_VIDEO_URL = TUTORIAL_VIDEOS.cartDrawer.url;
+const FBT_VIDEO_URL = TUTORIAL_VIDEOS.fbt.url;
+const COUPON_BANNER_VIDEO_URL = TUTORIAL_VIDEOS.couponBanner.url;
+const COMBO_BUILDER_VIDEO_URL = TUTORIAL_VIDEOS.comboBuilder.url;
+const ANALYTICS_VIDEO_URL = TUTORIAL_VIDEOS.analytics.url;
 
 const STEPS = [
   { id: 1, title: 'admin.home.step1_title',             desc: 'admin.home.step1_desc', to: '/app/brix-ai',       color: '#1a9de0', icon: StarIcon,        minPlan: 'starter', dur: '01:30', category: 'admin.home.step1_category',         difficulty: 'Beginner',     videoUrl: ENABLE_APP_EMBED_VIDEO_URL, thumbnail: '/brixai.png' },
@@ -52,9 +50,11 @@ function parseDurationToSeconds(dur) {
   return parts.reduce((total, part) => total * 60 + part, 0);
 }
 
-/* ─── StepVideoModal — the modal overlay used by the Setup Checklist thumbnails ─── */
+/* ─── StepVideoModal — the modal overlay used by the Setup Checklist thumbnails ───
+ * Also opened by the guided setup panel's "Watch" (components/guide/GuidePanel.jsx). */
 
-function StepVideoModal({ step, onClose, onGoToStep }) {
+// eslint-disable-next-line react/prop-types
+export function StepVideoModal({ step, onClose, onGoToStep }) {
   const t = useT();
   if (!step) return null;
   return (

@@ -33,6 +33,7 @@ import { checkAndConsumeCredit } from '../services/ai-credits.server';
 import { withTimeout } from '../utils/with-timeout';
 import { ColorField } from '../components/shared/ColorField';
 import AppSaveBar from '../components/shared/AppSaveBar';
+import { guideOwnsModule } from '../utils/guide-runtime';
 import { FBT_EXTRA_COLOR_KEYS, FBT_OFFER_WEIGHTS, fbtEffectiveColors, fbtOfferCss, pickFbtExtras, pickFbtLayout, fbtLayoutSizes, fbtStartsSelected } from '../utils/fbt-style.shared.js';
 import { HEADING_FONT_OPTIONS } from '../components/customization/ContentSection';
 
@@ -737,14 +738,16 @@ function pluralize(n, word) {
 
 /* ─── ACCORDION SECTION ───────────────────────────────────────────────────── */
 function AccordionSection({ id, icon, title, isOpen, onToggle, tip, children }) {
+  // data-tour: the guided setup opens a section by its row (components/guide/).
   return (
-    <div style={{
+    <div data-tour={`fbt-section-${id}`} style={{
       border: `1px solid ${isOpen ? '#b5e3d8' : '#e5e7eb'}`,
       borderRadius: '10px', overflow: 'hidden',
       transition: 'border-color 0.15s, box-shadow 0.15s',
       boxShadow: isOpen ? '0 0 0 2px rgba(0,128,96,0.06)' : 'none',
     }}>
       <button
+        data-tour={`fbt-section-${id}-toggle`}
         onClick={() => onToggle(id)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1062,7 +1065,8 @@ function FBTEditor({ onDiscard }) {
       tourDismissed = localStorage.getItem(fbtKey('cn_fbt_setup_tour_dismissed')) === '1';
     } catch {}
     setCustomizedFlag(customizedFromStorage);
-    if (tourDismissed) return;
+    // The guided setup is walking through FBT: its steps replace this tour.
+    if (tourDismissed || guideOwnsModule('fbt')) return;
 
     const doneFlags = [
       hasSavedFbtConfig,
@@ -1646,12 +1650,12 @@ function FBTEditor({ onDiscard }) {
               <span style={{ position: 'absolute', top: '3px', left: fbtEffectiveEnabled ? '25px' : '3px', width: '20px', height: '20px', borderRadius: '50%', background: '#ffffff', transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', display: 'block' }} />
             </button>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
-            <div ref={configureStepRef} style={{ display: 'inline-flex' }}>
+            <div ref={configureStepRef} style={{ display: 'inline-flex' }} data-tour="fbt-configure">
               <Button icon={SettingsIcon} onClick={() => setIsConfigModalOpen(true)} size="slim">Configure</Button>
             </div>
             <div style={{ width: 1, height: 24, background: '#e1e3e5' }} />
             <Button onClick={() => { setHasChanges(false); }} disabled={!hasChanges} size="slim">Discard</Button>
-            <Button variant="primary" onClick={() => handleSave()} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button>
+            <span data-tour="fbt-save" style={{ display: 'inline-flex' }}><Button variant="primary" onClick={() => handleSave()} loading={isSaving} disabled={!hasChanges} size="slim">Save</Button></span>
             {tourStepIndex === null && (
               <Button icon={PlayIcon} size="slim" onClick={replayTour}>Replay setup tour</Button>
             )}
@@ -1748,7 +1752,7 @@ function FBTEditor({ onDiscard }) {
                 {/* ── Left rail — mode switcher, mirrors the compact icon-rail
                      nav pattern used elsewhere in BRIX instead of a full-width
                      card picker ── */}
-                <div className="brix-fbt-rail" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div className="brix-fbt-rail" data-tour="fbt-config-mode" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {[
                     { value: 'manual', label: 'Manual', icon: SettingsIcon },
                     { value: 'ai',     label: 'AI-Powered', icon: MagicIcon },
@@ -2123,7 +2127,7 @@ function FBTEditor({ onDiscard }) {
               )}
 
               {/* Template selector */}
-              <div ref={templateStepRef}>
+              <div ref={templateStepRef} data-tour="fbt-template">
               <Card>
                 <BlockStack gap="300">
                   <Text as="h2" variant="headingMd">Select Template</Text>
@@ -2131,6 +2135,7 @@ function FBTEditor({ onDiscard }) {
                     {TEMPLATES.map((t) => (
                       <button
                         key={t.id}
+                        data-tour="fbt-template-option"
                         onClick={() => applyTemplate(t.id)}
                         style={{
                           padding: '7px 18px', borderRadius: '8px', cursor: 'pointer',
@@ -2540,7 +2545,7 @@ function FBTEditor({ onDiscard }) {
         </div>
       </div>
 
-      {tourStepIndex !== null && (() => {
+      {tourStepIndex !== null && !guideOwnsModule('fbt') && (() => {
         const step = SETUP_STEPS[tourStepIndex];
         if (!step) return null;
         const isLast = tourStepIndex === TOUR_STEP_COUNT - 1;

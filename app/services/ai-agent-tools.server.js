@@ -26,7 +26,7 @@ import { buildSalesReport, REPORT_PERIODS } from './sales-report.server';
 import { syncRewardGiftDiscount } from './reward-gift-shopify.server';
 import { getCatalogSnapshot } from './catalog-snapshot.server';
 import { canAccessFeature } from './plan-permissions.server';
-import { fetchCartDrawerRecord, persistCartDrawerRecord } from './cart-drawer-record.server';
+import { fetchCartDrawerRecord, fetchDrawerEnabled, persistCartDrawerRecord } from './cart-drawer-record.server';
 import { getDb } from './db.server';
 import { saveCouponBanner } from './coupon-banner.server';
 import { needsInfo, CHOICES } from '../utils/ai-needs-info';
@@ -67,10 +67,12 @@ async function syncCheckoutButtonToLegacyRecord(shop, { text, footerText, bgColo
 // same dual-write ai_agent_apply.php's enableDrawer/disableDrawer case used
 // to do, and the same pair app.cartdrawer.jsx's toggleDrawerStatus intent
 // writes today.
+// Returns whether the PHP backend (what the storefront reads) took it.
 async function syncDrawerStatusToLegacyRecord(shop, enabled) {
   const existing = (await fetchCartDrawerRecord(shop)) || {};
   const record = { ...existing, cartStatus: enabled ? 1 : 0, cart_status: enabled ? 1 : 0 };
-  await persistCartDrawerRecord(shop, record);
+  const saved = await persistCartDrawerRecord(shop, record);
+  return saved?.ok === true;
 }
 
 // The storefront (cart_drawer_inline.js's parseProgressData) reads milestones
@@ -377,6 +379,11 @@ export const TOOL_EXECUTORS = {
   async get_current_config(ctx) {
     const db = getDb();
     const [cdcRows] = await db.execute('SELECT * FROM cart_drawer_config WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
+    // Whether the drawer is on is the real switch (cart_drawer.cartStatus), not
+    // cart_drawer_config.is_enabled: the Cart Editor's Inactive pill doesn't
+    // update that copy, so it said "on" for a drawer that was off.
+    const drawerEnabled = await fetchDrawerEnabled(ctx.shop);
+    const cdc = cdcRows[0] ? { ...cdcRows[0], is_enabled: drawerEnabled ? 1 : 0 } : null;
     // progress_bar_settings alone has no goal/reward columns — those live in
     // progress_bar_tiers, joined in by fetchProgressBar (already used by the
     // write tools below) but previously never fetched here, so this tool
@@ -387,7 +394,8 @@ export const TOOL_EXECUTORS = {
     const [upRows] = await db.execute('SELECT * FROM upsell_widget_settings WHERE shop_domain = ? LIMIT 1', [ctx.shop]);
     const fbt = await fetchFbtConfig(db, ctx.shop);
     return {
-      cartDrawerConfig: summarizeBannerImages(cdcRows[0] || null),
+      cartDrawerEnabled: drawerEnabled,
+      cartDrawerConfig: summarizeBannerImages(cdc),
       imageBanner: cdcRows[0] ? imageBannerState(cdcRows[0]) : null,
       progressBar,
       couponSlider: csRows[0] || null,
@@ -458,9 +466,15 @@ export const TOOL_EXECUTORS = {
 
   // ── Cart drawer config ───────────────────────────────────────────────────
   async set_cart_drawer_enabled(ctx, { enabled }) {
-    await saveCartDrawerConfig(ctx.shop, ctx.planKey, { is_enabled: enabled ? 1 : 0 });
-    await syncDrawerStatusToLegacyRecord(ctx.shop, enabled);
-    return { success: true, enabled };
+    const on = enabled !== false;
+    await saveCartDrawerConfig(ctx.shop, ctx.planKey, { is_enabled: on ? 1 : 0 });
+    const saved = await syncDrawerStatusToLegacyRecord(ctx.shop, on);
+    // Report what the storefront's switch really says now, never just what was asked.
+    const nowEnabled = await fetchDrawerEnabled(ctx.shop);
+    if (!saved || nowEnabled !== on) {
+      return { success: false, enabled: nowEnabled, message: `The Cart Drawer is still ${nowEnabled ? 'on' : 'off'}: the change didn't save. Please try again, or use the Active / Inactive switch in the Cart Editor.` };
+    }
+    return { success: true, enabled: nowEnabled };
   },
 
   async update_design(ctx, args) {

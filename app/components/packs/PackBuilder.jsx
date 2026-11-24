@@ -6,6 +6,7 @@ import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, ButtonGroup,
 import { DesktopIcon, MobileIcon, SearchIcon, PersonIcon, CartIcon, DeleteIcon, PlusIcon, TextBlockIcon, PaintBrushFlatIcon, TextFontIcon, LayoutBlockIcon, DiscountIcon, ImageIcon, LayoutBuyButtonIcon, ButtonIcon, StarIcon, CashDollarIcon, MegaphoneIcon } from '@shopify/polaris-icons';
 import PackPreview from './PackPreview';
 import usePackDraft, { draftKey } from './usePackDraft';
+import { useGuideReveal } from '../../utils/guide-runtime';
 import { formatMoney } from '../../utils/currency.shared';
 import {
   CUSTOMIZATION_SCHEMA, PACK_TYPES, PACK_DESIGNS, MAX_TIERS, MAX_EXTRA_PRODUCTS, COMBO_MAX_ITEMS, COMBO_MAX_ITEM_QUANTITY, validateExtraProducts, validateComboTiers, comboTierQuantity, applyDesign, calculateTier, calculateComboTier, defaultCustomization, mergeCustomization, normalizeTiers, sanitizeCustomization, validateTiers, validateVariantCoverage, isSharedPack, sanitizeAppliesTo, MAX_APPLIES_PRODUCTS, MAX_APPLIES_COLLECTIONS,
@@ -387,6 +388,11 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
     setError(null);
     setStep(target);
   };
+  // The guided setup asks for a step's tab (packs-step-<key>); the same checks as Continue apply.
+  useGuideReveal((id) => {
+    const index = STEP_KEYS.indexOf(String(id).replace(/^packs-step-/, ''));
+    if (index >= 0 && index !== step) goTo(index);
+  });
 
   // ── review: server-side calculation ────────────────────────────────────────
   // Priced against the anchor variant only — an illustrative preview; the
@@ -1882,16 +1888,19 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
               <InlineStack align="space-between" blockAlign="center"><Text as="h3" variant="headingSm">Status</Text><Badge tone={wasActive ? 'success' : 'info'}>{wasActive ? 'Active' : isEdit ? (pack.status === 'inactive' ? 'Inactive' : 'Draft') : 'New (unsaved)'}</Badge></InlineStack>
               {!canPublish && <Banner tone="info" title="Publishing requires an eligible plan"><p>Your plan lets you build and preview Packs, but activating them on your storefront needs Starter or Pro. Save as a draft to keep your work.</p></Banner>}
               {canPublish && <Text as="p" tone="subdued" variant="bodySm">Activating installs the BRIX Packs checkout discount on your store so the savings apply at checkout. Shoppers only see the widget once that discount is verified active.</Text>}
+              {/* data-tour: the guided setup's last Packs step points here (components/guide/) */}
+              <div data-tour="packs-save">
               <InlineStack gap="300" wrap>
                 {wasActive && canPublish ? (
-                  <Button variant="primary" loading={saving === 'keep'} disabled={Boolean(saving) || review.status !== 'ready' || !reviewData?.valid} onClick={() => save('keep')}>Save changes</Button>
+                  <span data-tour="packs-save-button" style={{ display: 'inline-flex' }}><Button variant="primary" loading={saving === 'keep'} disabled={Boolean(saving) || review.status !== 'ready' || !reviewData?.valid} onClick={() => save('keep')}>Save changes</Button></span>
                 ) : (
                   <>
-                    <Button loading={saving === 'draft'} disabled={Boolean(saving) || !tierCheck.valid || customCheck.errors.length > 0} onClick={() => save(pack?.status === 'inactive' ? 'keep' : 'draft')}>{isEdit ? 'Save changes' : 'Save as draft'}</Button>
-                    <Button variant="primary" loading={saving === 'active'} disabled={Boolean(saving) || !canPublish || review.status !== 'ready' || !reviewData?.valid || !reviewData?.variant?.availableForSale} onClick={() => save('active')}>Save &amp; activate</Button>
+                    <span data-tour="packs-save-button" style={{ display: 'inline-flex' }}><Button loading={saving === 'draft'} disabled={Boolean(saving) || !tierCheck.valid || customCheck.errors.length > 0} onClick={() => save(pack?.status === 'inactive' ? 'keep' : 'draft')}>{isEdit ? 'Save changes' : 'Save as draft'}</Button></span>
+                    <span data-tour="packs-save-button" style={{ display: 'inline-flex' }}><Button variant="primary" loading={saving === 'active'} disabled={Boolean(saving) || !canPublish || review.status !== 'ready' || !reviewData?.valid || !reviewData?.variant?.availableForSale} onClick={() => save('active')}>Save &amp; activate</Button></span>
                   </>
                 )}
               </InlineStack>
+              </div>
             </BlockStack>
           </Card>
         </BlockStack>
@@ -1955,7 +1964,8 @@ export default function PackBuilder({ mode, pack, currency, planState, shop, ini
           </div>
         </div>
         <Card padding="0"><Tabs tabs={STEPS.map((label, index) => ({ id: STEP_KEYS[index], content: `${index + 1}. ${label}`, accessibilityLabel: `Step ${index + 1}: ${label}` }))} selected={step} onSelect={goTo} fitted /></Card>
-        {stepContent}
+        {/* data-tour: the guided setup points at the step on screen (packs-step-<key>) */}
+        <div data-tour={`packs-step-${STEP_KEYS[step]}`}>{stepContent}</div>
         {/* Room to scroll the last row clear of floating widgets (e.g. the
             "Help and Support" launcher) that sit over the bottom of the page. */}
         <div aria-hidden="true" style={{ height: 96 }} />

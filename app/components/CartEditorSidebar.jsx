@@ -151,7 +151,7 @@ export function CartEditorSidebar({ onDiscard }) {
             <Icon source={ArrowLeftIcon} />
           </button>
           <span className="cart-editor-sidebar-title" style={{ fontWeight: 700, color: '#202223', flex: 1 }}>Cart Editor</span>
-          <button onClick={handleToggleStatus} disabled={isTogglingStatus}
+          <button onClick={handleToggleStatus} disabled={isTogglingStatus} data-tour="cart-active"
             style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, border: 'none', fontSize: 10, fontWeight: 600, cursor: 'pointer', background: isActive ? '#aee9d1' : '#e4e5e7', color: isActive ? '#005e46' : '#6d7175', opacity: isTogglingStatus ? 0.6 : 1 }}
           >
             <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor' }} />
@@ -191,9 +191,12 @@ export function CartEditorSidebar({ onDiscard }) {
               const SectionComponent = SECTION_COMPONENT_MAP[item.id];
 
               return (
-                <div key={item.id} data-section={item.id} style={{ borderBottom: '1px solid #f1f2f3' }}>
+                <div key={item.id} data-section={item.id} data-tour={`cart-section-${item.id}`} style={{ borderBottom: '1px solid #f1f2f3' }}>
+                  {/* data-tour: the guided setup opens a section by this row (components/guide/) */}
                   <button
                     onClick={() => toggleSection(item.id)}
+                    aria-expanded={isOpen}
+                    data-tour={`cart-section-${item.id}-toggle`}
                     style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 7, padding: '5px 12px', width: '100%', background: isOpen ? '#f0f7f5' : 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}
                   >
                     <span style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: isOpen ? '#008060' : '#8c9196' }}>

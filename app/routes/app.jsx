@@ -14,6 +14,9 @@ import { adminMessages, getAdminLanguage, resolveAdminLocale, shopifyLocaleFor }
 import { I18nProvider, useT } from "../i18n/admin";
 import SupportChat from "../components/support/SupportChat";
 import OtpCreditsBadge from "../components/shared/OtpCreditsBadge";
+import { getGuideState } from "../services/guide-state.server";
+import { GuideProvider } from "../components/guide/GuideProvider";
+import GuideShell from "../components/guide/GuideShell";
 
 // Polaris's own texts (date pickers, pagination, …) where Polaris has the language.
 const POLARIS_TEXTS = { en: enTranslations, es: esTranslations };
@@ -26,10 +29,12 @@ const POLARIS_TEXTS = { en: enTranslations, es: esTranslations };
 export const loader = async ({ request }) => {
     const { admin, session } = await authenticate.admin(request);
 
-    const [planKey, currency, savedLanguage] = await Promise.all([
+    // guide = the guided setup's saved progress (brix.onboarding), null when never used; never throws.
+    const [planKey, currency, savedLanguage, guide] = await Promise.all([
         getShopPlan(session.shop, admin),
         getShopCurrency(admin, session.shop),
         getAdminLanguage(admin),
+        getGuideState(admin),
     ]);
     // Account → Language, else the language Shopify's admin is in (`locale` on the app's URL).
     const locale = resolveAdminLocale({ saved: savedLanguage, shopifyLocale: shopifyLocaleFor(session.shop, request) });
@@ -43,6 +48,7 @@ export const loader = async ({ request }) => {
         planKey,
         shop: session.shop,
         i18n: { locale, messages: adminMessages(locale) },
+        guide,
     };
 };
 
@@ -98,7 +104,7 @@ function AppNav({ planKey }) { // eslint-disable-line react/prop-types
 }
 
 export default function App() {
-    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop, i18n } = useLoaderData();
+    const { apiKey, currencySymbol, currencyCode, currencyLocale, planKey, shop, i18n, guide } = useLoaderData();
     const navigation = useNavigation();
     const isNavigating = navigation.state !== "idle";
 
@@ -115,7 +121,13 @@ export default function App() {
                             </div>
                         )}
                         <AppNav planKey={planKey} />
-                        <Outlet context={{ currencySymbol, currencyCode, shop }} />
+                        {/* Guided setup: onboarding questions + the setup panel on the right
+                            and its spotlight (components/guide/, saved in brix.onboarding). */}
+                        <GuideProvider initialState={guide}>
+                            <GuideShell>
+                                <Outlet context={{ currencySymbol, currencyCode, shop }} />
+                            </GuideShell>
+                        </GuideProvider>
                         {/* "Need help setting up?" chat, BRIX AI first then the team (/internal/chat) */}
                         <OtpCreditsBadge />
                         <SupportChat />

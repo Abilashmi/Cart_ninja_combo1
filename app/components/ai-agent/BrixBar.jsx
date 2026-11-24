@@ -352,7 +352,8 @@ export default function BrixBar({
   const floatBottom = 'var(--brix-bar-bottom, 80px)';
   const outerFloatStyle = side === 'left'
     ? { position: 'fixed', bottom: floatBottom, left: leftNavOffset, right: 'calc(45% + 20px)', zIndex }
-    : { position: 'fixed', bottom: floatBottom, left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 40px)', maxWidth: cfg.maxWidth, zIndex };
+    // Centred on the page beside the guided setup panel when it is open (--brix-guide-space, components/guide/GuideShell.jsx).
+    : { position: 'fixed', bottom: floatBottom, left: 'calc(50% - var(--brix-guide-space, 0px) / 2)', transform: 'translateX(-50%)', width: 'calc(100% - 40px - var(--brix-guide-space, 0px))', maxWidth: cfg.maxWidth, zIndex };
   const outerStyle = floating ? outerFloatStyle : outerInlineStyle;
 
   const panelHead = (

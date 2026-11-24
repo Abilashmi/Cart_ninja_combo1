@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useLoaderData, useRouteError, useNavigate, useSearchParams, redirect } from "react-router";
+import { useEffect, useState } from 'react';
+import { useLoaderData, useRouteError, useNavigate, useSearchParams, useRevalidator, redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Page, Text, Icon, Modal, BlockStack } from '@shopify/polaris';
 import {
@@ -8,7 +8,9 @@ import {
 } from '@shopify/polaris-icons';
 import { authenticate } from "../shopify.server";
 import { getAnalyticsData } from "../services/analytics.server";
-import { loadModuleStatus } from "../services/home-status.server";
+import { loadGuideStatus } from "../services/guide-status.server";
+import { getGuideState } from "../services/guide-state.server";
+import { loadGuideDashboard } from "../services/guide-dashboard.server";
 import { BASE_PHP_URL } from "../utils/api-helpers";
 import { getAgencyStoreStatus } from "../utils/agency-dashboard.server";
 import { useCurrency } from "../components/CurrencyContext";
@@ -20,6 +22,8 @@ import { resolveCodRange } from '../utils/cod-dates.shared';
 import DateRangePicker from '../components/shared/DateRangePicker';
 import ModuleArt, { MODULE_ART_CSS } from '../components/home/ModuleArt';
 import { internalAuthHeaders } from "../utils/internal-auth";
+import { useGuide } from '../components/guide/GuideProvider';
+import GuideDashboard from '../components/guide/GuideDashboard';
 
 /* ─── Loader: keep real Shopify auth + today's analytics ─── */
 
@@ -64,7 +68,7 @@ const RANGE_LABELS = {
 };
 
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const params = new URL(request.url).searchParams;
   const rangeParam = params.get('range');
   const resolved = resolveCodRange({ range: LEGACY_RANGES[rangeParam] || rangeParam, from: params.get('from'), to: params.get('to') });
@@ -98,14 +102,30 @@ export const loader = async ({ request }) => {
   // fetching this app's own /api/analytics route over HTTP — a self-fetch
   // would round-trip out through the public tunnel URL and back on every
   // home-page load. Which features are on (the card switches) loads at the
-  // same time; it never throws.
-  const [data, moduleStatus] = await Promise.all([
-    getAnalyticsData(shop, range.from, range.to).catch(() => null),
-    loadModuleStatus(shop),
-  ]);
+  // same time; it never throws. Stores using the guided setup also get each
+  // feature's configured / active (the extra reads are skipped for the rest);
+  // `existing` = the store already set something up, so the onboarding
+  // questions don't open by themselves.
+  // Those stores also get the personalized Home's numbers (guide-dashboard.server.js),
+  // for the features they picked, read at the same time.
+  const analyticsPromise = getAnalyticsData(shop, range.from, range.to).catch(() => null);
+  const savedGuidePromise = getGuideState(admin);
+  const guideStatusPromise = savedGuidePromise
+    .then((saved) => loadGuideStatus(shop, { admin, full: Boolean(saved?.modules?.length) }));
+  const guideDashPromise = savedGuidePromise.then((saved) => (saved?.modules?.length
+    ? loadGuideDashboard(shop, {
+      admin, modules: saved.modules, range: resolved,
+      current: analyticsPromise.then((d) => (d?.success ? normalizeAnalytics(d.data) : null)),
+    }).catch(() => null)
+    : null));
+  const [data, guideStatus, guideDash] = await Promise.all([analyticsPromise, guideStatusPromise, guideDashPromise]);
   if (data?.success) initialAnalytics = normalizeAnalytics(data.data);
 
-  return { shop, initialAnalytics, range, moduleStatus };
+  return {
+    shop, initialAnalytics, range, moduleStatus: guideStatus.moduleStatus,
+    guideHome: { existing: guideStatus.existing, modules: guideStatus.modules },
+    guideDash,
+  };
 };
 
 /* ─── The six modules on Home ─── */
@@ -162,22 +182,40 @@ const HOME_STYLES = `
 .brx-home-card:hover{box-shadow:0 8px 22px rgba(15,23,42,.1);transform:translateY(-2px);transition:box-shadow .2s,transform .2s}
 @media (prefers-reduced-motion:reduce){.brx-home-banner,.brx-home-orb,.brx-home-title,.brx-home-sub,.brx-home-banner-actions,.brx-home-card{animation:none}.brx-home-card:hover{transform:none}}
 .brx-home-switch:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
+.brx-home-customize{border:1px solid #d4d4d4;background:#fff;color:#111;border-radius:8px;padding:6px 14px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.brx-home-customize:hover{background:#f6f6f6}
+.brx-home-customize:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
+.brx-home-section{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brx-home-section h2{margin:0;font-size:16px;font-weight:650;color:#111}
+.brx-home-section p{margin:0;font-size:13px;color:#616161}
+.brx-gs.has-panel .brx-home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (min-width:1500px){.brx-gs.has-panel .brx-home-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.brx-gs.has-panel .brx-home-grid{grid-template-columns:minmax(0,1fr)}}
 `;
 
-function ModuleMedia({ id, tint, accent }) { // eslint-disable-line react/prop-types
+// Features with a drawn picture (ModuleArt); the others (Discount Creator, BRIX AI) show their icon.
+const HAS_ART = new Set(MODULES.map((m) => m.id));
+
+function ModuleMedia({ id, tint, accent, icon }) { // eslint-disable-line react/prop-types
   const url = MODULE_MEDIA[id];
   const isVideo = /\.(mp4|webm|mov)(\?|#|$)/i.test(url || '');
   return (
     <div className="brx-home-media" style={{ background: tint }}>
       {url && isVideo && <video src={url} autoPlay loop muted playsInline aria-hidden="true" />}
       {url && !isVideo && <img src={url} alt="" loading="lazy" />}
-      {!url && <ModuleArt id={id} accent={accent} />}
+      {!url && HAS_ART.has(id) && <ModuleArt id={id} accent={accent} />}
+      {!url && !HAS_ART.has(id) && icon && (
+        <span style={{ display: 'inline-flex', width: 56, height: 56, borderRadius: 16, background: '#fff', color: accent, alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(15,23,42,.08)' }}>
+          <span style={{ display: 'inline-flex', width: 28, height: 28 }}><Icon source={icon} tone="inherit" /></span>
+        </span>
+      )}
     </div>
   );
 }
 
 export default function DashboardPage() {
-  const { shop, initialAnalytics, range, moduleStatus = {} } = useLoaderData();
+  const { shop, initialAnalytics, range, moduleStatus = {}, guideDash = null } = useLoaderData();
+  const revalidator = useRevalidator();
   const [searchParams, setSearchParams] = useSearchParams();
   // Real app embed status from App Bridge (it used to always say "active").
   const embedStatus = useAppEmbedStatus();
@@ -185,6 +223,19 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const t = useT();
   const analytics = normalizeAnalytics(initialAnalytics);
+  // Guided setup (null outside the app shell, e.g. in test harnesses): once
+  // features are picked, they lead the page with their statuses.
+  const g = useGuide();
+  const guideModules = g && g.state.status !== 'dismissed' ? g.state.modules : [];
+  // Features just picked or changed: once they're saved, load their numbers.
+  const pickedKey = guideModules.join(',');
+  const loadedKey = (guideDash?.modules || []).join(',');
+  useEffect(() => {
+    if (!pickedKey || pickedKey === loadedKey) return undefined;
+    const timer = setTimeout(() => revalidator.revalidate(), 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedKey, loadedKey]);
 
   // A switch shows the feature's real on/off; tapping one opens that feature's page
   // (an off switch flips on as it goes).
@@ -247,6 +298,11 @@ export default function DashboardPage() {
                 else { next.set('from', pick.from); next.set('to', pick.to); }
                 setSearchParams(next);
               }} />
+            {g && !g.panelVisible && !g.questionsVisible && (
+              <button type="button" className="brx-home-customize" onClick={g.openSetup} data-guide-open>
+                {t('admin.guide.open_button')}
+              </button>
+            )}
             <s-button icon="question-circle" accessibilityLabel={t('admin.home.help_label')} onClick={() => setSetupOpen(true)}>How to set up</s-button>
             <Modal
               open={setupOpen}
@@ -267,24 +323,35 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* KPI strip */}
-        <div className="brx-home-kpis">
-          {kpis.map((kpi) => (
-            <div key={kpi.label} className="brx-home-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ display: 'inline-flex', width: 40, height: 40, borderRadius: 10, background: '#f4f6f8', color: kpi.accent, alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-                <span style={{ display: 'inline-flex', width: 22, height: 22 }}><Icon source={kpi.icon} tone="inherit" /></span>
-              </span>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>{kpi.value}</div>
-                <Text as="p" variant="bodySm" tone="subdued">{kpi.label}</Text>
+        {/* Guided setup in use: Home is built from the picked features (setup, impact,
+            their numbers, tips, plan, tutorials); the other features stay below. */}
+        {guideModules.length > 0 ? (
+          <>
+            <GuideDashboard data={guideDash} range={range} currencySymbol={currencySymbol} currencyCode={currencyCode} />
+            {MODULES.some((m) => !guideModules.includes(m.id)) && (
+              <div className="brx-home-section"><h2>{t('admin.guide.more_features')}</h2></div>
+            )}
+          </>
+        ) : (
+          // KPI strip
+          <div className="brx-home-kpis">
+            {kpis.map((kpi) => (
+              <div key={kpi.label} className="brx-home-card" style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <span style={{ display: 'inline-flex', width: 40, height: 40, borderRadius: 10, background: '#f4f6f8', color: kpi.accent, alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+                  <span style={{ display: 'inline-flex', width: 22, height: 22 }}><Icon source={kpi.icon} tone="inherit" /></span>
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>{kpi.value}</div>
+                  <Text as="p" variant="bodySm" tone="subdued">{kpi.label}</Text>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Module cards: each switch shows whether the feature is on and opens its page */}
         <div className="brx-home-grid">
-          {MODULES.map((module) => {
+          {MODULES.filter((module) => !guideModules.includes(module.id)).map((module) => {
             const name = t(module.title);
             return (
               <div key={module.id} className="brx-home-card brx-art-host">

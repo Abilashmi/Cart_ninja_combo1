@@ -44,6 +44,7 @@ import { ValidationPanel } from '../components/customization/ValidationPanel';
 import BrixBar from '../components/ai-agent/BrixBar';
 import CartDrawerEmbedModal from '../components/bundles/CartDrawerEmbedModal';
 import ComboSetupTour from '../components/bundles/ComboSetupTour';
+import { useGuideReveal } from '../utils/guide-runtime';
 import { getDb, sendToPhp } from '../utils/api-helpers';
 import { checkComboPlanGate } from '../services/combo-templates.server';
 import { getComboWeightDiscountStatus } from '../services/combo-weight-shopify.server';
@@ -2608,6 +2609,8 @@ function CustomizeEditor({ onDiscard }) {
       setExpandedSections((prev) => onlyOpen(prev, 'discount'));
     }
   }, [onlyOpen]);
+  // The guided setup's Offer step (config/guide-tours.js) asks for the same section.
+  useGuideReveal((id) => { if (id === 'combo-discount') tourBeforeStep('discount'); });
 
   const SECTION_CATEGORY = {
     general: 'layout', banner: 'layout', products: 'layout',
@@ -3302,7 +3305,7 @@ function CustomizeEditor({ onDiscard }) {
           </div>
         </div>
 
-        <div className="template-picker-grid">
+        <div className="template-picker-grid" data-tour="combo-templates">
           {TEMPLATE_CATALOGUE.map((tpl) => (
             <div key={tpl.id} className="tpl-pick-card">
               <div className="tpl-pick-media">
@@ -3359,9 +3362,11 @@ function CustomizeEditor({ onDiscard }) {
                       {`Upgrade to ${PLANS[getMinPlanForFeature(tpl.featureKey)]?.label || 'Pro'} to use this template`}
                     </Button>
                   ) : (
-                    <Button variant="primary" fullWidth onClick={() => handlePickLayout(tpl.blockName)}>
-                      Use This Template
-                    </Button>
+                    <div data-tour="combo-template-pick">
+                      <Button variant="primary" fullWidth onClick={() => handlePickLayout(tpl.blockName)}>
+                        Use This Template
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>

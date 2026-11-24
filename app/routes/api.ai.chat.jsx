@@ -7,6 +7,7 @@ import { TOOL_REGISTRY, isDestructiveToolCall } from '../config/ai-tool-schemas'
 import { PRODUCT_KNOWLEDGE } from '../config/ai-product-knowledge';
 import { TOOL_EXECUTORS } from '../services/ai-agent-tools.server';
 import { getStoreConfigSnapshot } from '../services/store-config-snapshot.server';
+import { fetchDrawerEnabled } from '../services/cart-drawer-record.server';
 import { getShopPlan } from '../services/plan-permissions.server';
 import { getShopCurrency, getCurrencySymbolFromCode } from '../utils/currency.server';
 import { getDb } from '../services/db.server';
@@ -180,7 +181,8 @@ async function buildAfterPayload(shop) {
   const [fbtRows] = await db.execute('SELECT is_enabled FROM fbt_widget_settings WHERE shop_domain = ? LIMIT 1', [shop]);
 
   return {
-    drawerEnabled: cdc ? !!cdc.is_enabled : undefined,
+    // The real switch (cart_drawer.cartStatus), as the Cart Editor's Active / Inactive pill shows it.
+    drawerEnabled: await fetchDrawerEnabled(shop).catch(() => undefined),
     header: cdc ? { bgColor: cdc.header_bg_color, textColor: cdc.header_text_color } : undefined,
     checkoutButton: cdc ? { backgroundColor: cdc.checkout_button_bg_color, textColor: cdc.checkout_button_text_color } : undefined,
     announcement: cdc ? { enabled: !!cdc.announcement_enabled, text: cdc.announcement_text, bgColor: cdc.announcement_bg_color, textColor: cdc.announcement_text_color } : undefined,

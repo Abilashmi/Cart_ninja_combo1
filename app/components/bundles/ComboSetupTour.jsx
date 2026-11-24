@@ -5,6 +5,7 @@ import { cartDrawerEmbedEditorUrl } from '../../config/theme-extension';
 import {
   COMBO_TOUR_EVENT, COMBO_TOUR_STEPS, readTour, dismissTour, finishTour, goToStep, nextStepOnPage, setTourShop,
 } from '../../utils/combo-tour';
+import { guideOwnsModule } from '../../utils/guide-runtime';
 
 // The Build a Combo setup tour. Mounted by each screen that owns steps
 // (`page`: 'dashboard' | 'picker' | 'builder'); it shows only the current
@@ -160,7 +161,8 @@ export default function ComboSetupTour({ page, shop, beforeStep }) {
     return () => document.removeEventListener('click', onClick, true);
   }, [ownsStep, step, advance]);
 
-  if (!ownsStep) return null;
+  // The guided setup (components/guide/) is walking through Build a Combo: one tour at a time.
+  if (!ownsStep || guideOwnsModule('combo')) return null;
 
   if (step.kind === 'embed') {
     return (

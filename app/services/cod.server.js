@@ -99,6 +99,12 @@ export async function getCodSettings(shop) {
   return sanitizeCodSettings((await loadStoredSettings(shop)) || {}, DEFAULT_COD_SETTINGS);
 }
 
+/** { saved, settings }: saved = the store has saved COD settings at least once (guided setup's "configured"). */
+export async function getCodSettingsState(shop) {
+  const raw = await loadStoredSettings(shop);
+  return { saved: raw !== null, settings: sanitizeCodSettings(raw || {}, DEFAULT_COD_SETTINGS) };
+}
+
 /** The settings plus the stored runtime facts (e.g. whether the prepaid discount is verified in Shopify). */
 export async function getCodSettingsWithRuntime(shop) {
   const raw = await loadStoredSettings(shop);

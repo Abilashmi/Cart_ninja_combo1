@@ -22,10 +22,10 @@ const AI_WAIT_MS = 45000;
 const TEASER_CLOSED_KEY = 'brixChatTeaserClosed';
 
 const CSS = `
-.bxsc-launch{position:fixed;right:20px;bottom:var(--brix-sidekick-space,80px);z-index:9990;display:flex;align-items:center;gap:8px;border:0;cursor:pointer;background:#111;color:#fff;font:600 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;border-radius:999px;padding:12px 18px 12px 14px;box-shadow:0 8px 24px rgba(15,23,42,.25);transition:transform .15s}
+.bxsc-launch{position:fixed;right:calc(20px + var(--brix-guide-space,0px));bottom:var(--brix-sidekick-space,80px);z-index:9990;display:flex;align-items:center;gap:8px;border:0;cursor:pointer;background:#111;color:#fff;font:600 14px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;border-radius:999px;padding:12px 18px 12px 14px;box-shadow:0 8px 24px rgba(15,23,42,.25);transition:transform .15s}
 .bxsc-launch:hover{transform:translateY(-2px)}
 .bxsc-launch.round{width:52px;height:52px;padding:0;justify-content:center}
-.bxsc-teaser{position:fixed;right:20px;bottom:calc(var(--brix-sidekick-space,80px) + 64px);z-index:9990;width:300px;background:#fff;border-radius:16px 16px 4px 16px;box-shadow:0 12px 32px rgba(15,23,42,.22);padding:12px 14px 14px;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111;text-align:start}
+.bxsc-teaser{position:fixed;right:calc(20px + var(--brix-guide-space,0px));bottom:calc(var(--brix-sidekick-space,80px) + 64px);z-index:9990;width:300px;background:#fff;border-radius:16px 16px 4px 16px;box-shadow:0 12px 32px rgba(15,23,42,.22);padding:12px 14px 14px;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111;text-align:start}
 .bxsc-teaser-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .bxsc-av{width:32px;height:32px;border-radius:50%;background:#fff;border:1px solid #e5e7eb;display:flex;align-items:center;justify-content:center;flex:none;overflow:hidden}
 .bxsc-av img{width:24px;height:24px;display:block}
@@ -39,7 +39,7 @@ const CSS = `
 .bxsc-teaser-go{margin-top:10px;width:100%;border:0;border-radius:10px;background:#111;color:#fff;font:600 14px/1 inherit;padding:11px 12px;cursor:pointer}
 .bxsc-launch:focus-visible,.bxsc button:focus-visible,.bxsc textarea:focus-visible{outline:2px solid #2c6ecb;outline-offset:2px}
 .bxsc-badge{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:10px;background:#e11d48;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 5px;border:2px solid #fff}
-.bxsc{position:fixed;right:20px;bottom:var(--brix-sidekick-space,80px);z-index:9991;width:370px;height:min(560px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111}
+.bxsc{position:fixed;right:calc(20px + var(--brix-guide-space,0px));bottom:var(--brix-sidekick-space,80px);z-index:9991;width:370px;height:min(560px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 48px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden;font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#111}
 .bxsc-head{background:#111;color:#fff;padding:14px 14px 14px 16px;display:flex;align-items:center;gap:10px}
 .bxsc-head b{display:block;font-size:15px}
 .bxsc-head small{display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.75);font-size:12px}

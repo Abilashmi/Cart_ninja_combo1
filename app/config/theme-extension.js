@@ -12,5 +12,19 @@ export const CART_DRAWER_EMBED_NAME = 'BRIX Cart & Combo';
 // Opens the merchant's theme editor on the App embeds panel with this embed
 // pre-selected for activation.
 export function cartDrawerEmbedEditorUrl(shop) {
-  return `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${EXTENSION_UUID}/${CART_DRAWER_EMBED_HANDLE}`;
+  return appEmbedEditorUrl(shop, CART_DRAWER_EMBED_HANDLE);
+}
+
+// Every app embed of the extension (blocks/<handle>.liquid with target "body"),
+// by handle, with the name the theme editor shows. The guided setup asks for
+// the one its feature needs.
+export const APP_EMBEDS = {
+  cart_drawer: CART_DRAWER_EMBED_NAME,
+  Fbt: 'BRIX FBT',
+  coupon_slider: 'BRIX Coupon',
+  Packs: 'BRIX Packs',
+};
+
+export function appEmbedEditorUrl(shop, handle) {
+  return `https://${shop}/admin/themes/current/editor?context=apps&activateAppId=${EXTENSION_UUID}/${handle}`;
 }

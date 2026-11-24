@@ -139,7 +139,9 @@ export default function AppPacks() {
   }, [clearSelection, revalidator]);
 
   return (
-    <Page title="Packs" subtitle="Quantity-based offers that help your customers save more." primaryAction={{ content: 'Create Pack', onAction: () => navigate('/app/packs/new'), disabled: planState === 'locked' }}
+    // primaryAction as a node so the guided setup can point at it (data-tour).
+    <Page title="Packs" subtitle="Quantity-based offers that help your customers save more."
+      primaryAction={<span data-tour="packs-create" style={{ display: 'inline-flex' }}><Button variant="primary" onClick={() => navigate('/app/packs/new')} disabled={planState === 'locked'}>Create Pack</Button></span>}
       secondaryActions={[{ content: 'Create Pack for a collection', onAction: () => navigate('/app/packs/new?start=collection'), disabled: planState === 'locked' }]}>
       <BlockStack gap="400">
         {planState === 'preview' && <Banner tone="info" title="Packs preview mode"><p>You can build, customize and preview Packs, but publishing them to your storefront requires the Starter or Pro plan.</p></Banner>}

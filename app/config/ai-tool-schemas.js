@@ -75,7 +75,7 @@ export const TOOL_REGISTRY = [
   // ── Cart drawer config writes (all funnel through saveCartDrawerConfig) ──
   {
     name: 'set_cart_drawer_enabled',
-    description: 'Turn the entire Cart Drawer on or off. Turning it OFF replaces the customized drawer with Shopify\'s default cart on the storefront — this is destructive and requires confirmation.',
+    description: 'Turn the entire Cart Drawer on or off. Whether it is on now is get_current_config\'s cartDrawerEnabled (the real storefront switch, the same as the "Current state" line); when the merchant asks to turn it on and it is off, call this with enabled: true instead of saying it is already on. The result\'s `enabled` is what the switch says after the change. Turning it OFF replaces the customized drawer with Shopify\'s default cart on the storefront — this is destructive and requires confirmation.',
     parameters: {
       type: 'object',
       properties: { enabled: { type: 'boolean' } },

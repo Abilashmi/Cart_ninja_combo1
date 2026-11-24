@@ -15,6 +15,7 @@ import TemplateManager from '../components/bundles/TemplateManager';
 import CartDrawerEmbedBanner from '../components/bundles/CartDrawerEmbedBanner';
 import ComboSetupTour from '../components/bundles/ComboSetupTour';
 import { readTour, startTour, setTourShop } from '../utils/combo-tour';
+import { guideOwnsModule } from '../utils/guide-runtime';
 import { getEmbedStatus } from '../services/theme-embed.server';
 import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
 import { CART_DRAWER_EMBED_HANDLE, cartDrawerEmbedEditorUrl } from '../config/theme-extension';
@@ -222,7 +223,8 @@ export default function AppBundlesIndex() {
   // itself, once. After that it only runs when the merchant clicks "Take the setup tour".
   useEffect(() => {
     setTourShop(shop);
-    if (readTour() === null && allTemplates.length === 0) startTour();
+    // Not while the guided setup walks through Build a Combo: its own steps take over.
+    if (readTour() === null && allTemplates.length === 0 && !guideOwnsModule('combo')) startTour();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const navigate = useNavigate();
