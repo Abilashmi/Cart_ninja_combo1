@@ -257,7 +257,7 @@ export default function DashboardPage() {
             >
               <Modal.Section>
                 <BlockStack gap="300">
-                  <Text as="p"><b>1. Turn on the app embed.</b> In your theme editor, switch on &ldquo;Custom Cart Drawer&rdquo; so BRIX shows on your store.</Text>
+                  <Text as="p"><b>1. Turn on the app embed.</b> In your theme editor, switch on &ldquo;BRIX Cart & Combo&rdquo; so BRIX shows on your store.</Text>
                   <Text as="p"><b>2. Design your cart drawer.</b> Open Cart Drawer and set colours, header, progress bar, coupons and upsells.</Text>
                   <Text as="p"><b>3. Add offers.</b> Create coupons, upsells, frequently bought together and bundles from the menu.</Text>
                   <Text as="p"><b>4. Check your store.</b> Add a product to the cart on your storefront and see the drawer.</Text>

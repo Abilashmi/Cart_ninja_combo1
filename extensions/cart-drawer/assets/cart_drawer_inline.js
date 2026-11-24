@@ -1044,6 +1044,7 @@
     function defaultTrust() {
       return {
         enabled: false,
+        placement: 'below',
         layout: 'stacked',
         iconSize: 26,
         iconColor: '#111827',
@@ -1121,6 +1122,7 @@
       }
       return {
         enabled: r.enabled === true || r.enabled === 1 || r.enabled === '1',
+        placement: pick(r.placement, ['above', 'below'], d.placement),
         layout: pick(r.layout, ['stacked', 'inline'], d.layout),
         iconSize: num(r.iconSize, d.iconSize, 12, 56),
         iconColor: hex(r.iconColor, d.iconColor),
@@ -1170,7 +1172,8 @@
     function trustHtml(cfg) {
       if (!cfg || !cfg.enabled || !cfg.items.length) return '';
       var stacked = cfg.layout === 'stacked';
-      var box = 'display:flex;gap:' + cfg.gap + 'px;margin-top:' + cfg.marginTop + 'px;padding:' + cfg.padding + 'px;border-radius:' + cfg.radius + 'px;'
+      // Above the Checkout button the space goes under the badges, else over them.
+      var box = 'display:flex;gap:' + cfg.gap + 'px;margin-' + (cfg.placement === 'above' ? 'bottom' : 'top') + ':' + cfg.marginTop + 'px;padding:' + cfg.padding + 'px;border-radius:' + cfg.radius + 'px;'
         + (cfg.bgColor ? 'background:' + cfg.bgColor + ';' : '') + (cfg.borderColor ? 'border:1px solid ' + cfg.borderColor + ';' : '');
       var out = '<div class="cc-trust" data-cc-section="trust-badges" style="' + box + '">';
       for (var i = 0; i < cfg.items.length; i++) {
@@ -1208,7 +1211,7 @@
 
   function parseCheckoutButtonStyle(d) {
     const raw = d.checkout_button_style;
-    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, fontSize: 15, paddingY: 16, mobileButtonType: 'standard', paymentCards: ccFooterExtras.cardsConfig(null), trustBadges: ccFooterExtras.trustConfig(null), continueShopping: ccContinueShopping(null), phoneLayout: ccDrawerLayout(null, 'phone'), desktopLayout: ccDrawerLayout(null, 'desktop') };
+    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12, fontSize: 15, paddingY: 16, mobileButtonType: 'standard', paymentCards: ccFooterExtras.cardsConfig(null), trustBadges: ccFooterExtras.trustConfig(null), sectionOrder: null, theme: null, continueShopping: ccContinueShopping(null), phoneLayout: ccDrawerLayout(null, 'phone'), desktopLayout: ccDrawerLayout(null, 'desktop') };
     const data = typeof raw === 'string' ? parseJSON(raw) : raw;
     const clampNum = (v, def, min, max) => { const n = parseInt(v, 10); return isFinite(n) ? Math.max(min, Math.min(max, n)) : def; };
     return {
@@ -1222,10 +1225,134 @@
       // Cards row and Trust badges under the Checkout button (Cart Editor → Cards / Trust Badges).
       paymentCards: ccFooterExtras.cardsConfig(data.paymentCards),
       trustBadges: ccFooterExtras.trustConfig(data.trustBadges),
+      // Drag-and-drop order of the drawer's parts, null = each part's own position setting.
+      sectionOrder: ccSectionOrder(data.sectionOrder),
+      // Drawer colour theme (Cart Editor → Design → Colour theme), null = the white drawer.
+      theme: ccDrawerTheme(data.theme),
       continueShopping: ccContinueShopping(data.continueShopping),
       phoneLayout: ccDrawerLayout(data.phoneLayout, 'phone'),
       desktopLayout: ccDrawerLayout(data.desktopLayout, 'desktop'),
     };
+  }
+
+  // Drawer colour theme: same rules as app/utils/drawer-theme.shared.js
+  // (sanitizeDrawerTheme / drawerThemeCss): keep in step.
+  var CC_THEME_PRESETS = {
+    peach: ['#ffe3d8', '#ffd1e3'], sunset: ['#ffd6a5', '#ff9ebb'], ocean: ['#cde9ff', '#b9f3e4'], lavender: ['#e6ddff', '#ffd9f0'],
+    mint: ['#d9f7e8', '#e8f5ff'], lemon: ['#fff6c9', '#ffe0b5'], rose: ['#ffe0ea', '#ffc9d9'], berry: ['#5b2a86', '#c0366f'],
+    night: ['#1f2340', '#3b2a63'], forest: ['#123d2f', '#1f6b4f'], graphite: ['#2b2b33', '#4a4a57']
+  };
+  function ccThemeHex(v, def) {
+    if (typeof v !== 'string' || !/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v.trim())) return def;
+    var h = v.trim().toLowerCase();
+    if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+    return h;
+  }
+  function ccDrawerTheme(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var a = parseInt(raw.angle, 10);
+    var angle = isFinite(a) ? Math.max(0, Math.min(360, a)) : 160;
+    var text = typeof raw.textColor === 'string' && /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(raw.textColor.trim()) ? ccThemeHex(raw.textColor, '') : '';
+    var p = CC_THEME_PRESETS[raw.preset];
+    if (p) return { preset: raw.preset, color1: p[0], color2: p[1], angle: angle, textColor: text };
+    var color1 = ccThemeHex(raw.color1, '');
+    if (!color1) return null;
+    return { preset: 'custom', color1: color1, color2: raw.color2 ? ccThemeHex(raw.color2, '') : '', angle: angle, textColor: text };
+  }
+  function ccThemeBrightness(h) {
+    var n = parseInt(h.slice(1), 16);
+    return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  }
+  function ccDrawerThemeCss(theme) {
+    if (!theme) return null;
+    var b = theme.color2 ? (ccThemeBrightness(theme.color1) + ccThemeBrightness(theme.color2)) / 2 : ccThemeBrightness(theme.color1);
+    var dark = b < 0.5;
+    return {
+      background: theme.color2 ? 'linear-gradient(' + theme.angle + 'deg, ' + theme.color1 + ', ' + theme.color2 + ')' : theme.color1,
+      color: theme.textColor || (dark ? '#ffffff' : '#111827'),
+      dark: dark
+    };
+  }
+  // Paints the drawer with the theme after every draw (the footer and the
+  // text drawn straight on the drawer follow it; cards keep their own colours).
+  function ccApplyDrawerTheme() {
+    var css = ccDrawerThemeCss(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.theme);
+    var drawer = document.getElementById('cc-drawer');
+    if (!css || !drawer) return;
+    drawer.style.background = css.background;
+    drawer.style.color = css.color;
+    var footer = document.getElementById('cc-drawer-footer');
+    if (footer) {
+      footer.style.background = 'transparent';
+      footer.style.borderTopColor = css.dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)';
+    }
+    // The progress bar, coupon and upsell sections paint white themselves: let the theme show through.
+    var panels = drawer.querySelectorAll('.cc-progress-section, .cc-coupon-section, .cc-upsell-section');
+    for (var j = 0; j < panels.length; j++) panels[j].style.background = 'transparent';
+    var texts = drawer.querySelectorAll('.cc-items-head p, .cc-footer-note, [data-cc-section="empty"] p, .bxcd-summary__label:not(.bxcd-summary__label--saving), .bxcd-summary__value:not(.bxcd-summary__value--saving)');
+    for (var i = 0; i < texts.length; i++) texts[i].style.color = css.color;
+  }
+
+  // Drag-and-drop order of the drawer's parts (Cart Editor preview: drag any
+  // part), saved as checkout_button_style.sectionOrder = { main, footer }. Same
+  // rules as app/utils/section-order.shared.js sanitizeSectionOrder: keep in step.
+  var CC_SECTION_ZONES = {
+    main: ['header', 'announcement', 'countdown', 'progress', 'coupons', 'banner', 'upsell', 'items'],
+    footer: ['summary', 'continue', 'checkout', 'cards', 'trust']
+  };
+  function ccSectionOrder(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var src = {
+      main: Array.isArray(raw.main) ? raw.main : [].concat(Array.isArray(raw.top) ? raw.top : [], Array.isArray(raw.body) ? raw.body : []),
+      footer: Array.isArray(raw.footer) ? raw.footer : []
+    };
+    var out = {};
+    Object.keys(CC_SECTION_ZONES).forEach(function (zone) {
+      var valid = CC_SECTION_ZONES[zone];
+      var seen = [];
+      src[zone].forEach(function (k) { if (valid.indexOf(k) >= 0 && seen.indexOf(k) < 0) seen.push(k); });
+      valid.forEach(function (k) { if (seen.indexOf(k) < 0) seen.push(k); });
+      out[zone] = seen;
+    });
+    return out;
+  }
+  // Puts the drawn parts in the saved order with CSS `order` (the drawer, its
+  // body and its footer are flex columns). The header / announcement / countdown
+  // that lead the list stay above the body; one listed after a body part moves
+  // into the body. Nothing saved = nothing touched.
+  var CC_ORDER_SELECTORS = {
+    header: '.cc-drawer-header', announcement: '#cc-announcement-bar', countdown: '#cc-countdown-bar',
+    progress: '[data-cc-section="progress"]', coupons: '.cc-coupon-section', banner: '#cc-image-banner', upsell: '[data-cc-section="upsell"]',
+    items: '.cc-items-head, .bxcd-items, [data-cc-section="empty"]',
+    summary: '.bxcd-summary', 'continue': '#cc-continue-wrap', checkout: '#cc-cod-slot, #cc-checkout-wrap', cards: '.cc-pay-cards', trust: '.cc-trust'
+  };
+  function ccApplySectionOrder() {
+    var cfg = CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.sectionOrder;
+    var drawer = document.getElementById('cc-drawer');
+    if (!cfg || !drawer) return;
+    var body = document.getElementById('cc-drawer-body');
+    var footer = document.getElementById('cc-drawer-footer');
+    var lead = 0;
+    while (lead < cfg.main.length && ['header', 'announcement', 'countdown'].indexOf(cfg.main[lead]) >= 0) lead++;
+    cfg.main.forEach(function (key, i) {
+      var els = drawer.querySelectorAll(CC_ORDER_SELECTORS[key]);
+      for (var n = 0; n < els.length; n++) {
+        if (i >= lead && body && els[n].parentNode !== body) body.appendChild(els[n]);
+        els[n].style.order = String(i + 1);
+      }
+    });
+    if (footer) {
+      footer.style.display = 'flex';
+      footer.style.flexDirection = 'column';
+      // Parts with no key (footer note, watermark) keep the end.
+      for (var c = 0; c < footer.children.length; c++) footer.children[c].style.order = 100;
+      cfg.footer.forEach(function (key, i) {
+        var els = footer.querySelectorAll(':scope > ' + CC_ORDER_SELECTORS[key].split(',').join(', :scope > '));
+        for (var n = 0; n < els.length; n++) els[n].style.order = String(i + 1);
+      });
+      footer.style.order = '20';
+    }
+    if (body) body.style.order = '10';
   }
 
   // Drawer width and spacing, one set per device (Cart Editor → Design →
@@ -4327,7 +4454,7 @@
     if (isEmpty) {
       const ec = CONFIG.emptyCart || {};
       drawerHtml += `
-  <div style="padding:40px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;">
+  <div data-cc-section="empty" style="padding:40px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#c9cccf" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
     <p style="margin:0;font-size:16px;font-weight:600;color:#111;">${escapeHtml(bxText(ec.message, 'storefront.drawer.empty', 'Your cart is empty'))}</p>
     <p style="margin:0;font-size:13px;color:#6b7280;">${escapeHtml(bxT('storefront.drawer.empty_hint', 'Add items to unlock rewards'))}</p>
@@ -4469,10 +4596,11 @@
 ].filter(Boolean).join(' ')}" style="--cc-m-pad:${phone.footerPadding}px;--cc-m-sum-row:${phone.summaryRowGap}px;--cc-m-sum-gap:${phone.summaryGap}px;--cc-d-sum-row:${desk.summaryRowGap}px;--cc-d-sum-gap:${desk.summaryGap}px;padding:${desk.footerPadding}px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
   ${renderSummaryHtml(shownSubtotal, totalDiscount, finalTotal, cartLevelOff > 0 ? cartDiscounts : [])}
   ${continueCfg.enabled && continueCfg.placement === 'above' ? renderContinueShopping(continueCfg) : ''}
+  ${(() => { const tb = ccTrustBadges((CONFIG.checkoutButtonStyle || {}).trustBadges); return tb && tb.placement === 'above' ? ccFooterExtras.trustHtml(tb) : ''; })()}
   <div id="cc-cod-slot"></div>
   <div id="cc-checkout-wrap">${(_ccCheckoutPrice = { cart: cart, total: finalTotal }, renderCheckoutButton(appliedCouponCodes))}</div>
   ${ccFooterExtras.cardsHtml((CONFIG.checkoutButtonStyle || {}).paymentCards)}
-  ${ccFooterExtras.trustHtml(ccTrustBadges((CONFIG.checkoutButtonStyle || {}).trustBadges))}
+  ${(() => { const tb = ccTrustBadges((CONFIG.checkoutButtonStyle || {}).trustBadges); return tb && tb.placement === 'above' ? '' : ccFooterExtras.trustHtml(tb); })()}
   ${continueCfg.enabled && continueCfg.placement !== 'above' ? renderContinueShopping(continueCfg) : ''}
   <p class="cc-footer-note" style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
     ${escapeHtml(bxText(CONFIG.checkoutFooterText, 'storefront.drawer.footer_note', 'Shipping and taxes calculated at checkout'))}
@@ -4552,6 +4680,8 @@
       ccRefreshCheckoutTags();
     }
 
+    ccApplyDrawerTheme();
+    ccApplySectionOrder();
     if (upsell && upsell.enabled) ccInitUpsellList(upsell);
     startCountdownTicker();
     startCouponTimers();

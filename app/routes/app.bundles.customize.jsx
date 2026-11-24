@@ -1871,7 +1871,7 @@ function CustomizeEditor({ onDiscard }) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Combo pages are rendered by the "Custom Cart Drawer" app embed. The check
+  // Combo pages are rendered by the "BRIX Cart & Combo" app embed. The check
   // starts when the merchant clicks Save (so it's usually done by the time the
   // save returns); after a successful save we show the how-to modal unless the
   // embed is confirmed ON, and only then continue to the templates list.

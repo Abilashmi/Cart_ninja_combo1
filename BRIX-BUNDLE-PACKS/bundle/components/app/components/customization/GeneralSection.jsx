@@ -1,0 +1,427 @@
+import { memo } from 'react';
+import { FormLayout, TextField, Select, Checkbox, Text, Tooltip, Button } from '@shopify/polaris';
+import { MagicIcon } from '@shopify/polaris-icons';
+import { SectionCard } from './SectionCard';
+import { useCurrency } from '../CurrencyContext';
+
+// 1em/currentColor so it inherits each button's own font-size/color inline
+// styles below with no extra props needed — used in place of a plain "✕"
+// character glyph.
+function CloseGlyph() {
+  return (
+    <svg width="1em" height="1em" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ display: 'inline-block', verticalAlign: '-0.125em' }}>
+      <line x1="5" y1="5" x2="19" y2="19" />
+      <line x1="19" y1="5" x2="5" y2="19" />
+    </svg>
+  );
+}
+
+function GeneralSectionComponent({
+  config,
+  collections,
+  updateConfig,
+  expanded,
+  onToggle,
+  stepErrors,
+  maxProductsError,
+  stepFieldAiLoading,
+  generateStepFieldSuggestion,
+}) {
+  const { formatMoney } = useCurrency();
+  const layout = config.layout;
+
+  if (layout === 'layout1') {
+    const numSteps = Number(config.max_selections || 1);
+    const addStep = () => updateConfig('max_selections', numSteps + 1);
+    const removeStep = (step) => {
+      updateConfig('max_selections', Math.max(1, numSteps - 1));
+      updateConfig(`step_${step}_collection`, '');
+      updateConfig(`step_${step}_title`, '');
+      updateConfig(`step_${step}_subtitle`, '');
+      updateConfig(`step_${step}_limit`, '');
+    };
+    return (
+      <SectionCard
+        title="Steps & Collections"
+        expanded={expanded}
+        onToggle={onToggle}
+        badge={`${numSteps} ${numSteps === 1 ? 'collection' : 'collections'}`}
+      >
+        <FormLayout>
+          <div className="cst-bundle-rule-box">
+            <Text variant="bodyMd" as="p" fontWeight="bold">Bundle Rule</Text>
+            <TextField
+              label="Total Products Customer Can Add"
+              type="number"
+              value={String(config.max_products || 5)}
+              onChange={(v) => { updateConfig('max_products', Math.max(1, Number(v))); }}
+              autoComplete="off"
+              error={maxProductsError}
+              helpText="Maximum total products across all collections."
+            />
+          </div>
+          {[...Array(numSteps)].map((_, index) => {
+            const step = index + 1;
+            return (
+              <div key={step} className="cst-step-block">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text variant="bodyMd" as="p" fontWeight="bold">Collection {step}</Text>
+                  {numSteps > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeStep(step)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d72c0d', fontSize: 13, fontWeight: 600, padding: '2px 6px' }}
+                    >
+                      <CloseGlyph /> Remove
+                    </button>
+                  )}
+                </div>
+                <div className="cst-step-fields">
+                  <TextField
+                    label="Title"
+                    value={config[`step_${step}_title`] || ''}
+                    onChange={(v) => updateConfig(`step_${step}_title`, v)}
+                    autoComplete="off"
+                    placeholder={`e.g. ${step === 1 ? 'Cleanser' : step === 2 ? 'Toner' : 'Product'}`}
+                    connectedRight={
+                      <Tooltip content="Generate text">
+                        <Button
+                          size="slim"
+                          variant="secondary"
+                          icon={MagicIcon}
+                          accessibilityLabel="Generate title text"
+                          className="cst-ai-btn"
+                          loading={!!stepFieldAiLoading[`${step}_title`]}
+                          onClick={() => generateStepFieldSuggestion(step, 'title')}
+                        />
+                      </Tooltip>
+                    }
+                  />
+                  <TextField
+                    label="Subtitle"
+                    value={config[`step_${step}_subtitle`] || ''}
+                    onChange={(v) => updateConfig(`step_${step}_subtitle`, v)}
+                    autoComplete="off"
+                    placeholder="e.g. Select one"
+                    connectedRight={
+                      <Tooltip content="Generate text">
+                        <Button
+                          size="slim"
+                          variant="secondary"
+                          icon={MagicIcon}
+                          accessibilityLabel="Generate subtitle text"
+                          className="cst-ai-btn"
+                          loading={!!stepFieldAiLoading[`${step}_subtitle`]}
+                          onClick={() => generateStepFieldSuggestion(step, 'subtitle')}
+                        />
+                      </Tooltip>
+                    }
+                  />
+                  <Select
+                    label="Collection"
+                    options={[
+                      { label: '+ Choose a collection', value: '' },
+                      ...(collections || []).map((col) => ({
+                        label: col.title,
+                        value: col.handle,
+                      })),
+                    ]}
+                    value={config[`step_${step}_collection`] || ''}
+                    onChange={(v) => updateConfig(`step_${step}_collection`, v)}
+                    error={stepErrors?.[`step_${step}_collection`]}
+                  />
+                  <TextField
+                    label="Selection Limit"
+                    type="number"
+                    value={config[`step_${step}_limit`] == null ? '' : String(config[`step_${step}_limit`])}
+                    onChange={(v) => updateConfig(`step_${step}_limit`, v === '' ? '' : Math.max(1, Number(v)))}
+                    autoComplete="off"
+                    placeholder="Unlimited"
+                    helpText="Leave blank for unlimited"
+                  />
+                </div>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={addStep}
+            style={{
+              width: '100%', padding: '10px', border: '1.5px dashed #c9cccf',
+              borderRadius: 8, background: '#f6f6f7', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, color: '#2c6ecb',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add Collection
+          </button>
+        </FormLayout>
+      </SectionCard>
+    );
+  }
+
+  // The box templates (Quantity Box layout7, Weight Box layout5, Value Box
+  // layout6) use the same collection list as layout2's tabs (col_1..col_N),
+  // shown as filter chips; their tiers are the rule (Advanced → Offer).
+  if (layout === 'layout2' || layout === 'layout5' || layout === 'layout6' || layout === 'layout7') {
+    const isQuickShop = layout === 'layout5' || layout === 'layout6' || layout === 'layout7';
+    const tabCount = Number(config.tab_count || 1);
+    const cols = [...Array(tabCount)].map((_, k) => config[`col_${k + 1}`] || '');
+    // Writes the list back as col_1..col_N (order = chips and sections order).
+    const setCols = (list) => {
+      const count = Math.max(1, list.length);
+      for (let k = 1; k <= Math.max(count, tabCount); k++) updateConfig(`col_${k}`, k <= list.length ? list[k - 1] : '');
+      updateConfig('tab_count', count);
+    };
+    const addTab = () => updateConfig('tab_count', tabCount + 1);
+    // Removing one from the middle used to clear it and drop the last one.
+    const removeTab = (index) => setCols(cols.filter((_, k) => k !== index));
+    const moveTab = (index, by) => {
+      const list = [...cols];
+      [list[index], list[index + by]] = [list[index + by], list[index]];
+      setCols(list);
+    };
+    const titles = config.qs_col_titles && typeof config.qs_col_titles === 'object' ? config.qs_col_titles : {};
+    const titleOf = (handle) => (collections || []).find((c) => c.handle === handle)?.title || handle;
+    const grouped = !!config.qs_group_by_collection;
+    const arrowStyle = (off) => ({ background: 'none', border: '1px solid #c9cccf', borderRadius: 6, width: 28, height: 28, cursor: off ? 'default' : 'pointer', opacity: off ? 0.35 : 1, fontSize: 14, lineHeight: 1, marginBottom: 4 });
+    return (
+      <SectionCard
+        title={isQuickShop ? 'Box Collections' : 'Collections (Switching Tabs)'}
+        expanded={expanded}
+        onToggle={onToggle}
+        badge={`${tabCount} ${tabCount === 1 ? 'collection' : 'collections'}`}
+      >
+        <FormLayout>
+          {isQuickShop ? (
+            <Text as="p" variant="bodySm" tone="subdued">
+              Products from these collections fill the box. With more than one, each becomes a filter chip (see Filters). The tiers are under Advanced → Offer.
+            </Text>
+          ) : (
+            <>
+              <div className="cst-bundle-rule-box">
+                <Text variant="bodyMd" as="p" fontWeight="bold">Bundle Rule</Text>
+                <TextField
+                  label="Total Products Customer Can Add"
+                  type="number"
+                  value={String(config.max_products || 5)}
+                  onChange={(v) => { updateConfig('max_products', Math.max(1, Number(v))); }}
+                  autoComplete="off"
+                  error={maxProductsError}
+                />
+              </div>
+              <div className="cst-inline-group">
+                <Checkbox
+                  label="Show 'All' Tab"
+                  checked={!!config.show_tab_all}
+                  onChange={(v) => updateConfig('show_tab_all', v)}
+                />
+                <TextField
+                  label="First Tab Label"
+                  value={config.tab_all_label || 'Collections'}
+                  onChange={(v) => updateConfig('tab_all_label', v)}
+                  autoComplete="off"
+                />
+              </div>
+            </>
+          )}
+          <div className="cst-row cst-row--vertical" style={{ marginTop: 12, gap: 10 }}>
+            {[...Array(tabCount)].map((_, index) => {
+              const i = index + 1;
+              const handle = config[`col_${i}`] || '';
+              return (
+                <div key={i}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <Select
+                      label={`Collection ${i}`}
+                      options={[
+                        { label: '+ Choose a collection', value: '' },
+                        ...(collections || []).map((col) => ({
+                          label: col.title,
+                          value: col.handle,
+                        })),
+                      ]}
+                      value={config[`col_${i}`] || ''}
+                      onChange={(v) => updateConfig(`col_${i}`, v)}
+                    />
+                  </div>
+                  {tabCount > 1 && (
+                    <>
+                      <button type="button" aria-label={`Move collection ${i} up`} disabled={index === 0} onClick={() => moveTab(index, -1)} style={arrowStyle(index === 0)}>↑</button>
+                      <button type="button" aria-label={`Move collection ${i} down`} disabled={index === tabCount - 1} onClick={() => moveTab(index, 1)} style={arrowStyle(index === tabCount - 1)}>↓</button>
+                    </>
+                  )}
+                  {tabCount > 1 && (
+                    <button
+                      type="button"
+                      aria-label={`Remove collection ${i}`}
+                      onClick={() => removeTab(index)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d72c0d', fontSize: 13, fontWeight: 600, padding: '8px 4px', marginBottom: 4 }}
+                    >
+                      <CloseGlyph />
+                    </button>
+                  )}
+                </div>
+                {isQuickShop && handle && (
+                  <div style={{ marginTop: 6 }}>
+                    <TextField
+                      label={`Name on the page for collection ${i}`}
+                      labelHidden
+                      value={titles[handle] || ''}
+                      placeholder={`Name on the page (optional): ${titleOf(handle)}`}
+                      onChange={(v) => updateConfig('qs_col_titles', { ...titles, [handle]: v })}
+                      autoComplete="off"
+                      maxLength={60}
+                    />
+                  </div>
+                )}
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={addTab}
+            style={{
+              width: '100%', padding: '10px', border: '1.5px dashed #c9cccf',
+              borderRadius: 8, background: '#f6f6f7', cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, color: '#2c6ecb',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add Collection
+          </button>
+          {isQuickShop && (
+            <>
+              <Text as="p" variant="bodySm" tone="subdued">
+                The order here is the order of the filter chips (and of the sections below). A name on the page replaces the collection&apos;s Shopify name on the page only; empty = the Shopify name.
+              </Text>
+              <Checkbox
+                label="Show products by collection"
+                helpText="One section per collection, in this order, under its name. A product in two collections shows in the first. Off = one grid, as now."
+                checked={grouped}
+                onChange={(v) => updateConfig('qs_group_by_collection', v)}
+              />
+              {grouped && (
+                <>
+                  <Select
+                    label="Section title alignment"
+                    options={[{ label: 'Left', value: 'left' }, { label: 'Centre', value: 'center' }, { label: 'Right', value: 'right' }]}
+                    value={config.qs_group_title_align || 'left'}
+                    onChange={(v) => updateConfig('qs_group_title_align', v)}
+                  />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    <TextField
+                      label="Title size (px)" type="number" min={10} max={40} placeholder="20" autoComplete="off"
+                      value={config.qs_group_title_size ? String(config.qs_group_title_size) : ''}
+                      onChange={(v) => updateConfig('qs_group_title_size', v === '' ? null : Number(v))}
+                    />
+                    <TextField
+                      label="On phones (px)" type="number" min={10} max={40} placeholder="17" autoComplete="off"
+                      value={config.qs_group_title_size_m ? String(config.qs_group_title_size_m) : ''}
+                      onChange={(v) => updateConfig('qs_group_title_size_m', v === '' ? null : Number(v))}
+                    />
+                  </div>
+                  <TextField
+                    label="Title for products you added yourself" autoComplete="off" maxLength={60}
+                    value={config.qs_extra_title || ''}
+                    onChange={(v) => updateConfig('qs_extra_title', v)}
+                    helpText="Products added under Products on the page come last. Empty = no title."
+                  />
+                </>
+              )}
+            </>
+          )}
+        </FormLayout>
+      </SectionCard>
+    );
+  }
+
+  if (layout === 'layout3') {
+    return (
+      <>
+        <SectionCard
+          title="Hero Deal Card"
+          expanded={expanded}
+          onToggle={onToggle}
+        >
+          <FormLayout>
+            <Checkbox
+              label="Show Deal of the Day"
+              checked={config.show_hero !== false}
+              onChange={(v) => updateConfig('show_hero', v)}
+            />
+            {config.show_hero !== false && (
+              <>
+                <TextField label="Hero Image URL" value={config.hero_image_url || ''} onChange={(v) => updateConfig('hero_image_url', v)} autoComplete="off" placeholder="https://example.com/image.jpg" />
+                <TextField label="Hero Title" value={config.hero_title || 'Mega Breakfast Bundle'} onChange={(v) => updateConfig('hero_title', v)} autoComplete="off" />
+                <TextField label="Hero Subtitle" value={config.hero_subtitle || 'Milk, Bread, Eggs, Cereal & Juice'} onChange={(v) => updateConfig('hero_subtitle', v)} autoComplete="off" />
+                <div className="cst-grid-2">
+                  <TextField label="Hero Price" value={config.hero_price || formatMoney(14.99)} onChange={(v) => updateConfig('hero_price', v)} autoComplete="off" />
+                  <TextField label="Compare Price" value={config.hero_compare_price || formatMoney(24.50)} onChange={(v) => updateConfig('hero_compare_price', v)} autoComplete="off" />
+                </div>
+                <TextField label="Button Text" value={config.hero_btn_text || 'Add to Cart - Save 38%'} onChange={(v) => updateConfig('hero_btn_text', v)} autoComplete="off" />
+              </>
+            )}
+          </FormLayout>
+        </SectionCard>
+
+        <SectionCard title="Pricing & Discounts" expanded={expanded} onToggle={onToggle}>
+          <FormLayout>
+            <div className="cst-bundle-rule-box">
+              <Text variant="bodyMd" as="p" fontWeight="bold">Bundle Rule</Text>
+              <TextField label="Number of Categories" type="number" value={String(config.col_count || 4)} onChange={(v) => updateConfig('col_count', Math.max(1, Number(v)))} autoComplete="off" />
+              <TextField label="Total Products" type="number" value={String(config.max_products || 5)} onChange={(v) => { updateConfig('max_products', Math.max(1, Number(v))); }} autoComplete="off" error={maxProductsError} />
+            </div>
+            <div className="cst-row">
+              {[...Array(config.col_count || 4)].map((_, index) => {
+                const i = index + 1;
+                return (
+                  <Select
+                    key={i}
+                    label={`Category ${i}`}
+                    options={[
+                      { label: '-- None --', value: '' },
+                      ...(collections || []).map((col) => ({
+                        label: col.title,
+                        value: col.handle,
+                      })),
+                    ]}
+                    value={config[`col_${i}`] || ''}
+                    onChange={(v) => updateConfig(`col_${i}`, v)}
+                  />
+                );
+              })}
+            </div>
+          </FormLayout>
+        </SectionCard>
+      </>
+    );
+  }
+
+  return (
+    <SectionCard title="Bundle Rule" expanded={expanded} onToggle={onToggle}>
+      <FormLayout>
+        <div className="cst-bundle-rule-box">
+          <TextField label="Combo Size" type="number" value={String(config.combo_size || 1)} onChange={(v) => updateConfig('combo_size', Math.max(1, Number(v)))} autoComplete="off" />
+          <TextField label="Total Products" type="number" value={String(config.max_products || 5)} onChange={(v) => { updateConfig('max_products', Math.max(1, Number(v))); }} autoComplete="off" error={maxProductsError} />
+        </div>
+        <Select
+          label="Select Collection"
+          options={[
+            { label: '-- Choose a collection --', value: '' },
+            ...(collections || []).map((col) => ({
+              label: col.productsCount ? `${col.title} (${col.productsCount})` : col.title,
+              value: col.handle,
+            })),
+          ]}
+          value={config.collection_handle || ''}
+          onChange={(v) => updateConfig('collection_handle', v)}
+        />
+      </FormLayout>
+    </SectionCard>
+  );
+}
+
+export const GeneralSection = memo(GeneralSectionComponent);

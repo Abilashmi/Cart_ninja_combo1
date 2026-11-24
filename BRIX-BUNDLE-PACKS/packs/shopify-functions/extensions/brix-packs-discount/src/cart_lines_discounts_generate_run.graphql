@@ -1,0 +1,38 @@
+query Input($collectionIds: [ID!]) {
+  cart {
+    lines {
+      id
+      quantity
+      packId: attribute(key: "_brix_pack_id") { value }
+      packQuantity: attribute(key: "_brix_pack_quantity") { value }
+      packGroup: attribute(key: "_brix_pack_group") { value }
+      cost {
+        subtotalAmount {
+          amount
+          currencyCode
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+            inCollections(ids: $collectionIds) {
+              collectionId
+              isMember
+            }
+          }
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+  shop {
+    metafield(namespace: "$app", key: "packs_config") {
+      jsonValue
+    }
+  }
+}

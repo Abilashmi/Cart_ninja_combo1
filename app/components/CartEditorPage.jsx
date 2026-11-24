@@ -7,6 +7,8 @@ import { announcementMessages, clampInterval } from '../utils/announcement.share
 import { footerExtras } from '../utils/cart-footer-extras.shared.js';
 import { sanitizeContinueShopping } from '../utils/continue-shopping.shared.js';
 import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
+import { sanitizeSectionOrder } from '../utils/section-order.shared.js';
+import { sanitizeDrawerTheme } from '../utils/drawer-theme.shared.js';
 import { CartEditorSidebar } from './CartEditorSidebar';
 import { CartPreview } from './CartPreview';
 import AppSaveBar from './shared/AppSaveBar';
@@ -79,6 +81,8 @@ function CartEditorContent() {
         paymentCards:     footerExtras.cardsConfig(footer.paymentCards),
         trustBadges:      footerExtras.trustConfig(footer.trustBadges),
         continueShopping: sanitizeContinueShopping(cb.continueShopping),
+        sectionOrder:     sanitizeSectionOrder(cb.sectionOrder),
+        theme:            sanitizeDrawerTheme(cb.theme),
         phoneLayout:      sanitizeDrawerLayout(cb.phoneLayout, 'phone'),
         desktopLayout:    sanitizeDrawerLayout(cb.desktopLayout, 'desktop'),
       }),

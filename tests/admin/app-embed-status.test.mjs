@@ -10,11 +10,11 @@ const theme = (status) => [{
   handle: 'cart-drawer', type: 'theme_app_extension',
   activations: [
     { handle: 'Fbt', target: 'body', status: 'active', activations: [] },
-    { handle: 'cart_drawer', name: 'Custom Cart Drawer', target: 'body', status, activations: [] },
+    { handle: 'cart_drawer', name: 'BRIX Cart & Combo', target: 'body', status, activations: [] },
   ],
 }];
 
-test('the Custom Cart Drawer embed: active only when Shopify says so', () => {
+test('the BRIX Cart & Combo embed: active only when Shopify says so', () => {
   assert.equal(embedStatusFrom(theme('active')), 'active');
   assert.equal(embedStatusFrom(theme('available')), 'off', 'in the theme but switched off');
   assert.equal(embedStatusFrom(theme('unavailable')), 'off');

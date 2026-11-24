@@ -1,0 +1,40 @@
+query Input($collectionIds: [ID!]) {
+  cart {
+    lines {
+      id
+      quantity
+      comboId: attribute(key: "_brix_combo_id") { value }
+      comboGroup: attribute(key: "_brix_combo_group") { value }
+      cost {
+        subtotalAmount {
+          amount
+          currencyCode
+        }
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          weight
+          weightUnit
+          product {
+            id
+            inCollections(ids: $collectionIds) {
+              collectionId
+              isMember
+            }
+          }
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+  }
+  presentmentCurrencyRate
+  shop {
+    metafield(namespace: "$app", key: "combo_weight_config") {
+      jsonValue
+    }
+  }
+}

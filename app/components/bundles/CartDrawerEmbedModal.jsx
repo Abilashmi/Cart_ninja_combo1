@@ -1,7 +1,7 @@
 import { Modal, BlockStack, Text } from '@shopify/polaris';
 import { EmbedSteps } from './CartDrawerEmbedBanner';
 
-// Shown right after a combo template is saved, when the "Custom Cart Drawer"
+// Shown right after a combo template is saved, when the "BRIX Cart & Combo"
 // app embed is not confirmed ON. `checked` is false when the theme couldn't be
 // read at all — then we don't claim it's off, we ask the merchant to confirm.
 export default function CartDrawerEmbedModal({ open, checked, editorUrl, onContinue }) {

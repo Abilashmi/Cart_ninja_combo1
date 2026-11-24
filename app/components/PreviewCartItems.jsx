@@ -83,7 +83,7 @@ export default function PreviewCartItems({ baseTotal, added, rewards, onRemove, 
   return (
     <div style={{ padding: '10px 10px' }}>
       {showHeading && <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#6d7175', margin: '0 4px 10px' }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>Items included</span>
+        <span className="bxcd-theme-text" style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>Items included</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {added.length > 0 && (
             <button

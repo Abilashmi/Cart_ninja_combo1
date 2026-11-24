@@ -1,0 +1,45 @@
+﻿{% if shop.permanent_domain != blank %}
+  <div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}" data-fast-add="{{ block.settings.fast_add }}"></div>
+
+  {{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
+  {{ 'brix_cart_ui.css' | asset_url | stylesheet_tag }}
+  {%- comment -%} Store-wide "Hide decimals in prices" (Account → Price display, app/services/price-display.server.js). {%- endcomment -%}
+  <script>window.__brixWholePrices = window.__brixWholePrices || {% if app.metafields.brix.display.value.wholePrices == true %}true{% else %}false{% endif %};</script>
+  {%- comment -%} Shopper's language for the scripts below (snippets/brix-i18n.liquid; English pages load nothing). {%- endcomment -%}
+  {% render 'brix-i18n' %}
+  <script src="{{ 'brix_checkout.js' | asset_url }}" defer></script>
+  {%- comment -%} BRIX COD Checkout: Cash on Delivery sheet shared by the cart drawer,
+       product pages and combo pages. Shows nothing unless the merchant turned
+       COD on in BRIX. The browser only talks to the PHP backend (data-php),
+       which relays order placement to the BRIX app server. Must load before
+       cart_drawer_inline.js. {%- endcomment -%}
+  <script src="{{ 'brix_cod.js' | asset_url }}" data-brix-logo="{{ 'brix_logo.png' | asset_url }}" data-php="https://int.thebrix.io" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"{% if product %} data-product-collections="{{ product.collections | map: 'id' | join: ',' }}"{% endif %} defer></script>
+  <script src="{{ 'cart_drawer_inline.js' | asset_url }}" defer></script>
+
+  {%- comment -%} Combo pages: auto-detects /pages/* URLs that match a published combo
+       template and injects the product picker into the page's main content
+       (the app writes no theme files, see app/services/combo-page.server.js).
+       Loaded only on Shopify Pages: other pages used to download it for
+       nothing (Built for Shopify storefront speed). {%- endcomment -%}
+  {%- if request.page_type == 'page' -%}
+  <script src="https://cartdrawer.fly.dev/combo-page.js" defer></script>
+  {%- endif -%}
+{% endif %}
+{% schema %}
+{
+  "name": "Custom Cart Drawer",
+  "target": "body",
+  "enabled_on": {
+    "templates": ["*"]
+  },
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "fast_add",
+      "label": "Fast Add to cart",
+      "default": false,
+      "info": "BRIX handles your theme's Add to cart button itself, so the cart opens as soon as the product is added. Turn on if Add to cart feels slow with this theme."
+    }
+  ]
+}
+{% endschema %}

@@ -48,6 +48,18 @@ export default defineConfig({
     },
     port: Number(process.env.PORT || 3000),
     hmr: hmrConfig,
+    // Compile the server entry files at startup so the first request doesn't
+    // spend the 60 s module-runner limit on a cold build (slow Windows machines).
+    warmup: {
+      ssrFiles: [
+        "./app/root.jsx",
+        "./app/routes.js",
+        "./app/shopify.server.js",
+        "./app/routes/app.jsx",
+        "./app/routes/app._index.jsx",
+        "./app/routes/app.packs._index.jsx",
+      ],
+    },
     fs: {
       // See https://vitejs.dev/config/server-options.html#server-fs-allow for more information
       allow: ["app", "node_modules"],

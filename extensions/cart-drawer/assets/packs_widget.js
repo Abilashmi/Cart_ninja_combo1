@@ -1294,7 +1294,7 @@
     var state = { data: null, pack: null, tierIndex: 0, slots: [], picks: [], comboPicks: {}, busy: false, message: null, redirecting: false, open: false, openPicker: null, cod: null, codProbing: false, codTries: 0, activeSlot: 0, ladderSel: [], ladderMatch: false, bands: [], bandSpeed: 0, bandRaf: 0, bandWatch: null };
 
     // The COD button shows only where BRIX COD Checkout is on for product pages. Its script
-    // comes from the Custom Cart Drawer app embed, which can load well after this widget, so
+    // comes from the BRIX Cart & Combo app embed, which can load well after this widget, so
     // keep looking for it (every 0.5 s, for up to 15 s) and then ask it if COD is available.
     function probeCod() {
       if (state.cod !== null || state.codProbing) return;

@@ -1,0 +1,24 @@
+{
+  "name": "brix-packs-discount",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@shopify/shopify_function": "~2.0.0"
+  },
+  "codegen": {
+    "schema": "schema.graphql",
+    "documents": "src/**/*.graphql",
+    "generates": {
+      "./generated/api.ts": {
+        "plugins": [
+          "typescript",
+          "typescript-operations"
+        ]
+      }
+    },
+    "config": {
+      "omitOperationSuffix": true
+    }
+  }
+}

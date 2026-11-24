@@ -16,7 +16,7 @@ BRIX is a Shopify app with these parts (left menu of the BRIX app):
 - Plans, Billing, Analytics, Account (language, price display, video tutorials).
 
 Setup steps every store needs:
-1. Turn on the app embed: Shopify admin > Online Store > Themes > Customize > App embeds > switch on "Custom Cart Drawer" > Save. Without it nothing from BRIX shows on the store. Home shows "Turn on app embed" when it is off.
+1. Turn on the app embed: Shopify admin > Online Store > Themes > Customize > App embeds > switch on "BRIX Cart & Combo" > Save. Without it nothing from BRIX shows on the store. Home shows "Turn on app embed" when it is off.
 2. Open each feature you want and switch it on (Cart Editor drawer switch, COD Checkout, FBT, Coupon Banner, a Pack, a combo template), then Save.
 3. Check the store: add a product to the cart and see the drawer / buttons. Changes can take a minute; refresh the store page.
 For Packs, FBT bundle offers, free gifts and combo box prices, BRIX creates a Shopify automatic discount; it must stay active in Shopify > Discounts.

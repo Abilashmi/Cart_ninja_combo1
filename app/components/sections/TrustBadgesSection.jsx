@@ -5,7 +5,7 @@ import { ColorField } from './ColorField';
 import { SliderField } from '../shared/SliderField';
 import { footerExtras } from '../../utils/cart-footer-extras.shared';
 
-// Cart Editor → Trust Badges: icon + title + line, under the Checkout button.
+// Cart Editor → Trust Badges: icon + title + line, above or below the Checkout button.
 export function TrustBadgesSection() {
   const { footer, updateTrustBadges } = useCartEditor();
   const trust = footer.trustBadges;
@@ -25,9 +25,15 @@ export function TrustBadgesSection() {
       <Card>
         <FormLayout>
           <Checkbox
-            label="Show trust badges under the Checkout button"
+            label="Show trust badges"
             checked={trust.enabled === true}
             onChange={(v) => updateTrustBadges({ enabled: v })}
+          />
+          <Select
+            label="Place badges"
+            options={[{ label: 'Below the Checkout button', value: 'below' }, { label: 'Above the Checkout button', value: 'above' }]}
+            value={trust.placement === 'above' ? 'above' : 'below'}
+            onChange={(v) => updateTrustBadges({ placement: v })}
           />
         </FormLayout>
       </Card>

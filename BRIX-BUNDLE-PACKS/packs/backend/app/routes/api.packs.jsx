@@ -1,0 +1,264 @@
+import { authenticate } from '../shopify.server';
+import { getFeatureState } from '../config/plans';
+import { getShopPlan } from '../services/plan-permissions.server';
+import { getShopCurrency } from '../utils/currency.server';
+import { PackError, packErrorResponse, getPack, listPacks, listActivePacks, savePack, deletePack, setPackStatus, parsePackId, productsWithOwnPack } from '../services/packs.server';
+import { fetchProduct, verifyProductVariant, verifyPackCoverage, verifyExtraProducts, verifyComboTiers, verifyAppliesTo, fetchCollectionProducts, hydratePacks, syncCheckoutDiscount, getCheckoutDiscountStatus } from '../services/packs-shopify.server';
+import { VALID_TEMPLATES, calculateTier, calculateComboTier, resolveSaveStatus, normalizeTiers, sanitizeCustomization, validateTiers, toNumericId, sanitizeShowOn, isSharedPack } from '../utils/packs.shared.js';
+
+/**
+ * Admin JSON API for BRIX Packs. Response contract (always):
+ *   success: { success: true, ...payload }
+ *   failure: { success: false, error: <merchant-safe message>, code, details? }
+ * Plan rules are enforced HERE from the shop's real plan — the browser's
+ * requested status is only ever a request, never trusted.
+ */
+
+async function context(request) {
+  const { admin, session } = await authenticate.admin(request);
+  const planKey = await getShopPlan(session.shop, admin);
+  const planState = getFeatureState(planKey, 'packs');
+  return { admin, shop: session.shop, planKey, planState };
+}
+
+function requireAvailable(planState) {
+  if (planState === 'locked') throw new PackError('plan_restricted', 'Packs is not available on your current plan.', { status: 403 });
+}
+
+function requirePublishing(planState) {
+  if (planState !== 'enabled') throw new PackError('plan_restricted', 'Publishing Packs requires an eligible plan. You can keep this Pack as a draft and preview it.', { status: 403 });
+}
+
+async function readBody(request) {
+  try {
+    const body = await request.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('not an object');
+    return body;
+  } catch {
+    throw new PackError('invalid_json', 'The request could not be read. Please refresh and try again.', { status: 400 });
+  }
+}
+
+/** Active Packs that the checkout discount function should know about. */
+async function packsForFunction(shop, planState) {
+  return planState === 'enabled' ? listActivePacks(shop) : [];
+}
+
+export async function loader({ request }) {
+  try {
+    const { admin, shop, planState } = await context(request);
+    requireAvailable(planState);
+    const url = new URL(request.url);
+    const currency = await getShopCurrency(admin, shop);
+    // A collection's first products with their prices, and which of them already have a Pack of their own
+    // (the builder's "Add a collection" list and per-product price table).
+    if (url.searchParams.get('collection')) {
+      const collection = await fetchCollectionProducts(admin, url.searchParams.get('collection'));
+      const own = new Set(await productsWithOwnPack(shop, url.searchParams.get('exclude') || null));
+      return Response.json({ success: true, collection: { ...collection, products: collection.products.map((item) => ({ ...item, hasPack: own.has(item.productId) })) }, currency });
+    }
+    if (url.searchParams.get('ownPacks')) {
+      return Response.json({ success: true, productIds: await productsWithOwnPack(shop, url.searchParams.get('exclude') || null) });
+    }
+    if (url.searchParams.get('product')) {
+      const product = await fetchProduct(admin, url.searchParams.get('product'));
+      return Response.json({ success: true, product, currency });
+    }
+    if (url.searchParams.get('id')) {
+      const pack = await getPack(shop, url.searchParams.get('id'));
+      if (!pack) throw new PackError('not_found', 'Pack not found.', { status: 404 });
+      const [hydrated] = await hydratePacks(admin, [pack], currency, { includeVariants: true });
+      return Response.json({ success: true, pack: hydrated, currency });
+    }
+    const packs = await hydratePacks(admin, await listPacks(shop), currency);
+    return Response.json({ success: true, packs, currency });
+  } catch (error) {
+    return packErrorResponse(error);
+  }
+}
+
+export async function action({ request }) {
+  try {
+    if (request.method !== 'POST') throw new PackError('method_not_allowed', 'Method not allowed.', { status: 405 });
+    const { admin, shop, planState } = await context(request);
+    const body = await readBody(request);
+    const currency = await getShopCurrency(admin, shop);
+
+    if (body.action === 'preview') {
+      requireAvailable(planState);
+      return Response.json(await previewPack(admin, body, currency));
+    }
+
+    if (body.action === 'delete') {
+      const id = parsePackId(body.id);
+      const pack = await getPack(shop, id);
+      if (!pack) throw new PackError('not_found', 'Pack not found.', { status: 404 });
+      await deletePack(shop, id);
+      const sync = pack.status === 'active' ? await syncCheckoutDiscount(admin, await packsForFunction(shop, planState), { install: false, currencyCode: currency.code }) : null;
+      return Response.json({ success: true, deleted: true, warning: sync?.warning || null });
+    }
+
+    if (body.action === 'status') {
+      const id = parsePackId(body.id);
+      const target = body.status;
+      if (!['active', 'inactive'].includes(target)) throw new PackError('invalid_status', 'Invalid Pack status.');
+      const pack = await getPack(shop, id);
+      if (!pack) throw new PackError('not_found', 'Pack not found.', { status: 404 });
+      if (target === 'active') {
+        requirePublishing(planState);
+        await assertActivatable(admin, pack, currency);
+      }
+      const updated = await setPackStatus(shop, id, target);
+      const active = await packsForFunction(shop, planState);
+      const sync = await syncCheckoutDiscount(admin, active, { install: target === 'active', currencyCode: currency.code });
+      const checkoutDiscount = target === 'active' ? await getCheckoutDiscountStatus(admin, active, { shop }) : null;
+      const [hydrated] = await hydratePacks(admin, [updated], currency);
+      return Response.json({ success: true, pack: hydrated, checkoutDiscount, warning: sync.warning });
+    }
+
+    if (body.action === 'save') {
+      requireAvailable(planState);
+      return Response.json(await saveFromBody({ admin, shop, planState, currency }, body));
+    }
+
+    throw new PackError('unsupported_action', 'Unsupported Packs action.', { status: 400 });
+  } catch (error) {
+    return packErrorResponse(error);
+  }
+}
+
+/**
+ * The price a fixed-amount discount is checked against. A pack with extra products can be filled with any
+ * of their variants, so it is the cheapest eligible variant of ANY product (a pack of only the main product
+ * keeps its anchor variant's price, as before).
+ */
+function priceFloor(anchorVariant, applicableVariants, extraPrices) {
+  if (!extraPrices.length) return anchorVariant.price;
+  return Math.min(...applicableVariants.map((variant) => variant.price), ...extraPrices);
+}
+
+/** Tiers + live variant coverage must be valid before a Pack may go (or stay) live. */
+async function assertActivatable(admin, pack, currency) {
+  const { anchorVariant, applicableVariants } = await verifyPackCoverage(admin, pack.productId, { packType: pack.packType, variantScope: pack.variantScope, allowedVariantIds: pack.allowedVariantIds }, { requireAvailable: true });
+  // Extra products are re-checked against Shopify too: one that went inactive / off the Online Store blocks going live.
+  const extra = await verifyExtraProducts(admin, { packType: pack.packType, productId: pack.productId, extraProducts: pack.extraProducts }, { requireAvailable: true });
+  const tiers = normalizeTiers(pack.tiers);
+  // Fixed Combo: each tier's items re-checked, its fixed discount against its own items.
+  const combo = pack.packType === 'combo' ? await verifyComboTiers(admin, { productId: pack.productId, tiers, mainPrice: comboMainPrice(applicableVariants) }, { requireAvailable: true }) : null;
+  // More products / collections: each re-checked too.
+  if (isSharedPack(pack)) await verifyAppliesTo(admin, pack.appliesTo, pack.productId, { requireAvailable: true });
+  const check = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code, packType: pack.packType, tierSubtotals: combo?.subtotals || null, sharedPrices: isSharedPack(pack) });
+  if (!check.valid) throw new PackError('invalid_tiers', `Fix the Pack tiers before enabling: ${check.errors[0].message}`, { status: 422, details: { errors: check.errors } });
+}
+
+/** Fixed Combo: this product's cheapest covered variant (a fixed discount must fit even then). */
+function comboMainPrice(applicableVariants) {
+  const prices = applicableVariants.map((variant) => variant.price).filter((price) => Number.isFinite(price));
+  return prices.length ? Math.min(...prices) : 0;
+}
+
+async function previewPack(admin, body, currency) {
+  const { variant } = await verifyProductVariant(admin, body.productId, body.variantId);
+  let tiers = normalizeTiers(body.tiers);
+  const money = { currencyCode: currency.code, locale: currency.locale };
+  if (body.packType === 'combo') {
+    // Fixed Combo: priced from this variant + each tier's own items, read from Shopify.
+    const combo = await verifyComboTiers(admin, { productId: body.productId, tiers, mainPrice: variant.price });
+    tiers = combo.tiers;
+    const check = validateTiers(tiers, { currencyCode: currency.code, packType: 'combo', tierSubtotals: combo.subtotals });
+    return {
+      success: true,
+      valid: check.valid,
+      errors: check.errors,
+      currency,
+      variant: { id: variant.id, title: variant.title, price: variant.price, availableForSale: variant.availableForSale, maxQuantity: variant.maxQuantity, inventoryQuantity: variant.inventoryQuantity },
+      tiers: check.valid ? tiers.map((tier) => ({ ...tier, ...calculateComboTier(variant.price, tier, combo.itemPrices, money) })) : [],
+    };
+  }
+  const check = validateTiers(tiers, { basePrice: variant.price, currencyCode: currency.code });
+  return {
+    success: true,
+    valid: check.valid,
+    errors: check.errors,
+    currency,
+    variant: { id: variant.id, title: variant.title, price: variant.price, availableForSale: variant.availableForSale, maxQuantity: variant.maxQuantity, inventoryQuantity: variant.inventoryQuantity },
+    tiers: check.valid ? tiers.map((tier) => ({ ...tier, ...calculateTier(variant.price, tier, { currencyCode: currency.code, locale: currency.locale }) })) : [],
+  };
+}
+
+async function saveFromBody({ admin, shop, planState, currency }, body) {
+  if (!VALID_TEMPLATES.has(body.template)) throw new PackError('invalid_template', 'Choose a valid Pack template.', { status: 422 });
+  if (!toNumericId(body.productId)) throw new PackError('invalid_variant', 'Select a Shopify product first.', { status: 422 });
+
+  const existing = body.id ? await getPack(shop, body.id) : null;
+  if (body.id && !existing) throw new PackError('not_found', 'Pack not found.', { status: 404 });
+
+  // Resolve the final status from the shop's REAL plan, never from the browser.
+  const resolved = resolveSaveStatus({ requested: body.status, existingStatus: existing?.status, planState });
+  if (resolved.error === 'invalid_status') throw new PackError('invalid_status', 'Invalid Pack status.');
+  if (resolved.error === 'plan_restricted') requirePublishing(planState);
+  const status = resolved.status;
+
+  let tiers = normalizeTiers(body.tiers);
+  const structure = validateTiers(tiers, { packType: body.packType });
+  if (!structure.valid) throw new PackError('invalid_tiers', structure.errors[0].message, { status: 422, details: { errors: structure.errors } });
+
+  const custom = sanitizeCustomization(body.customization);
+  if (custom.errors.length) throw new PackError('invalid_customization', custom.errors[0], { status: 422, details: { errors: custom.errors } });
+
+  // Re-verifies product + every allowed/scope='all' variant against Shopify —
+  // the browser's own variant list/ids are never trusted for what gets saved.
+  const { product, anchorVariant, applicableVariants, allowedVariantIds } = await verifyPackCoverage(
+    admin, body.productId,
+    { packType: body.packType, variantScope: body.variantScope, allowedVariantIds: body.allowedVariantIds },
+    { requireAvailable: status === 'active' }
+  );
+  // Other products (Mix & Match only): verified the same way, never from what the browser sent.
+  const extra = await verifyExtraProducts(admin, { packType: body.packType, productId: product.id, extraProducts: body.extraProducts }, { requireAvailable: status === 'active' });
+  const showOn = body.packType === 'mix_match' ? sanitizeShowOn(body.showOn).filter((id) => id !== product.id) : [];
+  // Fixed Combo: each tier's items re-read from Shopify; titles, handles and images from there.
+  let comboSubtotals = null;
+  if (body.packType === 'combo') {
+    const combo = await verifyComboTiers(admin, { productId: product.id, tiers, mainPrice: comboMainPrice(applicableVariants) }, { requireAvailable: status === 'active' });
+    tiers = combo.tiers;
+    comboSubtotals = combo.subtotals;
+  }
+  // More products / collections this Pack is used on, checked with Shopify.
+  const applies = await verifyAppliesTo(admin, body.appliesTo, product.id, { requireAvailable: status === 'active' });
+  const shared = isSharedPack(applies);
+  const priced = validateTiers(tiers, { basePrice: priceFloor(anchorVariant, applicableVariants, extra.prices), currencyCode: currency.code, packType: body.packType, tierSubtotals: comboSubtotals, sharedPrices: shared });
+  if (!priced.valid) throw new PackError('invalid_tiers', priced.errors[0].message, { status: 422, details: { errors: priced.errors } });
+
+  const saved = await savePack(shop, {
+    id: existing?.id || null,
+    productId: product.id,
+    productHandle: product.handle,
+    variantId: anchorVariant.id,
+    productTitle: product.title,
+    variantTitle: anchorVariant.title,
+    productImage: product.image,
+    basePrice: anchorVariant.price,
+    status,
+    template: body.template,
+    packType: body.packType,
+    variantScope: body.variantScope,
+    allowedVariantIds,
+    extraProducts: extra.extraProducts,
+    showOn,
+    appliesTo: applies.appliesTo,
+    tiers,
+    customization: custom.value,
+  });
+
+  const touchesLive = status === 'active' || existing?.status === 'active';
+  let warning = null;
+  let checkoutDiscount = null;
+  if (touchesLive) {
+    const active = await packsForFunction(shop, planState);
+    const sync = await syncCheckoutDiscount(admin, active, { install: status === 'active', currencyCode: currency.code });
+    warning = sync.warning;
+    if (status === 'active') checkoutDiscount = await getCheckoutDiscountStatus(admin, active, { shop });
+  }
+  const [hydrated] = await hydratePacks(admin, [saved], currency, { includeVariants: true });
+  return { success: true, pack: hydrated, checkoutDiscount, warning };
+}

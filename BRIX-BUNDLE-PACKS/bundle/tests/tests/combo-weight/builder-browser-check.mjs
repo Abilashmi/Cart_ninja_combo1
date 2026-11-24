@@ -1,0 +1,218 @@
+/* eslint-env node */
+// Browser check for the builder's Offer section and weight preview
+// (app/components/customization/OfferSection.jsx, app.bundles.customize.jsx).
+// Run with: node tests/combo-weight/builder-browser-check.mjs
+// Builds tests/combo-ai/harness (the REAL builder route with a mocked loader
+// and mocked API routes); no store or server.
+import { chromium } from '@playwright/test';
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+const root = path.join(process.cwd(), 'tests', 'combo-ai', 'harness');
+if (!process.env.SKIP_HARNESS_BUILD) execFileSync(process.execPath, [path.join('node_modules', 'vite', 'bin', 'vite.js'), 'build', '--config', path.join(root, 'vite.config.mjs')], { stdio: 'ignore' });
+const dist = path.join(root, 'dist');
+const MIME = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css' };
+const server = http.createServer((req, res) => {
+  const p = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  const file = path.join(dist, p);
+  if (p.startsWith('/assets/') && fs.existsSync(file)) {
+    res.writeHead(200, { 'Content-Type': `${MIME[path.extname(file)] || 'application/octet-stream'}; charset=utf-8` });
+    return res.end(fs.readFileSync(file));
+  }
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+  res.end(fs.readFileSync(path.join(dist, 'index.html')));
+});
+await new Promise((r) => server.listen(0, '127.0.0.1', r));
+const base = `http://127.0.0.1:${server.address().port}`;
+const SHOTS = path.resolve('tests/combo-weight/screenshots');
+fs.mkdirSync(SHOTS, { recursive: true });
+
+const P = (n) => `gid://shopify/Product/${n}`;
+const WEIGHT = {
+  unit: 'kg', max_grams: 2200,
+  tiers: [{ id: 't1', min_grams: 1000, type: 'percentage', value: 10, label: '' }, { id: 't2', min_grams: 2000, type: 'fixed_price', value: 1700, label: '' }],
+};
+const LIVE = { state: 'active', verified: true, message: 'The box discount is active in Shopify checkout.' };
+
+const results = [];
+const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
+const browser = await chromium.launch();
+
+async function open({ plan = 'pro', weight = WEIGHT, status = LIVE, saveWeight = null, fresh = false, viewport = { width: 1500, height: 1000 } } = {}) {
+  const page = await browser.newPage({ viewport });
+  page.on('pageerror', (e) => check('no page errors', false, e.message));
+  await page.addInitScript(({ plan: pl, weight: w, status: s, saveWeight: sw, fresh: f }) => {
+    window.shopify = { toast: { show: (message, opts) => { (window.__toasts = window.__toasts || []).push({ message, ...(opts || {}) }); } } };
+    window.__PLAN = pl;
+    if (w) window.__WEIGHT = w;
+    if (s) window.__WEIGHT_STATUS = s;
+    if (sw) window.__SAVE_WEIGHT = sw;
+    if (f) window.__NEW = true;
+  }, { plan, weight, status, saveWeight, fresh });
+  await page.route('**/api/combo-ai-suggestions', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true,"data":{"enabled":false}}' }));
+  await page.goto(`${base}/app/bundles/customize`);
+  await page.waitForSelector(fresh ? '.tpl-pick-card' : `[data-cdo-product-id="${P(1)}"]`, { timeout: 20000 });
+  return page;
+}
+
+async function openOffer(page) {
+  await page.click('.cst-sidebar-tab:has-text("Advanced")');
+  await page.click('.cst-section-header:has-text("Offer")');
+  await page.waitForSelector('text=/How this combo is priced|is priced by the weight of the box/');
+}
+const sidebar = (page) => page.textContent('.cst-sidebar-content');
+const toasts = (page) => page.evaluate(() => (window.__toasts || []).map((t) => `${t.isError ? '!' : ''}${t.message}`));
+
+// ── Pro: editor, live status, preview meter, audit, validation, save ──
+{
+  const page = await open({ saveWeight: { state: 'not_deployed', verified: false, active: true, message: 'The box discount is not installed on this store yet.' } });
+  await openOffer(page);
+  let text = await sidebar(page);
+  check('weight mode is selected for a weight template', await page.isChecked('input[type="radio"][value="weight"]'));
+  check('status card says the discount is live', text.includes('Box discount is live in checkout'));
+  check('live summary of the tiers', text.includes('1 kg+: 10% off · 2 kg+: box for $1700 (max 2.2 kg)'), text.match(/1 kg\+[^)]*\)/)?.[0]);
+
+  // Preview: 300 g + 450 g + 700 g = 1.45 kg
+  for (const n of [1, 3, 5]) await page.click(`[data-cdo-product-id="${P(n)}"]`);
+  const preview = await page.textContent('[data-tour="combo-preview"], body');
+  check('preview shows the weight meter with the unlocked tier', preview.includes('1.45 kg') && preview.includes('1 kg box discount unlocked!'), preview.match(/Your box.{0,160}/s)?.[0]?.replace(/\s+/g, ' '));
+  await page.screenshot({ path: path.join(SHOTS, 'builder-weight.png') });
+
+  // Clicking the preview jumps the sidebar to the product card settings.
+  await openOffer(page);
+  // Edit tier 1 → unsaved note
+  const valueField = page.getByLabel('Percentage off', { exact: true }).first();
+  await valueField.fill('15');
+  text = await sidebar(page);
+  check('summary follows the edit', text.includes('1 kg+: 15% off'));
+  check('says the change is not saved yet', text.includes('Save to send it to checkout'));
+
+  await page.click('button:has-text("Check product weights")');
+  await page.waitForSelector('text=without a weight', { timeout: 5000 }).catch(() => {});
+  check('weight audit lists the product without a weight', (await sidebar(page)).includes('Rose Face Wash'));
+
+  // Remove the max weight: a box price needs one → save blocked
+  const maxField = page.getByLabel('Max box weight', { exact: true });
+  await maxField.fill('');
+  await maxField.blur();
+  check('validation error shown', (await sidebar(page)).includes('A fixed box price needs a max weight'));
+  await page.click('button:has-text("Save Template")');
+  await page.waitForTimeout(300);
+  check('save is blocked with the error', (await toasts(page)).some((t) => t.startsWith('!A fixed box price needs a max weight')) && (await page.$('text=Template Title')) === null);
+
+  await maxField.fill('2.5');
+  await maxField.blur();
+  await page.click('button:has-text("Save Template")');
+  await page.waitForSelector('text=Template Title');
+  await page.click('.Polaris-Modal-Dialog button:has-text("Save")');
+  await page.waitForTimeout(800);
+  const saved = await page.evaluate(() => window.__SAVED?.[0]);
+  const config = saved ? JSON.parse(saved.customization_data) : {};
+  check('saved config carries weight mode and the edited pricing', config.pricing_mode === 'weight' && config.weight_pricing?.max_grams === 2500 && config.weight_pricing?.tiers?.[0]?.value === 15, JSON.stringify(config.weight_pricing));
+  check('no coupon is saved with a weight box', !config.has_discount_offer);
+  text = await sidebar(page);
+  check('after save, the status card shows why it is not live', text.includes('Box discount is not live yet') && text.includes('not installed on this store yet'));
+  check('and the merchant is told (and stays on the page)', (await toasts(page)).some((t) => t.startsWith('!The box discount is not installed')));
+  await page.close();
+}
+
+// ── Free: every plan has tiered pricing, so it's open on the lowest one ──
+{
+  const page = await open({ plan: 'free', weight: null, status: null });
+  await openOffer(page);
+  check('count template on Free: weight option usable', !(await page.isDisabled('input[type="radio"][value="weight"]')));
+  check('no plan badge or upgrade note in Offer', !/Requires the|part of the \w+ plan/.test(await sidebar(page)));
+  check('coupon controls still there for item-count combos', (await sidebar(page)).includes('Offer a coupon?'));
+  await page.close();
+}
+
+// ── Template picker: Quantity Box + Weight Box + Value Box ──
+{
+  const page = await open({ fresh: true });
+  const titles = await page.$$eval('.tpl-pick-card h3', (els) => els.map((e) => e.textContent.trim()));
+  check('picker shows 3 templates: Quantity Box, Weight Box, Value Box', titles.join('|') === 'Quantity Box|Weight Box|Value Box', titles.join(', '));
+  const card = page.locator('.tpl-pick-card', { hasText: 'Weight Box' });
+  check('Weight Box card has no plan badge (every plan has it)', (await card.locator('.tpl-pick-pro').count()) === 0);
+  await page.screenshot({ path: path.join(SHOTS, 'picker.png'), fullPage: true });
+  await card.locator('button:has-text("Use This Template")').click();
+  await page.waitForSelector('.bxq', { timeout: 15000 });
+  check('picking it opens the Quick Shop design in the preview (no old box panel)', (await page.$('.bxq-card')) !== null && (await page.$('.bxw')) === null);
+  const top = await page.textContent('.bxq-top');
+  check('top progress starts with sample weight tiers (1 kg 10%, 2 kg 15%)', top.includes('1 kg') && top.includes('10% OFF') && top.includes('15% OFF'), top.replace(/\s+/g, ' '));
+  // A fresh template shows sample products (with weights) until collections are chosen.
+  check('fresh: sample products, hint names "Box Collections"', (await page.textContent('body')).includes('Layout → Box Collections'));
+  for (const id of ['sample-3', 'sample-2', 'sample-4']) await page.click(`.bxq-card[data-product-id="${id}"] [data-combo-action="qty-inc"]`); // 500 + 450 + 450 g
+  const msg = await page.textContent('.bxq-msg');
+  check('adding 1.4 kg unlocks the 1 kg tier in the bottom bar', msg.includes('You unlocked') && msg.includes('10% OFF'), msg.replace(/\s+/g, ' '));
+  await page.screenshot({ path: path.join(SHOTS, 'builder-weight-box.png') });
+  await page.click('.cst-sidebar-tab:has-text("Style")');
+  check('Style tab: Quick Shop\'s Top progress / Bottom bar / Page colours', ((t) => t.includes('Top progress') && t.includes('Bottom bar') && t.includes('Page colours'))(await sidebar(page)));
+  await openOffer(page);
+  const offer = await sidebar(page);
+  check('Offer: always by weight (no item-count or measure choice)', offer.includes('The Weight Box is priced by the weight of the box') && !offer.includes('Box measured by') && !(await page.$('input[type="radio"][value="count"]')));
+  await page.click('.cst-sidebar-tab:has-text("Layout")');
+  check('Layout tab: "Box Collections" section', (await sidebar(page)).includes('Box Collections'));
+  await page.click('button:has-text("Save Template")');
+  await page.waitForTimeout(300);
+  check('save needs a collection for the box', (await toasts(page)).some((t) => t.startsWith('!Choose at least one collection for the box')));
+  await page.close();
+
+  const free = await open({ fresh: true, plan: 'free' });
+  check('Free: all three box templates usable', (await free.locator('.tpl-pick-card button:has-text("Use This Template")').count()) === 3);
+  check('Free: no upgrade offer on the picker', !(await free.textContent('body')).includes('Upgrade to'));
+  await free.close();
+}
+
+// ── older Classic combos (layout1/2/4): design switch + tiered progress bar on Growth ──
+{
+  const page = await open({ plan: 'growth', weight: null, status: null });
+  await page.waitForSelector('.cst-design-option', { timeout: 15000 });
+  check('an older Guided Architect combo opens on its design', await page.getAttribute('.cst-design-option[data-design="layout1"]', 'aria-checked') === 'true');
+  await page.click('.cst-design-option[data-design="layout2"]');
+  await page.waitForTimeout(300);
+  check('switching to Velocity Stream selects it', await page.getAttribute('.cst-design-option[data-design="layout2"]', 'aria-checked') === 'true');
+  check('the Layout tab now shows the tab collections', (await sidebar(page)).includes('Collections (Switching Tabs)'));
+  await page.click('.cst-design-option[data-design="layout4"]');
+  await page.waitForTimeout(300);
+  check('Editorial Split selectable too', await page.getAttribute('.cst-design-option[data-design="layout4"]', 'aria-checked') === 'true');
+  await page.close();
+
+  // Growth, an existing layout1 coupon combo → tiered progress bar by items.
+  const growth = await open({ plan: 'growth', weight: null, status: null });
+  await openOffer(growth);
+  check('Growth: tiered progress bar can be chosen', !(await growth.isDisabled('input[type="radio"][value="weight"]')));
+  await growth.click('.Polaris-Choice:has-text("Tiered progress bar")');
+  await growth.waitForSelector('text=Progress bar measured by');
+  check('measure choice shown for a Classic design, starting on Quantity', await growth.isChecked('input[type="radio"][value="quantity"]'));
+  await growth.getByRole('button', { name: /Buy N for/ }).click();
+  await growth.waitForTimeout(200);
+  const offer = await sidebar(growth);
+  check('"Buy N for X" adds a box price tier and sets the max items', offer.includes('Price of the whole box') && offer.includes('max 4 items'), offer.match(/3 items\+[^)]*\)/)?.[0]);
+  for (const n of [1, 3, 5]) await growth.click(`[data-cdo-product-id="${P(n)}"]`);
+  await growth.waitForSelector('[data-brix-tier-meter="milestones"]');
+  const meter = await growth.textContent('[data-brix-tier-meter]');
+  check('preview meter: items, milestone offers', meter.includes('3 items') && meter.includes('10% OFF') && meter.includes('Any 4 for'), meter.replace(/\s+/g, ' '));
+  await growth.screenshot({ path: path.join(SHOTS, 'builder-classic-tiers.png') });
+  await growth.click('button:has-text("Save Template")');
+  await growth.waitForSelector('text=Template Title');
+  await growth.click('.Polaris-Modal-Dialog button:has-text("Save")');
+  await growth.waitForTimeout(800);
+  const saved = await growth.evaluate(() => window.__SAVED?.[0]);
+  const config = saved ? JSON.parse(saved.customization_data) : {};
+  check('saved: tiered, by quantity, with the box price tier', config.pricing_mode === 'weight' && config.weight_pricing?.measure === 'quantity' && config.weight_pricing?.tiers?.some((t) => t.type === 'fixed_price' && t.min_grams === 4) && config.weight_pricing?.max_grams === 4, JSON.stringify(config.weight_pricing));
+  await growth.close();
+
+  // Growth: all three box templates are usable.
+  const picker = await open({ fresh: true, plan: 'growth' });
+  check('Growth: Weight Box and Value Box usable', (await picker.locator('.tpl-pick-card', { hasText: 'Weight Box' }).locator('button:has-text("Use This Template")').count()) === 1
+    && (await picker.locator('.tpl-pick-card', { hasText: 'Value Box' }).locator('button:has-text("Use This Template")').count()) === 1);
+  await picker.close();
+}
+
+await browser.close();
+server.close();
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} passed`);
+process.exit(failed.length ? 1 : 0);

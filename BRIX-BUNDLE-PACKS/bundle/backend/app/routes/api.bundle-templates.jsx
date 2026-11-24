@@ -1,0 +1,338 @@
+import { authenticate } from '../shopify.server';
+import { getDb } from '../services/db.server';
+import { checkComboPlanGate, createComboTemplate } from '../services/combo-templates.server';
+import { getShopPlan, canPublishFeature } from '../services/plan-permissions.server';
+import { syncComboWeightIfNeeded } from '../services/combo-weight-shopify.server';
+import { boxPricingFeature, fixedMeasureFor, isWeightCombo, normalizeWeightPricing } from '../utils/combo-weight.shared.js';
+import { PLANS, getMinPlanForFeature } from '../config/plans';
+
+/**
+ * Box-tier-priced combos (pricing_mode 'weight') need a plan
+ * (boxPricingFeature): Quantity Box = Starter+, Weight Box / Value Box (and
+ * tiers on the older Classic designs) = Growth+. Their pricing is always
+ * validated and re-normalized here, so what is stored (and later synced to the
+ * checkout Function) is the server's version, never the browser's. Returns
+ * { customizationData } or { response } to send back.
+ */
+async function prepareWeightPricing(shop, customizationData) {
+  let config;
+  try { config = JSON.parse(customizationData || '{}') || {}; } catch { return { customizationData }; }
+  if (!isWeightCombo(config)) return { customizationData };
+  const planKey = await getShopPlan(shop);
+  const feature = boxPricingFeature(config.layout);
+  if (!canPublishFeature(planKey, feature)) {
+    const plan = PLANS[getMinPlanForFeature(feature)]?.label || 'Pro';
+    return { response: Response.json({ success: false, upgradeRequired: true, feature, error: `This combo template is part of the ${plan} plan. Upgrade to save it.` }, { status: 403 }) };
+  }
+  // Each box template is priced by its own measure, whatever was sent
+  // (Quantity Box = items, Weight Box = weight, Value Box = value; an older
+  // Quick Shop combo saved by quantity or weight becomes value here). Only
+  // the older Classic designs keep the merchant's choice.
+  const fixed = fixedMeasureFor(config.layout);
+  const raw = fixed ? { ...(config.weight_pricing || {}), measure: fixed } : config.weight_pricing;
+  const { value, errors } = normalizeWeightPricing(raw);
+  if (errors.length) {
+    return { response: Response.json({ success: false, error: errors[0].message, weightErrors: errors }, { status: 422 }) };
+  }
+  // Box-priced templates (Weight Box, Quick Shop) always are, whatever the browser sent.
+  return { customizationData: JSON.stringify({ ...config, pricing_mode: 'weight', weight_pricing: value }) };
+}
+
+// What the builder shows about this template's box discount after a save.
+function weightStatusFor(sync, templateId, active) {
+  if (!sync) return null;
+  const own = sync.templates?.[Number(templateId)];
+  return { state: sync.state, verified: Boolean(own?.verified), message: own?.message || sync.message, active: Boolean(active) };
+}
+
+// Shopify Pages don't process Liquid tags in their body content (confirmed
+// live — {{ ... }} shows up as literal text to shoppers), so shop/templateId
+// must be baked in as plain strings at creation time, and the renderer must
+// be served from this app rather than referenced via the asset_url Liquid
+// filter. See app/routes/combo-page[.]js.jsx for the actual renderer.
+// Used as a fallback body even when the guaranteed template (below) is
+// active, so a page still shows something sane if the merchant later
+// switches it back to the Default Page template.
+function buildPageBody(shop, templateId) {
+  const scriptOrigin = process.env.SHOPIFY_APP_URL || 'https://cartdrawer.fly.dev';
+  return `<!-- Combo Bundle Template -->
+<div data-brix-combo-root data-shop="${shop}" data-template-id="${templateId}"></div>
+<script src="${scriptOrigin}/combo-page.js" defer></script>`;
+}
+
+// `?preview` is Shopify's own mechanism for staff to view an unpublished
+// page — appending it to an already-published page's URL is wrong (and is
+// what merchants were seeing before this fix). Only unpublished pages need it.
+function buildPreviewUrl(shop, handle, isPublished) {
+  return `https://${shop}/pages/${handle}${isPublished ? '' : '?preview'}`;
+}
+
+// ── Shopify page helpers ───────────────────────────────────────────────────────
+
+// The page's own body holds the combo root; the app embed's combo-page.js
+// draws it (the app writes no theme files, see combo-page.server.js).
+function comboForgePageFields(shop, templateId) {
+  return { body: buildPageBody(shop, templateId) };
+}
+
+async function createShopifyPage(admin, title, handle, shop, templateId) {
+  const res = await admin.graphql(`#graphql
+    mutation pageCreate($page: PageCreateInput!) {
+      pageCreate(page: $page) {
+        page { id title handle isPublished }
+        userErrors { field message }
+      }
+    }
+  `, { variables: { page: { title, handle, ...comboForgePageFields(shop, templateId) } } });
+  const json = await res.json();
+  if (json.data?.pageCreate?.userErrors?.length > 0) {
+    throw new Error(json.data.pageCreate.userErrors.map(e => e.message).join('; '));
+  }
+  const page = json.data?.pageCreate?.page;
+  return { id: page?.id, handle: page?.handle || handle, isPublished: !!page?.isPublished };
+}
+
+// ── Loader (GET) ──────────────────────────────────────────────────────────────
+
+export async function loader({ request }) {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get('shop');
+  const id = url.searchParams.get('id');
+
+  if (!shop) return Response.json({ success: false, error: 'shop parameter required' }, { status: 400 });
+
+  const db = getDb();
+  try {
+    if (id) {
+      const [rows] = await db.execute(
+        'SELECT * FROM combo_templates WHERE id = ? AND shop_domain = ?',
+        [Number(id), shop]
+      );
+      const row = rows[0] || null;
+      if (!row) return Response.json({ success: false, error: 'Template not found' }, { status: 404 });
+      return Response.json({ success: true, template: row });
+    }
+    const [rows] = await db.execute(
+      'SELECT * FROM combo_templates WHERE shop_domain = ? ORDER BY updated_at DESC',
+      [shop]
+    );
+    return Response.json({ success: true, templates: rows });
+  } catch (e) {
+    console.error('[bundle-templates loader]', e.message);
+    return Response.json({ success: false, error: e.message }, { status: 500 });
+  }
+}
+
+// ── Action (POST / DELETE) ────────────────────────────────────────────────────
+
+export async function action({ request }) {
+  if (request.method === 'POST') {
+    let admin, session;
+    try {
+      const auth = await authenticate.admin(request);
+      admin = auth.admin; session = auth.session;
+    } catch (e) {
+      return Response.json({ success: false, error: 'Authentication failed: ' + e.message }, { status: 401 });
+    }
+    const shop = session.shop;
+    const db = getDb();
+
+    let data;
+    const contentType = request.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      data = await request.json();
+    } else {
+      const formData = await request.formData();
+      data = JSON.parse(formData.get('body') || '{}');
+    }
+    const { id, name, template_type, status, is_active, publishParams, action: dataAction } = data;
+    let { customization_data } = data;
+
+    // ── Preview action ──────────────────────────────────────────────────────
+    if (dataAction === 'preview') {
+      const [rows] = await db.execute(
+        'SELECT * FROM combo_templates WHERE id = ? AND shop_domain = ?',
+        [Number(id), shop]
+      );
+      const row = rows[0] || null;
+      if (!row) return Response.json({ success: false, error: 'Template not found' }, { status: 404 });
+
+      const handle = row.page_handle || (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'combo-page';
+
+      try {
+        // `pageByHandle` isn't a field on QueryRoot in this API version (was
+        // silently failing every call here, caught by the empty catch below,
+        // which meant an already-published page could never be found and
+        // every "preview" click fell through to pageCreate — which then
+        // failed on the duplicate handle, killing the whole preview flow).
+        // `pages(query: "handle:...")` is the correct lookup.
+        const existingRes = await admin.graphql(`#graphql
+          query getPageByHandle($query: String!) {
+            pages(first: 1, query: $query) { nodes { id title handle isPublished } }
+          }
+        `, { variables: { query: `handle:${handle}` } });
+        const existingJson = await existingRes.json();
+        const existingPage = existingJson.data?.pages?.nodes?.[0];
+        if (existingPage) {
+          await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [existingPage.handle, existingPage.id, Number(id)]);
+          try {
+            await admin.graphql(`#graphql
+              mutation pageUpdate($id: ID!, $page: PageUpdateInput!) { pageUpdate(id: $id, page: $page) { page { id } userErrors { message } } }
+            `, { variables: { id: existingPage.id, page: comboForgePageFields(shop, id) } });
+          } catch (e) {
+            // Intentionally non-fatal: the existing page is already usable at
+            // its current handle/body even if this best-effort sync of the
+            // guaranteed-template/metafield settings onto it fails, so the
+            // success response below still returns either way.
+            console.error('[bundle-templates preview] pageUpdate sync failed:', e.message);
+          }
+          return Response.json({ success: true, previewUrl: buildPreviewUrl(shop, existingPage.handle, existingPage.isPublished), handle: existingPage.handle });
+        }
+      } catch (e) {
+        // Intentionally non-fatal: if looking up an existing page by handle
+        // fails for any reason, fall through to the createShopifyPage
+        // attempt below instead of erroring out the whole preview action.
+        console.error('[bundle-templates preview] existing-page lookup failed:', e.message);
+      }
+
+      try {
+        const pageResult = await createShopifyPage(admin, name || 'Combo Page', handle, shop, id);
+        if (pageResult) {
+          await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, Number(id)]);
+          return Response.json({ success: true, previewUrl: buildPreviewUrl(shop, pageResult.handle, pageResult.isPublished), handle: pageResult.handle });
+        }
+      } catch (e) {
+        return Response.json({ success: false, error: e.message });
+      }
+    }
+
+    let pageResult = null;
+    let pageError = null;
+    const isActive = (is_active === 1 || is_active === true) ? 1 : 0;
+
+    const prepared = await prepareWeightPricing(shop, customization_data);
+    if (prepared.response) return prepared.response;
+    customization_data = prepared.customizationData;
+
+    // ── Update existing template ────────────────────────────────────────────
+    if (id) {
+      // Needed to tell whether this save turns weight pricing off for a
+      // template that had it (the Function's config must drop it then).
+      const [previousRows] = await db.execute('SELECT customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), shop]);
+      const previousConfig = previousRows?.[0]?.customization_data || null;
+      await db.execute(
+        `UPDATE combo_templates SET
+           shop_domain = ?, name = ?, template_type = ?, status = ?, is_active = ?,
+           customization_data = ?, page_handle = ?, page_id = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`,
+        [
+          shop, name || 'Untitled', template_type || 'grid', status || 'draft', isActive,
+          customization_data || '{}',
+          publishParams?.pageInfo?.handle || null,
+          publishParams?.pageInfo?.selectedPageId || null,
+          Number(id),
+        ]
+      );
+      const weightPricing = weightStatusFor(await syncComboWeightIfNeeded(admin, shop, previousConfig, customization_data), id, isActive);
+
+      if (publishParams?.pageInfo && !publishParams.pageInfo.selectedPageId) {
+        try {
+          pageResult = await createShopifyPage(admin, publishParams.pageInfo.title, publishParams.pageInfo.handle, shop, id);
+          if (pageResult) {
+            await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, Number(id)]);
+          }
+        } catch (e) {
+          pageError = e.message;
+        }
+      }
+
+      if (pageError) return Response.json({ success: false, error: `Template saved but page creation failed: ${pageError}`, id, weightPricing });
+      return Response.json({ success: true, message: 'Template updated', id, page: pageResult, weightPricing });
+    }
+
+    // ── Create new template ─────────────────────────────────────────────────
+    // Backend enforcement of Build a Combo plan gating — defense-in-depth
+    // against a Free shop (or a Starter shop at its cap) hitting this API
+    // directly, bypassing the dashboard's own pre-emptive UI lock.
+    const gateError = await checkComboPlanGate(shop);
+    if (gateError) return Response.json({ success: false, ...gateError }, { status: 403 });
+
+    const newId = await createComboTemplate(shop, {
+      name, template_type, status, is_active: isActive,
+      customization_data,
+      page_handle: publishParams?.pageInfo?.handle || null,
+      page_id: publishParams?.pageInfo?.selectedPageId || null,
+    });
+    const weightPricing = weightStatusFor(await syncComboWeightIfNeeded(admin, shop, customization_data), newId, isActive);
+
+    if (publishParams?.pageInfo && !publishParams.pageInfo.selectedPageId) {
+      try {
+        pageResult = await createShopifyPage(admin, publishParams.pageInfo.title, publishParams.pageInfo.handle, shop, newId);
+        if (pageResult) {
+          await db.execute('UPDATE combo_templates SET page_handle = ?, page_id = ? WHERE id = ?', [pageResult.handle, pageResult.id, newId]);
+        }
+      } catch (e) {
+        pageError = e.message;
+      }
+    }
+
+    if (pageError) return Response.json({ success: false, error: `Template saved but page creation failed: ${pageError}`, id: newId, weightPricing });
+    return Response.json({ success: true, message: 'Template created', id: newId, page: pageResult, weightPricing });
+  }
+
+  if (request.method === 'DELETE') {
+    let session, admin;
+    try {
+      const auth = await authenticate.admin(request);
+      session = auth.session;
+      admin = auth.admin;
+    } catch (e) {
+      return Response.json({ success: false, error: 'Authentication failed' }, { status: 401 });
+    }
+    const data = await request.json();
+    const { id } = data;
+    if (!id) return Response.json({ success: false, error: 'id required' }, { status: 400 });
+    const db = getDb();
+
+    // Same page_id -> pageDelete cleanup as app.bundles._index.jsx's
+    // intent:delete action — without it, the published Shopify Page
+    // (created by createShopifyPage above) stays live with no template
+    // behind it. Kept in sync since this is a second, independently
+    // reachable delete path for the same table.
+    const [rows] = await db.execute('SELECT page_id, customization_data FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
+    const pageId = rows?.[0]?.page_id;
+    let pageDeleteWarning = null;
+    if (pageId) {
+      try {
+        const pageDeleteRes = await admin.graphql(`#graphql
+          mutation pageDelete($id: ID!) {
+            pageDelete(id: $id) {
+              deletedPageId
+              userErrors { field message }
+            }
+          }
+        `, { variables: { id: pageId } });
+        const pageDeleteJson = await pageDeleteRes.json();
+        const userErrors = pageDeleteJson.data?.pageDelete?.userErrors;
+        if (userErrors?.length > 0) {
+          pageDeleteWarning = userErrors.map((e) => e.message).join('; ');
+          console.error('[bundle-templates DELETE] pageDelete userErrors:', userErrors);
+        }
+      } catch (e) {
+        pageDeleteWarning = e.message;
+        console.error('[bundle-templates DELETE] pageDelete failed:', e.message);
+      }
+    }
+
+    await db.execute('DELETE FROM combo_templates WHERE id = ? AND shop_domain = ?', [Number(id), session.shop]);
+    await syncComboWeightIfNeeded(admin, session.shop, rows?.[0]?.customization_data);
+    return Response.json({
+      success: true,
+      message: pageDeleteWarning
+        ? `Template deleted, but the live Shopify page could not be removed automatically (${pageDeleteWarning}) — please delete it from Online Store > Pages.`
+        : 'Template deleted',
+    });
+  }
+
+  return Response.json({ success: false, error: 'Method not allowed' }, { status: 405 });
+}

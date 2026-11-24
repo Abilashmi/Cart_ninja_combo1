@@ -19,7 +19,7 @@ export function EmbedSteps() {
   );
 }
 
-// Shown on the Build a Combo page while the "Custom Cart Drawer" app embed is
+// Shown on the Build a Combo page while the "BRIX Cart & Combo" app embed is
 // confirmed OFF in the live theme. Combo pages are rendered by that embed, so
 // until it is on, a published combo page shows none of the builder — and a
 // first-time merchant has no way to know why. Parent decides when to show it.

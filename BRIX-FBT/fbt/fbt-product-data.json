@@ -1,0 +1,2087 @@
+{
+  "couponSlider": {
+    "activeTemplate": "template1",
+    "selectedActiveCoupons": [],
+    "templates": {
+      "template1": {
+        "name": "Classic Banner",
+        "headingText": "GET 10% OFF!",
+        "subtextText": "Apply at checkout for savings",
+        "bgColor": "#ffffff",
+        "textColor": "#111827",
+        "accentColor": "#3b82f6",
+        "buttonColor": "#3b82f6",
+        "buttonTextColor": "#ffffff",
+        "borderRadius": 12,
+        "fontSize": 16,
+        "padding": 16
+      },
+      "template2": {
+        "name": "Minimal Card",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on qualifying orders",
+        "bgColor": "#f9fafb",
+        "textColor": "#374151",
+        "accentColor": "#10b981",
+        "buttonColor": "#10b981",
+        "buttonTextColor": "#ffffff",
+        "borderRadius": 8,
+        "fontSize": 14,
+        "padding": 14
+      },
+      "template3": {
+        "name": "Bold & Vibrant",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF",
+        "bgColor": "#4f46e5",
+        "textColor": "#ffffff",
+        "accentColor": "#f59e0b",
+        "buttonColor": "#f59e0b",
+        "buttonTextColor": "#111827",
+        "borderRadius": 16,
+        "fontSize": 18,
+        "padding": 20
+      }
+    }
+  },
+  "fbt": {
+    "activeTemplate": "fbt2",
+    "templates": {
+      "fbt1": {
+        "name": "Classic Grid",
+        "layout": "horizontal",
+        "interactionType": "classic",
+        "bgColor": "#ffffff",
+        "textColor": "#111827",
+        "priceColor": "#059669",
+        "buttonColor": "#111827",
+        "buttonTextColor": "#ffffff",
+        "borderColor": "#e5e7eb",
+        "borderRadius": 8,
+        "showPrices": true,
+        "showAddAllButton": true
+      },
+      "fbt2": {
+        "name": "Modern Cards",
+        "layout": "vertical",
+        "interactionType": "bundle",
+        "bgColor": "#f9fafb",
+        "textColor": "#374151",
+        "priceColor": "#dc2626",
+        "buttonColor": "#4f46e5",
+        "buttonTextColor": "#ffffff",
+        "borderColor": "#d1d5db",
+        "borderRadius": 12,
+        "showPrices": true,
+        "showAddAllButton": true
+      },
+      "fbt3": {
+        "name": "Vertical List",
+        "layout": "vertical",
+        "interactionType": "bundle",
+        "bgColor": "#ffffff",
+        "textColor": "#1f2937",
+        "priceColor": "#2563eb",
+        "buttonColor": "#10b981",
+        "buttonTextColor": "#ffffff",
+        "borderColor": "#f3f4f6",
+        "borderRadius": 4,
+        "showPrices": true,
+        "showAddAllButton": true
+      }
+    },
+    "mode": "ai",
+    "manualRules": [
+      {
+        "id": "ai-rule-1775454746112-1",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482111183",
+            "title": "Gift Card",
+            "handle": "gift-card",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/gift_card.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926192845007",
+            "price": "10.00"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482373327",
+            "title": "The Compare at Price Snowboard",
+            "handle": "the-compare-at-price-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_sky.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193205455",
+            "price": "785.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-2",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-3",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-4",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-5",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-6",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-7",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482373327",
+            "title": "The Compare at Price Snowboard",
+            "handle": "the-compare-at-price-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_sky.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193205455",
+            "price": "785.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-8",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-9",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482438863",
+            "title": "The Out of Stock Snowboard",
+            "handle": "the-out-of-stock-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_f44a9605-cd62-464d-b095-d45cdaa0d0d7.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193074383",
+            "price": "885.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-10",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-11",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-12",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-13",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-14",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "aiGenerated": true
+      },
+      {
+        "id": "ai-rule-1775454746112-15",
+        "displayScope": "single",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "aiGenerated": true
+      }
+    ],
+    "aiSettings": {
+      "aiEnabled": true,
+      "aiProductCount": 6,
+      "maxSuggestions": 6,
+      "customPrompt": ""
+    },
+    "selectedTemplate": "fbt2",
+    "interactionStyle": "bundle",
+    "layoutAlignment": "vertical",
+    "color": {
+      "bgColor": "#f9fafb",
+      "textColor": "#374151",
+      "priceColor": "#dc2626",
+      "buttonColor": "#4f46e5",
+      "buttonText": "#ffffff",
+      "borderColor": "#d1d5db"
+    },
+    "styling": {
+      "borderRadius": 12,
+      "showPrices": true,
+      "showAddAllButton": true
+    },
+    "configurationMode": "AI Configuration",
+    "manualConfiguration": [
+      {
+        "ruleId": "ai-rule-1775454746112-1",
+        "displayScope": "single",
+        "triggeredProduct": "Gift Card",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Compare at Price Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482111183",
+            "title": "Gift Card",
+            "handle": "gift-card",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/gift_card.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926192845007",
+            "price": "10.00"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482373327",
+            "title": "The Compare at Price Snowboard",
+            "handle": "the-compare-at-price-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_sky.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193205455",
+            "price": "785.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-2",
+        "displayScope": "single",
+        "triggeredProduct": "The Inventory Not Tracked Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-3",
+        "displayScope": "single",
+        "triggeredProduct": "The Videographer Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-4",
+        "displayScope": "single",
+        "triggeredProduct": "The Minimal Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-5",
+        "displayScope": "single",
+        "triggeredProduct": "The Collection Snowboard: Hydrogen",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-6",
+        "displayScope": "single",
+        "triggeredProduct": "The Hidden Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-7",
+        "displayScope": "single",
+        "triggeredProduct": "The Compare at Price Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482373327",
+            "title": "The Compare at Price Snowboard",
+            "handle": "the-compare-at-price-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_sky.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193205455",
+            "price": "785.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-8",
+        "displayScope": "single",
+        "triggeredProduct": "The Complete Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-9",
+        "displayScope": "single",
+        "triggeredProduct": "The Out of Stock Snowboard",
+        "upsellProduct": "Selling Plans Ski Wax, The Multi-location Snowboard, The Multi-managed Snowboard, The 3p Fulfilled Snowboard, The Collection Snowboard: Oxygen, The Collection Snowboard: Liquid",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482438863",
+            "title": "The Out of Stock Snowboard",
+            "handle": "the-out-of-stock-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_f44a9605-cd62-464d-b095-d45cdaa0d0d7.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193074383",
+            "price": "885.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-10",
+        "displayScope": "single",
+        "triggeredProduct": "Selling Plans Ski Wax",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Complete Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482471631",
+            "title": "Selling Plans Ski Wax",
+            "handle": "selling-plans-ski-wax",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_wax.png?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193434831",
+            "price": "24.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-11",
+        "displayScope": "single",
+        "triggeredProduct": "The Multi-location Snowboard",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Complete Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482537167",
+            "title": "The Multi-location Snowboard",
+            "handle": "the-multi-location-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a4e9096-021a-4c1e-8750-24b233166a12.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193664207",
+            "price": "729.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-12",
+        "displayScope": "single",
+        "triggeredProduct": "The Multi-managed Snowboard",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Complete Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482569935",
+            "title": "The Multi-managed Snowboard",
+            "handle": "the-multi-managed-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_9129b69a-0c7b-4f66-b6cf-c4222f18028a.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193696975",
+            "price": "629.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-13",
+        "displayScope": "single",
+        "triggeredProduct": "The 3p Fulfilled Snowboard",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Complete Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482602703",
+            "title": "The 3p Fulfilled Snowboard",
+            "handle": "the-3p-fulfilled-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b9e0da7f-db89-4d41-83f0-7f417b02831d.jpg?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193762511",
+            "price": "2629.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-14",
+        "displayScope": "single",
+        "triggeredProduct": "The Collection Snowboard: Oxygen",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Complete Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482635471",
+            "title": "The Collection Snowboard: Oxygen",
+            "handle": "the-collection-snowboard-oxygen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1773999583",
+            "variantId": "gid://shopify/ProductVariant/44926193795279",
+            "price": "1025.00"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ]
+      },
+      {
+        "ruleId": "ai-rule-1775454746112-15",
+        "displayScope": "single",
+        "triggeredProduct": "The Collection Snowboard: Liquid",
+        "upsellProduct": "The Inventory Not Tracked Snowboard, The Videographer Snowboard, The Minimal Snowboard, The Collection Snowboard: Hydrogen, The Hidden Snowboard, The Complete Snowboard",
+        "triggerProducts": [
+          {
+            "id": "gid://shopify/Product/7829482668239",
+            "title": "The Collection Snowboard: Liquid",
+            "handle": "the-collection-snowboard-liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1773999584",
+            "variantId": "gid://shopify/ProductVariant/44926193860815",
+            "price": "749.95"
+          }
+        ],
+        "fbtProducts": [
+          {
+            "id": "gid://shopify/Product/7829482143951",
+            "title": "The Inventory Not Tracked Snowboard",
+            "handle": "the-inventory-not-tracked-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/snowboard_purple_hydrogen.png?v=1773999582",
+            "variantId": "gid://shopify/ProductVariant/44926193008847",
+            "price": "949.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482209487",
+            "title": "The Videographer Snowboard",
+            "handle": "the-videographer-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193107151",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482242255",
+            "title": "The Minimal Snowboard",
+            "handle": "the-minimal-snowboard",
+            "image": "",
+            "variantId": "gid://shopify/ProductVariant/44926193041615",
+            "price": "885.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482307791",
+            "title": "The Collection Snowboard: Hydrogen",
+            "handle": "the-collection-snowboard-hydrogen",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193565903",
+            "price": "600.00"
+          },
+          {
+            "id": "gid://shopify/Product/7829482340559",
+            "title": "The Hidden Snowboard",
+            "handle": "the-hidden-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_c8ff0b5d-c712-429a-be00-b29bd55cbc9d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193238223",
+            "price": "749.95"
+          },
+          {
+            "id": "gid://shopify/Product/7829482406095",
+            "title": "The Complete Snowboard",
+            "handle": "the-complete-snowboard",
+            "image": "https://cdn.shopify.com/s/files/1/0650/9300/9615/files/Main_589fc064-24a2-4236-9eaf-13b2bd35d21d.jpg?v=1773999581",
+            "variantId": "gid://shopify/ProductVariant/44926193270991",
+            "price": "699.95"
+          }
+        ]
+      }
+    ]
+  }
+}

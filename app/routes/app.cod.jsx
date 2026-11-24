@@ -335,7 +335,7 @@ export default function CodCheckoutPage() {
       action: <Button onClick={() => openCustomize('position')}>Choose</Button>,
     },
     {
-      key: 'embed', state: 'info', title: 'Custom Cart Drawer app embed is on in your theme',
+      key: 'embed', state: 'info', title: 'BRIX Cart & Combo app embed is on in your theme',
       text: "The COD button and checkout load through this embed, also when the BRIX Cart Drawer itself is off and your theme's own drawer is used. BRIX can't check it from here.",
       action: <Button url="shopify://admin/themes/current/editor?context=apps" target="_top" icon={ExternalIcon}>Open theme editor</Button>,
     },

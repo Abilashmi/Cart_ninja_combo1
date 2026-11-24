@@ -1,20 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Divider, Badge, Modal } from '@shopify/polaris';
-import { GiftCardFilledIcon, DeliveryFilledIcon, StarFilledIcon, RewardIcon, DiscountFilledIcon } from '@shopify/polaris-icons';
+import { Card, FormLayout, TextField, Select, BlockStack, Text, InlineStack, Button, Divider, Badge, Modal, Popover, Icon } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import ProductPickerBody from '../shared/ProductPickerBody';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { ColorField } from './ColorField';
 import { CustomizableLockedSection, ProBadge } from '../plan/PlanGate';
 import { useCurrency } from '../CurrencyContext';
+import { TIER_ICON_MAP } from '../CartPreview';
 
-const TIER_ICON_MAP = {
-  gift: GiftCardFilledIcon,
-  shipping: DeliveryFilledIcon,
-  star: StarFilledIcon,
-  trophy: RewardIcon,
-  diamond: DiscountFilledIcon,
-};
 
 const PRODUCT_PICKER_STORAGE_KEY = 'cached_products';
 
@@ -294,56 +287,6 @@ export function ProgressBarSection() {
       </Text>
 
       {progressBar.enabled && (<>
-      <Card>
-        <FormLayout>
-          <Select
-            label="Progress mode"
-            options={[
-              { label: `By amount spent (${currencySymbol})`, value: 'amount' },
-              { label: 'By item count', value: 'count' },
-            ]}
-            value={progressBar.mode}
-            onChange={(v) => updateProgressBar({ mode: v })}
-          />
-          <Select
-            label="Position"
-            options={[
-              { label: 'Top of cart', value: 'top' },
-              { label: 'Bottom of cart items', value: 'bottom' },
-            ]}
-            value={progressBar.position}
-            onChange={(v) => updateProgressBar({ position: v })}
-          />
-          <FeatureToggle
-            label="Show progress bar when cart is empty"
-            enabled={progressBar.showWhenEmpty}
-            onToggle={(v) => updateProgressBar({ showWhenEmpty: v })}
-          />
-          <FeatureToggle
-            label="Hide milestone amount"
-            enabled={progressBar.hideMilestoneAmount}
-            onToggle={(v) => updateProgressBar({ hideMilestoneAmount: v })}
-          />
-          <BlockStack gap="100">
-            <FeatureToggle
-              label="Keep visible while scrolling"
-              enabled={progressBar.sticky === true}
-              onToggle={(v) => updateProgressBar({ sticky: v })}
-            />
-            <Text as="p" variant="bodySm" tone="subdued">
-              The progress bar stays pinned at the top of the cart (at the bottom when placed below the products) while shoppers scroll their items.
-            </Text>
-          </BlockStack>
-        </FormLayout>
-      </Card>
-
-      <ColorField label="Background color" value={progressBar.colors?.background || '#e5e7eb'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), background: v } })} />
-      <ColorField label="Fill color" value={progressBar.colors?.fill || '#10b981'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), fill: v } })} />
-      <ColorField label="Icon color" value={progressBar.colors?.icon || '#2563eb'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), icon: v } })} />
-      <ColorField label="Message color" value={progressBar.colors?.message || '#10b981'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), message: v } })} />
-
-      <Divider />
-
       {progressBar.tiers.length === 0 && (
         <Button onClick={addTier}>Add milestone</Button>
       )}
@@ -366,11 +309,14 @@ export function ProgressBarSection() {
 
             <Card>
               <FormLayout>
-                <InlineStack align="space-between">
+                <InlineStack align="space-between" blockAlign="center" gap="200">
                   <Text as="h3" variant="headingSm">Milestone {activeTierIndex + 1}</Text>
-                  {progressBar.tiers.length > 1 && (
-                    <Button variant="plain" tone="critical" size="slim" onClick={() => removeTier(activeTierIndex)}>Remove</Button>
-                  )}
+                  <InlineStack gap="200" blockAlign="center">
+                    <MilestoneIconPicker value={activeTier.icon} onChange={(v) => updateTier(activeTierIndex, { icon: v })} />
+                    {progressBar.tiers.length > 1 && (
+                      <Button variant="plain" tone="critical" size="slim" onClick={() => removeTier(activeTierIndex)}>Remove</Button>
+                    )}
+                  </InlineStack>
                 </InlineStack>
                 <TextField
                   label={progressBar.mode === 'count' ? 'Minimum item count' : `Minimum spend (${currencySymbol})`}
@@ -380,29 +326,11 @@ export function ProgressBarSection() {
                   autoComplete="off"
                 />
                 <TextField
-                  label="Milestone title (optional)"
-                  value={activeTier.title}
-                  onChange={(v) => updateTier(activeTierIndex, { title: v })}
-                  autoComplete="off"
-                />
-                <TextField
-                  label="Description"
+                  label="Milestone text"
+                  helpText="Shown on the progress bar for this milestone, e.g. Free gift at $500"
                   value={activeTier.description}
                   onChange={(v) => updateTier(activeTierIndex, { description: v })}
                   autoComplete="off"
-                />
-                <Select
-                  label="Icon"
-                  options={[
-                    { label: 'Gift', value: 'gift' },
-                    { label: 'Shipping', value: 'shipping' },
-                    { label: 'Star', value: 'star' },
-                    { label: 'Trophy', value: 'trophy' },
-                    { label: 'Diamond', value: 'diamond' },
-                    { label: 'Rupee (₹)', value: 'rupee' },
-                  ]}
-                  value={activeTier.icon}
-                  onChange={(v) => updateTier(activeTierIndex, { icon: v })}
                 />
                 <BlockStack gap="200">
                   <Text as="h4" variant="headingSm">Reward Products</Text>
@@ -498,6 +426,57 @@ export function ProgressBarSection() {
         </>
       )}
 
+      <Divider />
+
+      <Text as="h3" variant="headingSm">Progress bar settings</Text>
+      <Card>
+        <FormLayout>
+          <Select
+            label="Progress mode"
+            options={[
+              { label: `By amount spent (${currencySymbol})`, value: 'amount' },
+              { label: 'By item count', value: 'count' },
+            ]}
+            value={progressBar.mode}
+            onChange={(v) => updateProgressBar({ mode: v })}
+          />
+          <Select
+            label="Position"
+            options={[
+              { label: 'Top of cart', value: 'top' },
+              { label: 'Bottom of cart items', value: 'bottom' },
+            ]}
+            value={progressBar.position}
+            onChange={(v) => updateProgressBar({ position: v })}
+          />
+          <FeatureToggle
+            label="Show progress bar when cart is empty"
+            enabled={progressBar.showWhenEmpty}
+            onToggle={(v) => updateProgressBar({ showWhenEmpty: v })}
+          />
+          <FeatureToggle
+            label="Hide milestone amount"
+            enabled={progressBar.hideMilestoneAmount}
+            onToggle={(v) => updateProgressBar({ hideMilestoneAmount: v })}
+          />
+          <BlockStack gap="100">
+            <FeatureToggle
+              label="Keep visible while scrolling"
+              enabled={progressBar.sticky === true}
+              onToggle={(v) => updateProgressBar({ sticky: v })}
+            />
+            <Text as="p" variant="bodySm" tone="subdued">
+              The progress bar stays pinned at the top of the cart (at the bottom when placed below the products) while shoppers scroll their items.
+            </Text>
+          </BlockStack>
+        </FormLayout>
+      </Card>
+
+      <ColorField label="Background color" value={progressBar.colors?.background || '#e5e7eb'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), background: v } })} />
+      <ColorField label="Fill color" value={progressBar.colors?.fill || '#10b981'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), fill: v } })} />
+      <ColorField label="Icon color" value={progressBar.colors?.icon || '#2563eb'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), icon: v } })} />
+      <ColorField label="Message color" value={progressBar.colors?.message || '#10b981'} onChange={(v) => updateProgressBar({ colors: { ...(progressBar.colors || {}), message: v } })} />
+
       <ProductPickerModal
         open={pickerTierIndex !== null}
         onClose={() => setPickerTierIndex(null)}
@@ -508,5 +487,50 @@ export function ProgressBarSection() {
       </>)}
     </BlockStack>
     </CustomizableLockedSection>
+  );
+}
+
+const MILESTONE_ICONS = [
+  ['gift', 'Gift'], ['shipping', 'Shipping'], ['star', 'Star'],
+  ['trophy', 'Trophy'], ['diamond', 'Diamond'], ['rupee', 'Rupee'],
+];
+
+function renderMilestoneIcon(name) {
+  const C = TIER_ICON_MAP[name] || TIER_ICON_MAP.gift;
+  // Diamond and rupee are the app's own SVG components; the rest are Polaris icons.
+  return name === 'diamond' || name === 'rupee' ? <C width="20" height="20" /> : <Icon source={C} />;
+}
+
+function MilestoneIconPicker({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover
+      active={open}
+      onClose={() => setOpen(false)}
+      activator={
+        <Button onClick={() => setOpen((o) => !o)} disclosure accessibilityLabel="Change milestone icon">
+          <span style={{ display: 'inline-flex', width: 20, height: 20 }}>{renderMilestoneIcon(value)}</span>
+        </Button>
+      }
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 44px)', gap: 8, padding: 12 }}>
+        {MILESTONE_ICONS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            title={label}
+            aria-label={label}
+            onClick={() => { onChange(key); setOpen(false); }}
+            style={{
+              width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              borderRadius: 8, background: value === key ? '#f1f1f1' : '#fff',
+              border: value === key ? '2px solid #303030' : '1px solid #c9cccf',
+            }}
+          >
+            <span style={{ display: 'inline-flex', width: 20, height: 20 }}>{renderMilestoneIcon(key)}</span>
+          </button>
+        ))}
+      </div>
+    </Popover>
   );
 }

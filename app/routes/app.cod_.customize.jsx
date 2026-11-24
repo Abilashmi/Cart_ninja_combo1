@@ -344,6 +344,7 @@ const GROUPS = [
     title: 'Charges & rules',
     items: [
       { id: 'fee', label: 'COD fee', icon: ReceiptIcon, preview: 'sheet', fields: ['codFee', 'codFeeLabel', 'codFeePercent', 'codFeePercentFrom', 'codFeeOwnAmount'], toggle: 'codFeeEnabled' },
+      { id: 'sms', label: 'OTP SMS', icon: ChatIcon, preview: 'sheet', fields: ['msg91AuthKey', 'msg91TemplateId'] },
       { id: 'partial', label: 'Partial COD', icon: CashRupeeIcon, preview: 'sheet', fields: ['partialAmount', 'partialPercent', 'partialMinOrder', 'partialMaxOrder'], toggle: 'partialEnabled' },
       { id: 'eligibility', label: 'Eligibility', icon: FilterIcon, preview: 'drawer', fields: ['minOrder', 'maxOrder', 'unlistedPicks'] },
       { id: 'fraud', label: 'Fraud protection', icon: ShieldCheckMarkIcon, preview: 'sheet', fields: ['dailyLimitPerPhone', 'blockedPincodes'] },
@@ -374,7 +375,6 @@ const GROUPS = [
   {
     title: 'Advanced',
     items: [
-      { id: 'sms', label: 'OTP SMS', icon: ChatIcon, preview: 'sheet', fields: ['msg91AuthKey', 'msg91TemplateId'] },
       { id: 'tracking', label: 'Ads & analytics', icon: ChartVerticalIcon, preview: null, fields: ['ga4Id', 'metaPixelId', 'ga4ApiSecret', 'metaCapiToken', 'metaTestCode'] },
       { id: 'orders', label: 'Order settings', icon: OrderIcon, preview: null, fields: [] },
     ],
@@ -639,7 +639,7 @@ export default function CodCustomizePage() {
                 {!otpOn && (
                   <Text as="p" variant="bodySm" tone="subdued">
                     {form.requireOtp
-                      ? (data.sms.source === 'wallet' ? 'Phone verification is paused: your OTP wallet is empty (Advanced → OTP SMS).' : 'Phone verification starts once you add your MSG91 keys (Advanced → OTP SMS).')
+                      ? (data.sms.source === 'wallet' ? 'Phone verification is paused: your OTP wallet is empty (COD fee → OTP SMS).' : 'Phone verification starts once you add your MSG91 keys (COD fee → OTP SMS).')
                       : 'Phone verification is off (Fraud protection).'}
                   </Text>
                 )}
@@ -647,7 +647,7 @@ export default function CodCustomizePage() {
             </FormLayout>
           </Card>
           <Banner tone="info" action={{ content: 'Open theme editor', url: 'shopify://admin/themes/current/editor?context=apps', target: '_top' }}>
-            COD works in your theme&apos;s own cart drawer or the BRIX Cart Drawer. Keep the &quot;Custom Cart Drawer&quot; app embed on in your theme.
+            COD works in your theme&apos;s own cart drawer or the BRIX Cart Drawer. Keep the &quot;BRIX Cart & Combo&quot; app embed on in your theme.
           </Banner>
         </BlockStack>
       );
@@ -1122,8 +1122,8 @@ export default function CodCustomizePage() {
               <Checkbox
                 label="Verify phone with an SMS code (OTP)"
                 helpText={data.sms.source === 'wallet'
-                  ? (data.sms.configured ? 'Each code is one SMS sent by BRIX, paid from your OTP wallet (Advanced → OTP SMS).' : 'Your OTP wallet is empty, so no code is asked for. Recharge in Advanced → OTP SMS.')
-                  : (data.sms.configured ? 'Each code is one SMS from your MSG91 account (Advanced → OTP SMS).' : 'Starts once you add your MSG91 keys in Advanced → OTP SMS.')}
+                  ? (data.sms.configured ? 'Each code is one SMS sent by BRIX, paid from your OTP wallet (COD fee → OTP SMS).' : 'Your OTP wallet is empty, so no code is asked for. Recharge in COD fee → OTP SMS.')
+                  : (data.sms.configured ? 'Each code is one SMS from your MSG91 account (COD fee → OTP SMS).' : 'Starts once you add your MSG91 keys in COD fee → OTP SMS.')}
                 checked={form.requireOtp}
                 onChange={set('requireOtp')}
               />

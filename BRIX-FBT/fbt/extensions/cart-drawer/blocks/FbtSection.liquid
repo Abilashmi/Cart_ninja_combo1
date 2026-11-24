@@ -1,0 +1,16 @@
+{% schema %}
+{
+  "name": "FBT Widget",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Drag this block to exactly where you want it on the product page. Design and availability are still controlled from the app's FBT Widget settings page — set placement there to \"Custom\" to stop the app auto-positioning it."
+    }
+  ]
+}
+{% endschema %}
+{%- comment -%} Store-wide "Hide decimals in prices" (Account → Price display, app/services/price-display.server.js). {%- endcomment -%}
+<script>window.__brixWholePrices = window.__brixWholePrices || {% if app.metafields.brix.display.value.wholePrices == true %}true{% else %}false{% endif %};</script>
+{% render 'fbt-widget-render' %}

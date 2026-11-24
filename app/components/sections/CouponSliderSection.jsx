@@ -38,7 +38,7 @@ function makeCouponSliderItem(shopifyCoupon) {
     textColor: '#ffffff',
     icon: 'discount',
     borderRadius: 8,
-    buttonText: 'Apply',
+    buttonText: 'Copy',
     buttonBgColor: '#000000',
     buttonTextColor: '#ffffff',
   };
@@ -108,7 +108,7 @@ function CouponAppearanceEditor({ item, onUpdate, onClose, onRemove }) {
         {!item.textOnly && (
           <>
             <Text as="h4" variant="headingSm">Button Settings</Text>
-            <TextField label="Button Text" value={item.buttonText} onChange={(v) => onUpdate({ buttonText: v })} autoComplete="off" />
+            <TextField label="Button Text" value={(!item.buttonText || item.buttonText === 'Apply') ? 'Copy' : item.buttonText} onChange={(v) => onUpdate({ buttonText: v })} autoComplete="off" />
             <InlineStack gap="400">
               <ColorField label="Button Background" value={item.buttonBgColor} onChange={(v) => onUpdate({ buttonBgColor: v })} />
               <ColorField label="Button Text Color" value={item.buttonTextColor} onChange={(v) => onUpdate({ buttonTextColor: v })} />

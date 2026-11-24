@@ -1,0 +1,513 @@
+// Run with: node --import ./tests/packs/register.mjs --test tests/combo-weight/quickshop-filters.test.mjs
+// Box templates: collection filter groups (qs_filter_groups: "Weight" with
+// its collections, "Years" with its own), the membership lookup behind them
+// (services/collection-members.server.js), and the top progress's milestone
+// icon size, label lines and text sizes.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createComboWeightCore } from '../../app/utils/combo-weight.shared.js';
+import { createQuickShopKit } from '../../app/utils/combo-quickshop.shared.js';
+import { loadCollectionMembers } from '../../app/services/collection-members.server.js';
+
+const kit = createQuickShopKit(createComboWeightCore());
+
+const product = (n, extra = {}) => ({
+  id: `gid://shopify/Product/${n}`, title: `Product ${n}`, tags: [],
+  variants: [{ id: `gid://shopify/ProductVariant/${n}`, title: 'Default Title', price: '100.00', grams: 500, available: true }],
+  ...extra,
+});
+const P = [1, 2, 3, 4, 5].map((n) => product(n));
+const productsByHandle = { 'all-kids': P };
+
+const GROUPS = [
+  { id: 'weight', label: 'Weight', style: 'dropdown', options: [{ handle: '250g', label: '250 g' }, { handle: '500g', label: '' }, { handle: '1kg', label: '' }, { handle: 'empty-col', label: '' }] },
+  { id: 'years', label: 'Years', style: 'chips', options: [{ handle: 'age-1-2', label: '1-2 Y' }, { handle: 'age-3-4', label: '3-4 Y' }] },
+];
+const MEMBERS = {
+  '250g': [P[0].id, P[1].id],
+  '500g': [P[2].id, P[3].id],
+  '1kg': [P[4].id],
+  'empty-col': [],
+  'age-1-2': [P[0].id, P[2].id],
+  'age-3-4': [P[1].id, P[3].id, P[4].id],
+};
+
+function model(config, ui = {}, extra = {}) {
+  return kit.buildModel({
+    config: { layout: 'layout6', tab_count: 1, col_1: 'all-kids', ...config },
+    productsByHandle,
+    handles: ['all-kids'],
+    collectionNames: { '500g': '500 Grams', '1kg': '1 Kg' },
+    collectionMembers: MEMBERS,
+    ui: { chip: 'all', dd: {}, ...ui },
+    pricing: { tiers: [], enabled: false },
+    symbol: '₹',
+    ...extra,
+  });
+}
+
+const shownIds = (m) => m.cards.map((c) => c.id);
+
+test('filterGroups keeps only valid groups, at most 5 × 15, no repeats', () => {
+  const groups = kit.filterGroups({
+    qs_filter_groups: [
+      { id: 'a', label: '  Weight ', options: [{ handle: '250g' }, { handle: '250g' }, { handle: 'bad handle' }, { handle: '<x>' }] },
+      { id: 'b', label: '', options: [{ handle: 'x' }] }, // no name
+      { id: 'c', label: 'Empty', options: [] }, // no collection
+      { id: 'a', label: 'Same id', style: 'chips', options: Array.from({ length: 20 }, (_, i) => ({ handle: `c${i}`, label: `L${i}` })) },
+      ...Array.from({ length: 6 }, (_, i) => ({ id: `z${i}`, label: `Z${i}`, options: [{ handle: 'h' }] })),
+    ],
+  });
+  assert.equal(groups.length, 5);
+  assert.deepEqual(groups[0], { id: 'a', label: 'Weight', style: 'dropdown', options: [{ handle: '250g', label: '' }] });
+  assert.notEqual(groups[1].id, 'a', 'a repeated id gets its own');
+  assert.equal(groups[1].style, 'chips');
+  assert.equal(groups[1].options.length, 15);
+  assert.deepEqual(kit.filterGroups({}), []);
+  assert.deepEqual(kit.filterGroups({ qs_filter_groups: 'nope' }), []);
+  assert.deepEqual(kit.filterGroupHandles({ qs_filter_groups: GROUPS }), ['250g', '500g', '1kg', 'empty-col', 'age-1-2', 'age-3-4']);
+});
+
+test('a dropdown group lists its collections with products on the page', () => {
+  const m = model({ qs_filter_groups: GROUPS, qs_filter_type: false, qs_filter_brand: false, qs_filter_sort: false });
+  const menu = m.row.menus.find((x) => x.id === 'g:weight');
+  assert.ok(menu, 'Weight dropdown shown');
+  assert.equal(menu.label, 'Weight');
+  assert.deepEqual(menu.options.map((o) => o.label), ['All', '250 g', '500 Grams', '1 Kg'], 'own label, else collection title; empty collection hidden');
+  assert.equal(m.row.groups.length, 1, 'the chips group comes back as a chip row');
+  assert.deepEqual(m.row.groups[0].options.map((o) => o.label), ['1-2 Y', '3-4 Y']);
+  assert.equal(m.cards.length, 5);
+  assert.equal(m.row.active, false);
+});
+
+test('picking options filters, and two groups combine', () => {
+  let m = model({ qs_filter_groups: GROUPS }, { dd: { 'g:weight': '500g' } });
+  assert.deepEqual(shownIds(m), [P[2].id, P[3].id]);
+  assert.equal(m.row.active, true);
+  m = model({ qs_filter_groups: GROUPS }, { dd: { 'g:weight': '500g', 'g:years': 'age-3-4' } });
+  assert.deepEqual(shownIds(m), [P[3].id], '500 g and 3-4 Y');
+  m = model({ qs_filter_groups: GROUPS }, { dd: { 'g:weight': '1kg', 'g:years': 'age-1-2' } });
+  assert.deepEqual(shownIds(m), [], 'nothing in both');
+  assert.equal(m.empty, 'Nothing matches these filters.');
+});
+
+test('a removed group or a collection not loaded yet does not filter', () => {
+  let m = model({}, { dd: { 'g:weight': '500g' } });
+  assert.equal(m.cards.length, 5, 'group gone');
+  m = model({ qs_filter_groups: GROUPS }, { dd: { 'g:weight': '500g' } }, { collectionMembers: {} });
+  assert.equal(m.cards.length, 5, 'members unknown (builder before its fetch)');
+  assert.equal(m.row.menus.find((x) => x.id === 'g:weight').options.length, 5, 'all options shown while unknown');
+});
+
+test('page collections count as known members', () => {
+  const m = model({ qs_filter_groups: [{ id: 'k', label: 'Kids', options: [{ handle: 'all-kids' }] }] }, { dd: { 'g:k': 'all-kids' } }, { collectionMembers: {} });
+  assert.equal(m.cards.length, 5);
+});
+
+test('chips group: tap picks, tap again clears; Clear resets every group', () => {
+  const ui = { dd: {} };
+  const el = (menu, value) => ({ getAttribute: (k) => ({ 'data-menu': menu, 'data-value': value }[k]) });
+  assert.equal(kit.applyUiAction(ui, 'qs-group', el('g:years', 'age-1-2')), true);
+  assert.equal(ui.dd['g:years'], 'age-1-2');
+  kit.applyUiAction(ui, 'qs-group', el('g:years', 'age-3-4'));
+  assert.equal(ui.dd['g:years'], 'age-3-4');
+  kit.applyUiAction(ui, 'qs-group', el('g:years', 'age-3-4'));
+  assert.equal(ui.dd['g:years'], '');
+  ui.dd['g:weight'] = '500g';
+  kit.applyUiAction(ui, 'qs-clear', null);
+  assert.deepEqual(ui.dd, {});
+});
+
+test('render draws the dropdown and the chip row, escaped', () => {
+  const groups = [...GROUPS, { id: 'x', label: '<b>Bad</b>', style: 'chips', options: [{ handle: '1kg', label: '"1kg"' }] }];
+  const html = kit.render(model({ qs_filter_groups: groups }, { dd: { 'g:years': 'age-1-2' }, menu: 'g:weight' }));
+  assert.match(html, /data-combo-action="qs-menu" data-menu="g:weight"/);
+  assert.match(html, /data-combo-action="qs-pick" data-menu="g:weight" data-value="500g">500 Grams</);
+  assert.match(html, /class="bxq-filters bxq-gchips" role="group" aria-label="Years"><span class="bxq-gchips-label">Years<\/span>/);
+  assert.match(html, /class="bxq-chip is-on" aria-pressed="true" data-combo-action="qs-group" data-menu="g:years" data-value="age-1-2">1-2 Y</);
+  assert.ok(!html.includes('<b>Bad</b>'));
+  assert.ok(html.includes('&lt;b&gt;Bad&lt;/b&gt;'));
+  assert.ok(html.includes('&quot;1kg&quot;'));
+});
+
+/* ── milestones ─────────────────────────────────────────────────────── */
+
+const TIERS = [
+  { id: 't1', min_grams: 1000, type: 'percentage', value: 5, label: '' },
+  { id: 't2', min_grams: 2000, type: 'percentage', value: 10, label: '' },
+  { id: 't3', min_grams: 3000, type: 'percentage', value: 15, label: '' },
+];
+function top(config, isMobile = false, tiers = TIERS) {
+  return kit.render(model({ qs_top_style: 'milestones', ...config }, {}, {
+    pricing: { measure: 'weight', unit: 'kg', tiers, enabled: true }, isMobile,
+  }));
+}
+const milesStyle = (html) => html.match(/class="bxq-miles" style="([^"]+)"/)[1];
+
+test('milestone icon size: default as before, merchant size, phone size', () => {
+  assert.deepEqual(kit.mileSizes({}, false, 3), { icon: 18, dot: 34 });
+  assert.deepEqual(kit.mileSizes({}, true, 6), { icon: 18, dot: 34 }, 'six tiers on a phone keep the old size');
+  assert.deepEqual(kit.mileSizes({ qs_mile_icon_size: 30 }, false, 3), { icon: 30, dot: 46 });
+  assert.deepEqual(kit.mileSizes({ qs_mile_icon_size: 30 }, true, 3), { icon: 30, dot: 46 }, 'phones follow desktop when unset');
+  assert.deepEqual(kit.mileSizes({ qs_mile_icon_size: 30, qs_mile_icon_size_m: 20 }, true, 3), { icon: 20, dot: 36 });
+  assert.deepEqual(kit.mileSizes({ qs_mile_icon_size: 999 }, false, 1), { icon: 48, dot: 64 }, 'clamped');
+  const many = kit.mileSizes({ qs_mile_icon_size: 40 }, true, 8);
+  assert.ok(many.dot <= Math.floor(260 / 8) - 8 && many.dot >= 22, `8 tiers on a phone fit (${many.dot}px)`);
+  assert.ok(many.icon < 40);
+  assert.match(milesStyle(top({})), /--bxq-mile-dot:34px;--bxq-mile-icon:18px;height:74px/, 'default height unchanged (74px)');
+  assert.match(milesStyle(top({ qs_mile_icon_size: 30 })), /--bxq-mile-dot:46px;--bxq-mile-icon:30px;height:86px/);
+});
+
+test('label lines can be hidden and resized', () => {
+  let html = top({});
+  assert.match(html, /<span class="bxq-mile-label"><b>5% OFF<\/b><small>1 kg<\/small><\/span>/);
+  html = top({ qs_top_show_amount: false });
+  assert.match(html, /<span class="bxq-mile-label"><b>5% OFF<\/b><\/span>/);
+  assert.ok(!html.includes('<small>1 kg</small>'));
+  html = top({ qs_top_show_name: false });
+  assert.match(html, /<span class="bxq-mile-label"><small>1 kg<\/small><\/span>/);
+  html = top({ qs_top_show_name: false, qs_top_show_amount: false });
+  assert.ok(!html.includes('bxq-mile-label'), 'both hidden = no label at all');
+  assert.match(milesStyle(html), /height:38px/, 'circle + 4px');
+  html = top({ qs_top_label_size: 16, qs_top_sub_size: 13 });
+  assert.match(html, /--bxq-lbl-fs:16px;--bxq-lbl-sub:13px;/);
+  assert.match(html, /--bxq-lbl-fs-mile-m:15px;/, 'phones 1px smaller when unset, as before');
+  assert.match(milesStyle(html), /height:(\d+)px/);
+  assert.ok(Number(milesStyle(html).match(/height:(\d+)px/)[1]) > 74, 'bigger text = more room');
+  html = top({ qs_top_label_size_m: 10 }, true);
+  assert.match(html, /--bxq-lbl-fs-m:10px;--bxq-lbl-fs-mile-m:10px;/);
+});
+
+test('the same label options apply to the bar and steps styles', () => {
+  let html = top({ qs_top_style: 'bar', qs_top_show_amount: false });
+  assert.match(html, /<b>5% OFF<\/b><\/span>/);
+  assert.ok(!html.includes('<small>1 kg</small>'));
+  assert.match(html, /class="bxq-ticks" style="height:24px"/);
+  html = top({ qs_top_style: 'bar' });
+  assert.match(html, /class="bxq-ticks" style="height:38px"/, 'default height unchanged');
+  html = top({ qs_top_style: 'steps', qs_top_show_name: false });
+  assert.match(html, /<div class="bxq-step-label"><small>1 kg<\/small><\/div>/);
+});
+
+/* ── membership lookup ──────────────────────────────────────────────── */
+
+function fakeAdmin(collections, membership, calls = []) {
+  return {
+    calls,
+    graphql: async (query, { variables }) => {
+      calls.push({ query, variables });
+      let data;
+      if (query.includes('BrixFilterCollections')) {
+        data = {};
+        Object.entries(variables).forEach(([k, handle]) => { data[`c${k.slice(1)}`] = collections[handle] ? { id: collections[handle] } : null; });
+      } else {
+        const colIds = Object.keys(variables).filter((k) => k !== 'ids').map((k) => [k.slice(1), variables[k]]);
+        data = { nodes: variables.ids.map((id) => {
+          const node = { id };
+          colIds.forEach(([i, cid]) => { node[`m${i}`] = (membership[cid] || []).includes(id); });
+          return node;
+        }) };
+      }
+      return { json: async () => ({ data }) };
+    },
+  };
+}
+
+test('loadCollectionMembers asks inCollection for the page products', async () => {
+  const admin = fakeAdmin(
+    { '250g': 'gid://shopify/Collection/1', '500g': 'gid://shopify/Collection/2' },
+    { 'gid://shopify/Collection/1': [P[0].id], 'gid://shopify/Collection/2': [P[1].id, P[2].id] },
+  );
+  const out = await loadCollectionMembers(admin, { handles: ['250g', '500g', 'missing', '250g', 'bad handle'], productIds: [...P.map((p) => p.id), 'not-a-gid'] });
+  assert.deepEqual(out, { '250g': [P[0].id], '500g': [P[1].id, P[2].id], missing: [] });
+  assert.equal(admin.calls.length, 2);
+  assert.match(admin.calls[1].query, /m0: inCollection\(id: \$c0\)/);
+  assert.equal(admin.calls[1].variables.ids.length, 5);
+});
+
+test('loadCollectionMembers pages products and never throws', async () => {
+  const many = Array.from({ length: 250 }, (_, i) => `gid://shopify/Product/${i + 1}`);
+  const admin = fakeAdmin({ a: 'gid://shopify/Collection/1' }, { 'gid://shopify/Collection/1': [many[0], many[249]] });
+  const out = await loadCollectionMembers(admin, { handles: ['a'], productIds: many });
+  assert.deepEqual(out, { a: [many[0], many[249]] });
+  assert.equal(admin.calls.length, 4, '1 lookup + 3 pages of 100');
+
+  const failing = { graphql: async () => ({ json: async () => ({ errors: [{ message: 'Throttled' }] }) }) };
+  assert.deepEqual(await loadCollectionMembers(failing, { handles: ['a'], productIds: many }), {}, 'failure = unknown, not empty');
+  assert.deepEqual(await loadCollectionMembers(admin, { handles: [], productIds: many }), {});
+});
+
+/* ── weight filter (variant weights) ────────────────────────────────── */
+
+const variant = (id, grams, extra = {}) => ({ id, title: `${grams} g`, price: '100.00', grams, available: true, ...extra });
+const W = [
+  product(11, { variants: [variant('v11a', 500), variant('v11b', 1000)] }),
+  product(12, { variants: [variant('v12a', 250)] }),
+  product(13, { variants: [variant('v13a', 1000, { available: false }), variant('v13b', 2000)] }),
+  product(14, { variants: [variant('v14a', null)] }), // no weight in Shopify
+];
+function weightModel(config, ui = {}, extra = {}) {
+  return kit.buildModel({
+    config: { layout: 'layout5', qs_filter_weight: true, qs_filter_type: false, qs_filter_brand: false, qs_filter_sort: false, ...config },
+    productsByHandle: { kids: W },
+    handles: ['kids'],
+    ui: { chip: 'all', dd: {}, ...ui },
+    pricing: { tiers: [], enabled: false },
+    symbol: '₹',
+    ...extra,
+  });
+}
+
+test('weight filter, automatic: one option per variant weight on the page', () => {
+  const m = weightModel({});
+  const menu = m.row.menus.find((x) => x.id === 'weight');
+  assert.ok(menu);
+  assert.equal(menu.label, 'Weight');
+  assert.deepEqual(menu.options.map((o) => o.value), ['', 'w:250', 'w:500', 'w:1000', 'w:2000']);
+  assert.equal(weightModel({ qs_filter_weight: false }).row.menus.length, 0, 'off by default');
+  const one = kit.buildModel({ config: { qs_filter_weight: true }, productsByHandle: { k: [W[1]] }, handles: ['k'], ui: {}, pricing: { tiers: [] } });
+  assert.equal(one.row.menus.find((x) => x.id === 'weight'), undefined, 'one weight only = no filter');
+});
+
+test('picking a weight keeps products with that variant and shows that variant', () => {
+  const m = weightModel({}, { dd: { weight: 'w:1000' } });
+  assert.deepEqual(m.cards.map((c) => c.id), [W[0].id, W[2].id], 'sold-out 1 kg variant still means the product has it');
+  assert.equal(m.cards[0].variantId, 'v11b', 'the card switches to its 1 kg variant');
+  assert.equal(m.cards[1].variantId, 'v13b', 'never a sold-out variant');
+  assert.equal(m.row.active, true);
+  const picked = weightModel({}, { dd: { weight: 'w:1000' } }, { pending: { [W[0].id]: 'v11a' } });
+  assert.equal(picked.cards[0].variantId, 'v11a', "the shopper's own pick wins");
+});
+
+test('the + and − buttons name the variant the card shows', () => {
+  const html = kit.render(weightModel({}, { dd: { weight: 'w:1000' } }, { selection: { v11b: { productId: W[0].id, qty: 1 } } }));
+  assert.match(html, /data-combo-action="qty-dec" data-product-id="gid:\/\/shopify\/Product\/11" data-variant-id="v11b"/);
+  assert.match(html, /data-combo-action="qty-inc" data-product-id="gid:\/\/shopify\/Product\/13" data-variant-id="v13b"/);
+});
+
+test('weight filter, ranges: named, checked, only ranges with products', () => {
+  const ranges = [
+    { min: 0, max: 500 }, { min: 500, max: 1000, label: 'Medium' }, { min: 1000, max: null },
+    { min: 5000, max: 9000 }, // nothing that heavy
+    { min: 800, max: 300 }, { min: 0, max: null }, // invalid
+  ];
+  assert.deepEqual(kit.weightRanges({ qs_filter_weight_ranges: ranges }).map((r) => r.label), ['Under 500 g', 'Medium', '1 kg+', '5 kg – 9 kg']);
+  const m = weightModel({ qs_filter_weight_mode: 'ranges', qs_filter_weight_ranges: ranges, qs_filter_weight_style: 'chips', qs_filter_weight_label: 'Pack size' });
+  assert.equal(m.row.menus.length, 0);
+  assert.equal(m.row.groups[0].label, 'Pack size');
+  assert.deepEqual(m.row.groups[0].options.map((o) => o.label), ['Under 500 g', 'Medium', '1 kg+']);
+  const medium = weightModel({ qs_filter_weight_mode: 'ranges', qs_filter_weight_ranges: ranges }, { dd: { weight: 'r:1' } });
+  assert.deepEqual(medium.cards.map((c) => c.id), [W[0].id], '500 g is in 500–1000, 1 kg is not');
+  assert.equal(medium.cards[0].variantId, 'v11a');
+  assert.equal(kit.weightFilter({ qs_filter_weight: true, qs_filter_weight_mode: 'ranges', qs_filter_weight_ranges: [] }), null, 'ranges mode without a range = off');
+});
+
+test('weight works next to collection groups', () => {
+  const m = weightModel({ qs_filter_groups: [{ id: 'y', label: 'Years', options: [{ handle: 'age' }] }] }, { dd: { weight: 'w:1000', 'g:y': 'age' } }, { collectionMembers: { age: [W[2].id, W[1].id] } });
+  assert.deepEqual(m.cards.map((c) => c.id), [W[2].id]);
+});
+
+test('the card selling price can be hidden; the popup keeps it', () => {
+  const priced = [product(21, { variants: [{ id: 'v21', title: 'Default Title', price: '168.00', compareAtPrice: '179.00', grams: 500, available: true }] })];
+  const draw = (config, ui = {}) => kit.render(kit.buildModel({
+    config, productsByHandle: { k: priced }, handles: ['k'], ui: { dd: {}, ...ui }, pricing: { tiers: [] }, symbol: '₹',
+  }));
+  assert.match(draw({}), /<div class="bxq-price"><b>₹168<\/b><s>₹179<\/s><\/div>/, 'shown by default');
+  assert.match(draw({ qs_show_price: false }), /<div class="bxq-price"><s>₹179<\/s><\/div>/);
+  assert.ok(!draw({ qs_show_price: false, qs_show_compare: false }).includes('bxq-price'), 'nothing left = no empty price row');
+  assert.match(draw({ qs_show_price: false }, { popup: priced[0].id }), /<b>₹168<\/b>/, 'popup still shows it');
+});
+
+test('weight and price sliders: ends on round steps, picked span filters and picks the variant', () => {
+  let m = weightModel({ qs_filter_weight_mode: 'slider', qs_filter_price: true, qs_filter_price_label: 'Budget' });
+  assert.equal(m.row.menus.length, 0);
+  const [w] = m.row.sliders;
+  assert.deepEqual([w.id, w.min, w.max, w.step, w.lo, w.hi, w.text], ['weight', 250, 2000, 25, 250, 2000, '250 g – 2 kg']);
+  assert.equal(m.row.sliders.length, 1, 'every product costs ₹100: no price slider');
+  m = weightModel({ qs_filter_weight_mode: 'slider' }, { dd: { weight: 's:900-1500' } });
+  assert.deepEqual(m.cards.map((c) => c.id), [W[0].id, W[2].id]);
+  assert.equal(m.cards[0].variantId, 'v11b');
+  assert.equal(m.row.sliders[0].text, '900 g – 1.5 kg');
+  assert.equal(m.row.active, true);
+  m = weightModel({ qs_filter_weight_mode: 'slider' }, { dd: { weight: 's:x-y' } });
+  assert.equal(m.cards.length, 4, 'a broken span filters nothing');
+  m = weightModel({ qs_filter_weight_mode: 'auto' }, { dd: { weight: 'r:5' } });
+  assert.equal(m.cards.length, 4, 'a range pick left over after switching to automatic filters nothing');
+});
+
+test('price slider uses each variant price', () => {
+  const priced = [
+    product(31, { variants: [{ id: 'a', title: 'S', price: '149.00', available: true }, { id: 'b', title: 'L', price: '399.00', available: true }] }),
+    product(32, { variants: [{ id: 'c', title: 'Default Title', price: '250.00', available: true }] }),
+  ];
+  const build = (ui = {}) => kit.buildModel({ config: { qs_filter_price: true }, productsByHandle: { k: priced }, handles: ['k'], ui: { dd: {}, ...ui }, pricing: { tiers: [] }, symbol: '₹' });
+  const sl = build().row.sliders[0];
+  assert.deepEqual([sl.min, sl.max, sl.step, sl.text], [145, 400, 5, '₹145 – ₹400']);
+  const m = build({ dd: { price: 's:300-400' } });
+  assert.deepEqual(m.cards.map((c) => [c.id, c.variantId]), [[priced[0].id, 'b']]);
+  assert.equal(kit.buildModel({ config: { qs_filter_price: true }, productsByHandle: { k: [priced[1]] }, handles: ['k'], ui: {}, pricing: { tiers: [] } }).row.sliders.length, 0, 'one price = no slider');
+});
+
+test('filters on the left (desktop only): every filter open as a list', () => {
+  const config = { qs_filter_position: 'left', qs_filter_weight: true, qs_filter_price: true, qs_filter_type: false, qs_filter_brand: false, qs_filter_sort: false };
+  const html = kit.render(weightModel(config, { dd: { weight: 'w:500' } }));
+  assert.match(html, /<div class="bxq-layout"><aside class="bxq-side" aria-label="Filters">/);
+  assert.match(html, /<button type="button" class="bxq-side-clear" data-combo-action="qs-clear">Clear all<\/button>/);
+  assert.match(html, /<p class="bxq-side-title">Weight<\/p>/);
+  assert.match(html, /class="bxq-side-opt is-on" aria-pressed="true" data-combo-action="qs-pick" data-menu="weight" data-value="w:500"/);
+  assert.ok(!html.includes('class="bxq-filters"'), 'no top row');
+  assert.match(html, /<div class="bxq-main"><div class="bxq-grid">/);
+  const phone = kit.render(weightModel(config, {}, { isMobile: true }));
+  assert.ok(!phone.includes('bxq-side'), 'phones keep filters on top');
+  assert.ok(phone.includes('class="bxq-filters"'));
+});
+
+test('slider inside a dropdown: chip names the span, stays open after letting go', () => {
+  const config = { qs_filter_weight_mode: 'slider', qs_slider_look: 'dropdown' };
+  let m = weightModel(config, { dd: { weight: 's:500-1000' } });
+  assert.equal(m.row.sliders.length, 0);
+  const menu = m.row.menus.find((x) => x.id === 'weight');
+  assert.ok(menu.slider);
+  let html = kit.render(m);
+  assert.match(html, /data-combo-action="qs-menu" data-menu="weight">500 g – 1 kg/);
+  html = kit.render(weightModel(config, { menu: 'weight' }));
+  assert.match(html, /<div class="bxq-menu bxq-menu--range"><div class="bxq-filters bxq-gchips bxq-range"/);
+  assert.match(html, /bxq-scrim/);
+});
+
+test('text sizes: only set ones become CSS variables; 6px allowed', () => {
+  const draw = (config) => kit.render(weightModel(config));
+  const plain = draw({});
+  assert.ok(!/--bxq-(title|price|ctext|chip)-fs/.test(plain), 'unset = the old sizes');
+  const set = draw({ qs_card_title_size: 12, qs_card_title_size_m: 6, qs_card_price_size: 20, qs_card_text_size_m: 2, qs_filter_font_size: 7 });
+  assert.match(set, /--bxq-title-fs:12px;--bxq-title-fs-m:6px;/);
+  assert.match(set, /--bxq-ctext-fs-m:6px;/, 'clamped to 6');
+  assert.match(set, /--bxq-price-fs:20px;--bxq-cmp-fs:15px;/);
+  assert.match(set, /--bxq-chip-fs:7px;/);
+  const mile = draw({ qs_top_label_size: 6, qs_top_label_size_m: 6, qs_top_sub_size: 6 });
+  assert.match(mile, /--bxq-lbl-fs:6px;--bxq-lbl-sub:6px;/);
+  assert.match(mile, /--bxq-lbl-fs-m:6px;/);
+});
+
+/* ── slots bottom bar (quantity boxes) ──────────────────────────────── */
+
+const QTY_TIERS = [{ id: 'q1', min_grams: 3, type: 'fixed_price', value: 469, label: '' }, { id: 'q2', min_grams: 5, type: 'percentage', value: 10, label: '' }];
+function slotsModel(selection = {}, { isMobile = false, config = {}, measure = 'quantity', tiers = QTY_TIERS } = {}) {
+  return kit.buildModel({
+    config: { qs_bar_style: 'slots', ...config },
+    productsByHandle: { k: [P[0], P[1]] }, handles: ['k'], ui: {}, selection, isMobile,
+    pricing: { measure, tiers, enabled: true, maxGrams: 20 }, symbol: '₹',
+  });
+}
+const slotHtml = (m) => kit.render(m).match(/<div class="bxq-bar[\s\S]*$/)?.[0] || '';
+
+test('slots: shown before anything is added, one empty box per item of the first offer', () => {
+  const html = slotHtml(slotsModel());
+  assert.match(html, /bxq-bar bxq-bar--slots/);
+  assert.match(html, /<div class="bxq-slots-msg is-muted"/);
+  assert.equal((html.match(/class="bxq-slot"/g) || []).length, 3);
+  assert.ok(!html.includes('bxq-go'), 'no Go to Cart before an item');
+});
+
+test('slots: items fill boxes with their pictures (tap = take one out); target moves to the next offer', () => {
+  const sel = { [P[0].variants[0].id]: { productId: P[0].id, qty: 2 } };
+  let html = slotHtml(slotsModel(sel));
+  assert.equal((html.match(/bxq-slot is-filled/g) || []).length, 2);
+  assert.equal((html.match(/class="bxq-slot"/g) || []).length, 1);
+  assert.match(html, /data-combo-action="box-dec" data-variant-id="gid:\/\/shopify\/ProductVariant\/1" aria-label="Remove Product 1"/);
+  assert.match(html, /bxq-go/);
+  html = slotHtml(slotsModel({ [P[0].variants[0].id]: { productId: P[0].id, qty: 3 } }));
+  assert.equal((html.match(/bxq-slot is-filled/g) || []).length + (html.match(/class="bxq-slot"/g) || []).length, 5, 'first offer reached: boxes for the next (5)');
+  html = slotHtml(slotsModel({ [P[0].variants[0].id]: { productId: P[0].id, qty: 7 } }));
+  assert.equal((html.match(/bxq-slot is-filled/g) || []).length, 7, 'all offers reached, more items: a box each');
+});
+
+test('slots: at most 8 boxes (5 on phones), the last one counts', () => {
+  const big = [{ id: 'q', min_grams: 12, type: 'percentage', value: 10, label: '' }];
+  assert.match(slotHtml(slotsModel({}, { tiers: big })), /<span class="bxq-slot is-more" role="listitem">0\/12<\/span>/);
+  assert.equal((slotHtml(slotsModel({}, { tiers: big, isMobile: true })).match(/class="bxq-slot[ "]/g) || []).length, 5);
+});
+
+test('slots: weight / value boxes get the full bar instead', () => {
+  const html = slotHtml(slotsModel({ [P[0].variants[0].id]: { productId: P[0].id, qty: 1 } }, { measure: 'weight', tiers: [{ id: 'w', min_grams: 1000, type: 'percentage', value: 10, label: '' }] }));
+  assert.match(html, /bxq-bar--full/);
+  assert.ok(!html.includes('bxq-slots'));
+  assert.equal(slotHtml(slotsModel({}, { measure: 'weight', tiers: [{ id: 'w', min_grams: 1000, type: 'percentage', value: 10, label: '' }] })), '', 'and no empty bar');
+});
+
+test('box list: line prices shown by default, hidden with qs_sheet_show_price off', () => {
+  const selection = { [P[0].variants[0].id]: { productId: P[0].id, qty: 2 } };
+  const list = (config) => kit.render(model(config, { sheetOpen: true }, { selection }));
+  const shown = list({});
+  assert.match(shown, /class="bxq-sheet"/);
+  assert.match(shown, /<div class="bxq-line-price">₹200<\/div>/);
+  const hidden = list({ qs_sheet_show_price: false });
+  assert.match(hidden, /class="bxq-line-name">Product 1</, 'the line is still there');
+  assert.doesNotMatch(hidden, /bxq-line-price/);
+});
+
+test('Type / Brand / own tag / Sort as rows of chips (qs_filter_dd_style)', () => {
+  const typed = [
+    product(11, { productType: 'Rings', vendor: 'Silverline', tags: ['Oxidised'] }),
+    product(12, { productType: 'Chains', vendor: 'Gopi', tags: ['Plain'] }),
+    product(13, { productType: 'Rings', vendor: 'Gopi', tags: ['Plain'] }),
+  ];
+  const build = (config, ui = {}) => kit.buildModel({
+    config: { layout: 'layout6', tab_count: 1, col_1: 'jewels', qs_filter_custom: true, qs_filter_custom_label: 'Finish', qs_filter_custom_tags: 'Oxidised, Plain', ...config },
+    productsByHandle: { jewels: typed }, handles: ['jewels'], ui: { chip: 'all', dd: {}, ...ui }, pricing: { tiers: [], enabled: false },
+  });
+  // Default: dropdowns, as before.
+  const drop = build({});
+  assert.deepEqual(drop.row.menus.map((m) => m.id), ['type', 'brand', 'custom', 'sort']);
+  assert.equal((drop.row.groups || []).length, 0);
+  // Chips: each its own labelled row, no dropdowns; the picked value is on.
+  const chips = build({ qs_filter_dd_style: 'chips' }, { dd: { type: 'Rings', sort: 'price_asc' } });
+  assert.equal(chips.row.menus.length, 0);
+  assert.deepEqual(chips.row.groups.map((g) => [g.id, g.label]), [['type', 'Type'], ['brand', 'Brand'], ['custom', 'Finish'], ['sort', 'Sort By']]);
+  const type = chips.row.groups[0];
+  assert.deepEqual(type.options.map((o) => [o.label, o.on]), [['Chains', false], ['Rings', true]], 'A to Z, like the dropdown');
+  assert.deepEqual(chips.row.groups[3].options.filter((o) => o.on).map((o) => o.value), ['price_asc']);
+  assert.deepEqual(build({ qs_filter_dd_style: 'chips' }).row.groups[3].options.filter((o) => o.on).map((o) => o.value), ['featured'], 'no sort picked = Featured on');
+  // The pick filters like the dropdown did.
+  assert.deepEqual(chips.cards.map((c) => c.id), [typed[0].id, typed[2].id]);
+  // Drawn as chip rows with qs-group, a tap on the picked chip clears it.
+  const html = kit.render(chips);
+  assert.match(html, /bxq-gchips[^>]*aria-label="Type"/);
+  assert.match(html, /data-combo-action="qs-group" data-menu="type" data-value="Rings"/);
+  assert.doesNotMatch(html, /data-combo-action="qs-menu" data-menu="type"/);
+  const ui = { dd: { type: 'Rings' } };
+  const el = (menu, value) => ({ getAttribute: (k) => ({ 'data-menu': menu, 'data-value': value }[k]) });
+  kit.applyUiAction(ui, 'qs-group', el('type', 'Rings'));
+  assert.equal(ui.dd.type, '');
+  kit.applyUiAction(ui, 'qs-group', el('sort', 'name'));
+  assert.equal(ui.dd.sort, 'name');
+});
+
+test('each filter has its own style: only Type as chips', () => {
+  const typed = [
+    product(21, { productType: 'Rings', vendor: 'Silverline' }),
+    product(22, { productType: 'Chains', vendor: 'Gopi' }),
+  ];
+  const build = (config) => kit.buildModel({
+    config: { layout: 'layout6', tab_count: 1, col_1: 'jewels', ...config },
+    productsByHandle: { jewels: typed }, handles: ['jewels'], ui: { chip: 'all', dd: {} }, pricing: { tiers: [], enabled: false },
+  });
+  const typeOnly = build({ qs_filter_type_style: 'chips' });
+  assert.deepEqual(typeOnly.row.groups.map((g) => g.id), ['type']);
+  assert.deepEqual(typeOnly.row.menus.map((m) => m.id), ['brand', 'sort']);
+  // A filter's own choice wins over the old all-in-one setting.
+  const mixed = build({ qs_filter_dd_style: 'chips', qs_filter_sort_style: 'dropdown' });
+  assert.deepEqual(mixed.row.groups.map((g) => g.id), ['type', 'brand']);
+  assert.deepEqual(mixed.row.menus.map((m) => m.id), ['sort']);
+});
+
+test('builder note: why Type / Brand / own tag filter is hidden on this page', async () => {
+  const { filterHiddenNote } = await import('../../app/utils/combo-filter-notes.shared.js');
+  assert.equal(filterHiddenNote('type', null), null, 'products not loaded yet');
+  assert.equal(filterHiddenNote('type', ['Saree', 'Kurta set']), null, 'two types: it shows');
+  assert.match(filterHiddenNote('type', []), /no product type/);
+  assert.match(filterHiddenNote('type', ['Saree']), /same product type \("Saree"\)/);
+  assert.match(filterHiddenNote('brand', ['Naanal']), /same vendor/);
+  assert.equal(filterHiddenNote('custom', [], ''), null, 'no tags typed yet');
+  assert.match(filterHiddenNote('custom', [], 'Silk, Cotton'), /none of these tags/);
+});

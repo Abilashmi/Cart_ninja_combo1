@@ -1,0 +1,370 @@
+// Run with: node --import ./tests/packs/register.mjs --test tests/pairing
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  computeOrderPairs, partnersOf, matchProducts, buildRulesFromPlan, parsePromptHeuristically,
+  ruleKey, toFbtRule, toUpsellRule, fbtRuleKey, upsellRuleKey, mergeInstructionRules, instructionsHash,
+} from '../../app/utils/pairing.shared.js';
+
+const P = (id, title, extra = {}) => ({ id: `gid://shopify/Product/${id}`, title, handle: title.toLowerCase().replace(/\s+/g, '-'), image: '', price: '10.00', productType: '', tags: [], collectionIds: [], ...extra });
+
+const CATALOG = [
+  P(1, 'Boys Joggers', { productType: 'Bottoms', collectionIds: ['c-kids'] }),
+  P(2, 'Girls Joggers', { productType: 'Bottoms', collectionIds: ['c-kids'] }),
+  P(3, 'Ankle Socks', { productType: 'Socks', tags: ['accessory'] }),
+  P(4, 'Crew Socks', { productType: 'Socks', tags: ['accessory'] }),
+  P(5, 'Coffee Mug', { collectionIds: ['c-kitchen'] }),
+  P(6, 'Coffee Beans', { collectionIds: ['c-kitchen'] }),
+  P(7, 'Milk Frother', { collectionIds: ['c-kitchen'] }),
+  P(8, 'Cap'),
+];
+const COLLECTIONS = [{ id: 'c-kids', title: 'Kids' }, { id: 'c-kitchen', title: 'Kitchen' }];
+
+const order = (id, ...productIds) => ({ id, products: productIds.map((p) => ({ id: `gid://shopify/Product/${p}`, title: `P${p}` })) });
+
+test('order pairs: counts orders together, shares and lift; one product per order counted once', () => {
+  const orders = [
+    order('o1', 1, 3), order('o2', 1, 3, 3), order('o3', 1, 4), order('o4', 1), order('o5', 5, 6),
+  ];
+  const { totalOrders, multiItemOrders, pairs } = computeOrderPairs(orders);
+  assert.equal(totalOrders, 5);
+  assert.equal(multiItemOrders, 4);
+  const top = pairs[0];
+  assert.deepEqual([top.a.id, top.b.id], ['1', '3']);
+  assert.equal(top.together, 2, 'duplicate line of the same product is one order, not two');
+  assert.equal(top.aToB, 50, 'joggers were in 4 orders, 2 of them had socks');
+  assert.equal(top.bToA, 100);
+  assert.ok(top.lift > 1);
+});
+
+test('order pairs: minTogether drops rare pairs; orders without products are ignored', () => {
+  const { totalOrders, pairs } = computeOrderPairs([order('a', 1, 3), order('b', 1, 3), order('c', 5, 6), { id: 'd', products: [] }], { minTogether: 2 });
+  assert.equal(totalOrders, 3);
+  assert.equal(pairs.length, 1);
+});
+
+test('partnersOf ranks the products bought most with a product, either side of the pair', () => {
+  const { pairs } = computeOrderPairs([order(1, 1, 3), order(2, 1, 3), order(3, 4, 1), order(4, 8, 3)]);
+  assert.deepEqual(partnersOf(pairs, 'gid://shopify/Product/1', 5).map((x) => x.id), ['3', '4']);
+  assert.deepEqual(partnersOf(pairs, '3', 5).map((x) => x.id), ['1', '8']);
+});
+
+test('matchProducts: exact title, every-word group, plural tolerant, and title-in-sentence', () => {
+  assert.equal(matchProducts('coffee mug', CATALOG).products[0].title, 'Coffee Mug');
+  const joggers = matchProducts('joggers', CATALOG);
+  assert.equal(joggers.status, 'many');
+  assert.equal(joggers.products.length, 2);
+  assert.equal(matchProducts('sock', CATALOG).products.length, 2, '"sock" finds "Socks"');
+  assert.equal(matchProducts('the milk frother please', CATALOG).products[0].title, 'Milk Frother');
+  assert.equal(matchProducts('Snowboard', CATALOG).status, 'not_found');
+});
+
+test('plan → rules: a group to a bigger group gives each product its own picks; never itself', () => {
+  const plan = { rules: [{ trigger: { products: ['joggers'] }, offer: { products: ['socks', 'Boys Joggers', 'Cap'] } }] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: CATALOG, collections: COLLECTIONS, maxOffers: 2 });
+  assert.deepEqual(rules.map((r) => r.triggerProducts.map((p) => p.title)), [['Boys Joggers'], ['Girls Joggers']]);
+  assert.ok(rules.every((r) => r.offerProducts.length === 2));
+  assert.ok(rules.every((r) => !r.offerProducts.some((p) => p.id === r.triggerProducts[0].id)), 'a product is never recommended with itself');
+});
+
+test('plan → rules: small groups stay one shared rule', () => {
+  const plan = { rules: [{ trigger: { products: ['joggers'] }, offer: { products: ['socks'] } }] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: CATALOG, maxOffers: 3 });
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].triggerProducts.length, 2);
+});
+
+test('plan → rules: when several offers match, the ones bought together most win', () => {
+  const { pairs } = computeOrderPairs([order(1, 1, 4), order(2, 1, 4), order(3, 1, 3)]);
+  const plan = { rules: [{ trigger: { products: ['Boys Joggers'] }, offer: { products: ['socks'], count: 1 } }] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: CATALOG, pairs });
+  assert.deepEqual(rules[0].offerProducts.map((p) => p.title), ['Crew Socks']);
+});
+
+test('plan → rules: collections, product types and tags resolve to real products', () => {
+  const plan = { rules: [
+    { trigger: { collections: ['kitchen'] }, offer: { products: ['Cap'] } },
+    { trigger: { productTypes: ['Bottoms'] }, offer: { tags: ['accessory'] } },
+  ] };
+  const { rules, warnings } = buildRulesFromPlan(plan, { catalog: CATALOG, collections: COLLECTIONS, maxOffers: 3 });
+  assert.equal(rules.length, 2);
+  assert.equal(rules[0].triggerProducts.length, 3);
+  assert.deepEqual(rules[1].offerProducts.map((p) => p.title).sort(), ['Ankle Socks', 'Crew Socks']);
+  assert.deepEqual(warnings, []);
+});
+
+test('plan → rules: unknown products are reported and never invented; empty offers drop the rule', () => {
+  const plan = { rules: [
+    { trigger: { products: ['Snowboard'] }, offer: { products: ['Cap'] } },
+    { trigger: { products: ['Cap'] }, offer: { products: ['Unicorn Hat'] } },
+  ] };
+  const { rules, warnings } = buildRulesFromPlan(plan, { catalog: CATALOG, collections: COLLECTIONS });
+  assert.equal(rules.length, 0);
+  assert.ok(warnings.some((w) => w.includes('"Snowboard"')));
+  assert.ok(warnings.some((w) => w.includes('"Unicorn Hat"')));
+});
+
+test('plan → rules: "what customers buy with it" makes one rule per trigger from past orders', () => {
+  const { pairs } = computeOrderPairs([order(1, 5, 6), order(2, 5, 6), order(3, 5, 7), order(4, 6, 7)]);
+  const plan = { rules: [{ trigger: { collections: ['Kitchen'] }, offer: { fromOrderHistory: true, count: 1 } }] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: CATALOG, collections: COLLECTIONS, pairs });
+  const byTrigger = Object.fromEntries(rules.map((r) => [r.triggerProducts[0].title, r.offerProducts.map((p) => p.title)]));
+  assert.deepEqual(byTrigger['Coffee Mug'], ['Coffee Beans']);
+  assert.deepEqual(byTrigger['Coffee Beans'], ['Coffee Mug']);
+  assert.equal(rules.every((r) => r.basis === 'orders'), true);
+});
+
+test('plan → rules: history with no orders for a product warns instead of guessing', () => {
+  const plan = { rules: [{ trigger: { products: ['Cap'] }, offer: { fromOrderHistory: true } }] };
+  const { rules, warnings } = buildRulesFromPlan(plan, { catalog: CATALOG, pairs: [] });
+  assert.equal(rules.length, 0);
+  assert.ok(warnings[0].includes('Cap'));
+});
+
+test('plan → rules: "all products" trigger and duplicate rules merged', () => {
+  const plan = { rules: [
+    { trigger: { allProducts: true }, offer: { products: ['Cap'] } },
+    { trigger: { allProducts: true }, offer: { products: ['cap'] } },
+  ] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: CATALOG });
+  assert.equal(rules.length, 1);
+  assert.equal(rules[0].allProducts, true);
+  assert.deepEqual(rules[0].triggerProducts, []);
+});
+
+test('heuristic parser handles the common phrasings', () => {
+  const { rules } = parsePromptHeuristically([
+    'Pair Boys Joggers with Ankle Socks, Cap',
+    'Coffee Mug -> Coffee Beans and Milk Frother',
+    'all products: Cap',
+    'Crew Socks with what customers usually buy',
+    'hello there',
+  ].join('\n'));
+  assert.equal(rules.length, 4);
+  assert.deepEqual(rules[0], { trigger: { products: ['Boys Joggers'] }, offer: { products: ['Ankle Socks', 'Cap'] } });
+  assert.deepEqual(rules[1].offer.products, ['Coffee Beans', 'Milk Frother']);
+  assert.equal(rules[2].trigger.allProducts, true);
+  assert.equal(rules[3].offer.fromOrderHistory, true);
+});
+
+test('surface shapes: FBT and upsell rules, and their keys match the generic rule key', () => {
+  const generic = { name: 'Boys Joggers', allProducts: false, triggerProducts: [{ id: 'gid://shopify/Product/1', title: 'Boys Joggers' }], offerProducts: [{ id: 'gid://shopify/Product/3', title: 'Ankle Socks' }] };
+  const fbt = toFbtRule(generic, 'r1');
+  assert.equal(fbt.displayScope, 'per_product');
+  assert.deepEqual(fbt.fbtProducts, generic.offerProducts);
+  const up = toUpsellRule(generic, 'r2');
+  assert.equal(up.triggerType, 'specific');
+  assert.deepEqual(up.upsellProductIds, ['gid://shopify/Product/3']);
+  assert.deepEqual(up.upsellProductDetails, generic.offerProducts);
+  const key = ruleKey(['1'], ['gid://shopify/Product/3']);
+  assert.equal(fbtRuleKey(fbt), key);
+  assert.equal(upsellRuleKey(up), key);
+
+  const everywhere = toFbtRule({ ...generic, allProducts: true, triggerProducts: [] }, 'r3');
+  assert.equal(everywhere.displayScope, 'all');
+  assert.equal(toUpsellRule({ ...generic, allProducts: true, triggerProducts: [] }).triggerType, 'all');
+});
+
+// ── FBT AI-Powered mode: instructions first ──
+const offer = (n, title) => ({ id: `gid://shopify/Product/${n}`, title, handle: '', image: '', price: '10.00' });
+const autoRule = (t, ...offers) => ({ name: `AI: ${t.title}`, trigger_products: [t], fbt_products: offers });
+
+test('instructions: named products get their offers first, AI fills up to the count; others untouched', () => {
+  const J = offer(1, 'Boys Joggers'); const S = offer(3, 'Ankle Socks'); const C = offer(8, 'Cap'); const M = offer(5, 'Coffee Mug'); const B = offer(6, 'Coffee Beans');
+  const auto = [autoRule(J, C, M), autoRule(M, B, J)];
+  const pinned = [{ allProducts: false, triggerProducts: [J], offerProducts: [S] }];
+  const { rules, pinnedProducts } = mergeInstructionRules(auto, pinned, 2);
+  assert.equal(pinnedProducts, 1);
+  const byTrigger = Object.fromEntries(rules.map((r) => [r.trigger_products[0].title, r.fbt_products.map((p) => p.title)]));
+  assert.deepEqual(byTrigger['Boys Joggers'], ['Ankle Socks', 'Cap'], 'instruction offer first, then the best AI pick');
+  assert.deepEqual(byTrigger['Coffee Mug'], ['Coffee Beans', 'Boys Joggers']);
+  assert.equal(rules.find((r) => r.trigger_products[0].title === 'Boys Joggers').name, 'Your rule: Boys Joggers');
+  assert.equal(rules.find((r) => r.trigger_products[0].title === 'Coffee Mug').name, 'AI: Coffee Mug');
+});
+
+test('instructions: more offers than the count are all kept; a product AI skipped still gets its rule', () => {
+  const J = offer(1, 'Boys Joggers'); const S = offer(3, 'Ankle Socks'); const C = offer(8, 'Cap'); const T = offer(9, 'Tee');
+  const pinned = [{ allProducts: false, triggerProducts: [T], offerProducts: [S, C, J] }];
+  const { rules } = mergeInstructionRules([], pinned, 1);
+  assert.equal(rules.length, 1);
+  assert.deepEqual(rules[0].fbt_products.map((p) => p.title), ['Ankle Socks', 'Cap', 'Boys Joggers']);
+});
+
+test('instructions: "every product" offers go on every catalog product, never on themselves', () => {
+  const J = offer(1, 'Boys Joggers'); const C = offer(8, 'Cap'); const M = offer(5, 'Coffee Mug');
+  const catalog = [{ gid: J.id, title: J.title }, { gid: C.id, title: C.title }, { gid: M.id, title: M.title }];
+  const { rules } = mergeInstructionRules([autoRule(J, M)], [{ allProducts: true, triggerProducts: [], offerProducts: [C] }], 2, catalog);
+  const byTrigger = Object.fromEntries(rules.map((r) => [r.trigger_products[0].title, r.fbt_products.map((p) => p.title)]));
+  assert.deepEqual(byTrigger['Boys Joggers'], ['Cap', 'Coffee Mug']);
+  assert.deepEqual(byTrigger['Coffee Mug'], ['Cap']);
+  assert.equal(byTrigger.Cap, undefined, 'Cap is not recommended on its own page, and nothing else is known for it');
+});
+
+test('instructions: no instructions = the automatic rules unchanged', () => {
+  const J = offer(1, 'Boys Joggers'); const M = offer(5, 'Coffee Mug');
+  const auto = [autoRule(J, M)];
+  const { rules, pinnedProducts } = mergeInstructionRules(auto, [], 3);
+  assert.equal(pinnedProducts, 0);
+  assert.deepEqual(rules.map((r) => [r.name, r.fbt_products.map((p) => p.id)]), [['AI: Boys Joggers', [M.id]]]);
+});
+
+test('instructionsHash changes with the text or the count, not with spacing', () => {
+  assert.equal(instructionsHash('socks with joggers', 3), instructionsHash('  socks   with joggers ', 3));
+  assert.notEqual(instructionsHash('socks with joggers', 3), instructionsHash('socks with joggers', 4));
+  assert.notEqual(instructionsHash('socks with joggers', 3), instructionsHash('caps with joggers', 3));
+});
+
+// ── "match the tops and bottoms" (words that are not in any product title) ──
+import { matchGroup } from '../../app/utils/pairing.shared.js';
+
+const CLOTHES = [
+  P(21, 'Cotton T-Shirt'), P(22, 'Oversized Hoodie'), P(23, 'Linen Kurta'),
+  P(24, 'Boys Joggers'), P(25, 'Slim Fit Jeans'), P(26, 'Cargo Pants'),
+  P(27, 'Leather Belt'),
+];
+
+test('"match the bottom and top": both ways, tops and bottoms found by their usual names', () => {
+  const plan = parsePromptHeuristically('match the bottom and top');
+  assert.equal(plan.rules.length, 2);
+  const { rules, warnings } = buildRulesFromPlan(plan, { catalog: CLOTHES, maxOffers: 3 });
+  assert.deepEqual(warnings.filter((w) => w.includes('No product')), []);
+  const byFirst = Object.fromEntries(rules.map((r) => [r.triggerProducts[0].title, r]));
+  assert.deepEqual(byFirst['Boys Joggers'].triggerProducts.map((p) => p.title).sort(), ['Boys Joggers', 'Cargo Pants', 'Slim Fit Jeans']);
+  assert.deepEqual(byFirst['Boys Joggers'].offerProducts.map((p) => p.title).sort(), ['Cotton T-Shirt', 'Linen Kurta', 'Oversized Hoodie']);
+  assert.deepEqual(byFirst['Cotton T-Shirt'].offerProducts.map((p) => p.title).sort(), ['Boys Joggers', 'Cargo Pants', 'Slim Fit Jeans']);
+  assert.ok(!rules.some((r) => [...r.triggerProducts, ...r.offerProducts].some((p) => p.title === 'Leather Belt')), 'a belt is neither');
+});
+
+test('group words prefer the store\'s own collection, type or tag over the built-in word list', () => {
+  const catalog = [
+    { ...P(31, 'Classic Polo'), collectionIds: ['c-tops'] },
+    { ...P(32, 'Cotton T-Shirt'), collectionIds: [] },
+    { ...P(33, 'Denim Shorts'), productType: 'Bottom Wear' },
+    { ...P(34, 'Yoga Leggings'), tags: ['bottoms'] },
+  ];
+  const tops = matchGroup('tops', catalog, [{ id: 'c-tops', title: 'Tops' }]);
+  assert.deepEqual(tops.products.map((p) => p.title), ['Classic Polo'], 'the merchant\'s Tops collection wins');
+  assert.match(tops.via, /collection/);
+  assert.deepEqual(matchGroup('bottoms', catalog).products.map((p) => p.title), ['Denim Shorts'], 'product type before tags');
+  assert.equal(matchGroup('spaceships', catalog), null);
+});
+
+test('more phrasings: "pair X & Y", "X and Y together", and "with" still one way', () => {
+  assert.equal(parsePromptHeuristically('pair tops & bottoms').rules.length, 2);
+  assert.equal(parsePromptHeuristically('tops and bottoms together').rules.length, 2);
+  const oneWay = parsePromptHeuristically('pair joggers with socks and caps').rules;
+  assert.equal(oneWay.length, 1);
+  assert.deepEqual(oneWay[0].offer.products, ['socks', 'caps']);
+});
+
+test('unknown group word still warns instead of guessing', () => {
+  const { rules, warnings } = buildRulesFromPlan(parsePromptHeuristically('match spaceships and rockets'), { catalog: CLOTHES });
+  assert.equal(rules.length, 0);
+  assert.ok(warnings.some((w) => w.includes('"spaceships"')));
+});
+
+// ── Instruction-style prompts (a merchant writing steps, not pairings) ──
+import { rankOffersFor } from '../../app/utils/pairing.shared.js';
+import { readPlanReply } from '../../app/services/pairing-assistant.server.js';
+
+const STORE = [
+  { ...P(41, 'Girls Purple Denim Waistcoat'), productType: 'Girls Top', price: '799' },
+  { ...P(42, 'Girls Peplum Top & Wide Leg Jeans Co-ord Set'), productType: 'Girls Co-Ord Set', price: '1299' },
+  { ...P(43, 'Girls Wide Leg Jeans Indigo'), productType: 'Girls Jeans', price: '899' },
+  { ...P(44, 'Boys Slim Fit Jeans'), productType: 'Boys jeans', price: '899' },
+  { ...P(45, 'Girls Denim Shorts'), productType: 'Girls Shorts', price: '599' },
+];
+
+test('a name that is exactly one of the store\'s product types means that type (not co-ords that mention it)', () => {
+  const { rules } = buildRulesFromPlan({ rules: [{ trigger: { productTypes: ['Girls Top'] }, offer: { products: ['Girls Jeans', 'Girls Shorts'] } }] }, { catalog: STORE, maxOffers: 5 });
+  assert.deepEqual(rules[0].offerProducts.map((p) => p.title).sort(), ['Girls Denim Shorts', 'Girls Wide Leg Jeans Indigo']);
+});
+
+test('ranking: same gender first, a boys\' item never ahead of a girls\' one for a girls\' product', () => {
+  const ranked = rankOffersFor(STORE[0], [STORE[3], STORE[2], STORE[4]]);
+  assert.equal(ranked[ranked.length - 1].title, 'Boys Slim Fit Jeans');
+});
+
+test('steps-style prompt: instruction lines ignored, "if it\'s a top, recommend bottoms like jeans" understood', () => {
+  const plan = parsePromptHeuristically([
+    "- First identify the main product's category: top, bottom or co-ord",
+    "- If the product is a top, recommend bottoms like jeans, shorts and skirts",
+    '- Display recommendations horizontally',
+  ].join('\n'));
+  assert.equal(plan.rules.length, 1);
+  assert.deepEqual(plan.rules[0].trigger.products, ['top']);
+  assert.ok(plan.rules[0].offer.products.includes('jeans') && plan.rules[0].offer.products.includes('shorts'));
+});
+
+test('model reply read even when wrapped in text or cut off mid-way', () => {
+  assert.equal(readPlanReply('Sure! {"rules":[{"trigger":{"products":["a"]},"offer":{"products":["b"]}}]} hope that helps').rules.length, 1);
+  const cut = '{"rules":[{"trigger":{"products":["a"]},"offer":{"products":["b"]}},{"trigger":{"products":["c"]},"offer":{"products":["Knit N Kn';
+  assert.deepEqual(readPlanReply(cut).rules.map((r) => r.trigger.products[0]), ['a']);
+  assert.equal(readPlanReply('no json here'), null);
+});
+
+test('a long title copied only in part still finds the product', () => {
+  const cat = [P(51, 'Knit N Knot Girls Denim Casual Shirt Full Sleeves, Stone-Washed Indigo Blue, Double Chest Pockets')];
+  assert.equal(matchProducts('Knit N Knot Girls Denim Casual Shirt Full Sleeves, Stone-Washed Indigo Blue, Dou', cat).status, 'found');
+});
+
+// ── "2 topwear, 2 bottomwear and 1 dress/co-ord" for every kind (knitnknot.in) ──
+import { kindOfType, typesByKind, kindNamed, fillEveryType } from '../../app/utils/pairing.shared.js';
+
+const SHOP = [
+  { ...P(61, 'Girls Wide Leg Jeans'), productType: 'Girls Jeans', price: '899' },
+  { ...P(62, 'Girls Bell Bottom Jeans'), productType: 'Girls Jeans', price: '999' },
+  { ...P(63, 'Girls Denim Skirt'), productType: 'Girls Skirt', price: '799' },
+  { ...P(64, 'Girls Denim Palazzo'), productType: 'Girls Palazzo', price: '899' },
+  { ...P(65, 'Girls Peplum Top'), productType: 'Girls Top', price: '799' },
+  { ...P(66, 'Girls Denim Waistcoat'), productType: 'Girls Top', price: '799' },
+  { ...P(67, 'Girls Shirt Dress'), productType: 'Girls Dresses', price: '1199' },
+  { ...P(68, 'Girls Top & Palazzo Co-ord Set'), productType: 'Girls Co-Ord Set', price: '1299' },
+  { ...P(69, 'Boys Slim Jeans'), productType: 'Boys jeans', price: '899' },
+  { ...P(70, 'Boys Denim Shirt'), productType: 'Boys Shirt', price: '799' },
+];
+
+test('kinds: the store\'s own types sorted into topwear, bottomwear, dresses, co-ord sets, sets', () => {
+  assert.equal(kindOfType('Girls Co-Ord Set'), 'co-ord sets');
+  assert.equal(kindOfType('Boys T-Shirt Sets'), 'sets');
+  assert.equal(kindOfType('Girls Dresses'), 'dresses');
+  assert.equal(kindOfType('Blazer & Tshirt'), 'topwear');
+  assert.equal(kindOfType('Girls Cargo Jeans'), 'bottomwear');
+  assert.equal(kindOfType('Snap Cart Drawer - Shipping Protection'), null);
+  assert.deepEqual(typesByKind(SHOP).bottomwear.sort(), ['Boys jeans', 'Girls Jeans', 'Girls Palazzo', 'Girls Skirt']);
+  assert.equal(kindNamed('topwear'), 'topwear');
+  assert.equal(kindNamed('bottom wear'), 'bottomwear');
+  assert.equal(kindNamed('co-ords'), 'co-ord sets');
+  assert.equal(kindNamed('dresses'), 'dresses');
+});
+
+test('a mix for one product = one rule, offers in the order asked; picks alternate between the named types', () => {
+  const plan = { rules: [
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['topwear'], count: 2 } },
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['Girls Palazzo', 'Girls Skirt'], count: 2 } },
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['dresses', 'co-ord sets'], count: 1 } },
+  ] };
+  const { rules } = buildRulesFromPlan(plan, { catalog: SHOP, maxOffers: 5 });
+  assert.equal(rules.length, 2, 'one rule per pair of jeans');
+  const types = rules[0].offerProducts.map((p) => SHOP.find((x) => x.id === p.id).productType);
+  assert.deepEqual(types, ['Girls Top', 'Girls Top', 'Girls Palazzo', 'Girls Skirt', 'Girls Dresses']);
+});
+
+test('a general idea with one example reaches every type; boys get boys\' items only', () => {
+  const plan = { rules: [
+    { trigger: { productTypes: ['Girls Jeans'] }, offer: { products: ['Girls Top'], count: 2 } },
+    { trigger: { productTypes: ['Girls Top'] }, offer: { products: ['Girls Jeans'], count: 2 } },
+  ] };
+  const filled = fillEveryType(plan, SHOP);
+  assert.deepEqual(filled.missingKinds.sort(), ['co-ord sets', 'dresses'], 'kinds with no example at all are left to the model');
+  const { rules } = buildRulesFromPlan({ rules: filled.rules }, { catalog: SHOP, maxOffers: 5 });
+  const byTitle = Object.fromEntries(rules.flatMap((r) => r.triggerProducts.map((t) => [t.title, r.offerProducts.map((p) => p.title)])));
+  assert.ok(byTitle['Girls Denim Skirt'].every((t) => /Top|Waistcoat/.test(t)), 'a skirt follows the jeans example: tops');
+  assert.deepEqual(byTitle['Boys Slim Jeans'], ['Boys Denim Shirt'], 'boys\' jeans get the boys\' top, never a girls\' one');
+  assert.ok(byTitle['Boys Denim Shirt'].every((t) => t.startsWith('Boys')));
+});
+
+test('"dresses" and "dress" are the same word', () => {
+  assert.equal(matchGroup('dresses', SHOP).products[0].title, 'Girls Shirt Dress');
+});

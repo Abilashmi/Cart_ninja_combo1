@@ -93,7 +93,7 @@ test('settings: defaults, cleaned values, office hours', () => {
 test('merchant writes, BRIX AI answers from the guide with the store context', async () => {
   const db = fakeDb();
   const prompts = [];
-  const llm = async (messages) => { prompts.push(messages); return 'Go to Online Store > Themes > Customize > App embeds and switch on "Custom Cart Drawer".'; };
+  const llm = async (messages) => { prompts.push(messages); return 'Go to Online Store > Themes > Customize > App embeds and switch on "BRIX Cart & Combo".'; };
   const sent = await chat.merchantSend(SHOP, { body: 'The drawer does not show', context: { plan: 'starter', embed: 'off', page: '/app', features: { cart: true, cod: false } } }, deps(db, llm));
   assert.equal(sent.aiWillAnswer, true);
   const answer = await chat.aiAnswer(SHOP, deps(db, llm));

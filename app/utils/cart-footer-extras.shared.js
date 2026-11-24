@@ -106,6 +106,7 @@ export function createFooterExtras() {
   function defaultTrust() {
     return {
       enabled: false,
+      placement: 'below',
       layout: 'stacked',
       iconSize: 26,
       iconColor: '#111827',
@@ -183,6 +184,7 @@ export function createFooterExtras() {
     }
     return {
       enabled: r.enabled === true || r.enabled === 1 || r.enabled === '1',
+      placement: pick(r.placement, ['above', 'below'], d.placement),
       layout: pick(r.layout, ['stacked', 'inline'], d.layout),
       iconSize: num(r.iconSize, d.iconSize, 12, 56),
       iconColor: hex(r.iconColor, d.iconColor),
@@ -232,7 +234,8 @@ export function createFooterExtras() {
   function trustHtml(cfg) {
     if (!cfg || !cfg.enabled || !cfg.items.length) return '';
     var stacked = cfg.layout === 'stacked';
-    var box = 'display:flex;gap:' + cfg.gap + 'px;margin-top:' + cfg.marginTop + 'px;padding:' + cfg.padding + 'px;border-radius:' + cfg.radius + 'px;'
+    // Above the Checkout button the space goes under the badges, else over them.
+    var box = 'display:flex;gap:' + cfg.gap + 'px;margin-' + (cfg.placement === 'above' ? 'bottom' : 'top') + ':' + cfg.marginTop + 'px;padding:' + cfg.padding + 'px;border-radius:' + cfg.radius + 'px;'
       + (cfg.bgColor ? 'background:' + cfg.bgColor + ';' : '') + (cfg.borderColor ? 'border:1px solid ' + cfg.borderColor + ';' : '');
     var out = '<div class="cc-trust" data-cc-section="trust-badges" style="' + box + '">';
     for (var i = 0; i < cfg.items.length; i++) {

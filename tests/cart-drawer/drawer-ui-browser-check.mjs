@@ -76,7 +76,8 @@ async function open({ width, cart = CART, cfg = config(), before = '', heldReads
   const page = await context.newPage();
   const net = { images: [], changes: [], nav: [], cartReads: [], adds: [], updates: [] };
   page.errors = [];
-  page.on('pageerror', (e) => page.errors.push(e.message));
+  page.on('pageerror', (e) => { page.errors.push(e.message); console.log('PAGEERROR', e.message); });
+  page.on('console', (m) => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 200)); });
   let currentCart = [...cart];
   let lastAddAt = 0;
   let readsSinceAdd = 0;

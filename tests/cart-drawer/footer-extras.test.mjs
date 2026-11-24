@@ -12,6 +12,8 @@ test('storefront copy is the shared source, verbatim', () => {
   const block = inline.slice(inline.indexOf('footer-extras:begin'), inline.indexOf('footer-extras:end'));
   const strip = (s) => s.replace(/\s+/g, '');
   assert.ok(strip(block).includes(strip(fn)));
+  // The drawer reads ccFooterExtras: losing this line breaks the whole drawer.
+  assert.ok(block.includes('const ccFooterExtras = createFooterExtras();'));
 });
 
 test('cards: off or empty draws nothing; brands, text and https images draw', () => {

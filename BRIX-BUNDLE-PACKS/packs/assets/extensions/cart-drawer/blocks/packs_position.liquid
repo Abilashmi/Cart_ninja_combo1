@@ -1,0 +1,21 @@
+{%- comment -%}
+  BRIX Packs position: an empty slot the merchant drags anywhere in the product
+  section. A Pack whose Placement is "Custom" moves into it
+  (packs_widget.js -> place). Renders nothing visible on its own. The Pack
+  itself still needs the "BRIX Packs" app embed turned on.
+{%- endcomment -%}
+<div data-brix-packs-slot {{ block.shopify_attributes }}></div>
+
+{% schema %}
+{
+  "name": "BRIX Packs position",
+  "target": "section",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "Your BRIX Pack appears here when its Placement is set to Custom in the app. Keep the BRIX Packs app embed turned on."
+    }
+  ]
+}
+{% endschema %}

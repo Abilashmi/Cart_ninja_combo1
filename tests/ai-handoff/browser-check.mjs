@@ -296,7 +296,7 @@ await check('16. Build a Combo embed notice: steps, theme-editor deep link, chec
   await page.goto(`${base}/__embed-banner`);
   await page.getByText('Turn on the Cart Drawer app embed so your combo pages show up').waitFor();
   const body = await page.locator('.Polaris-Banner').innerText();
-  for (const s of ['App embeds', 'Custom Cart Drawer', 'Save', 'check again', 'once per theme']) assert.ok(body.includes(s), `notice is missing: ${s}`);
+  for (const s of ['App embeds', 'BRIX Cart & Combo', 'Save', 'check again', 'once per theme']) assert.ok(body.includes(s), `notice is missing: ${s}`);
   assert.equal(await page.locator('.Polaris-Banner ol li').count(), 4);
   const link = page.getByRole('link', { name: 'Open theme editor' });
   assert.equal(await link.getAttribute('target'), '_blank');
@@ -333,7 +333,7 @@ await check('17. save with the Cart Drawer embed OFF: shows the how-to first, th
   await page.getByText(noticeTitle).waitFor();
   const dialog = page.getByRole('dialog', { name: noticeTitle }); // the Save Template modal may still be fading out
   const text = await dialog.innerText();
-  for (const s of ['not turned on in your theme', 'App embeds', 'Custom Cart Drawer', 'Save', 'once per theme']) assert.ok(text.includes(s), `notice is missing: ${s}`);
+  for (const s of ['not turned on in your theme', 'App embeds', 'BRIX Cart & Combo', 'Save', 'once per theme']) assert.ok(text.includes(s), `notice is missing: ${s}`);
   assert.ok(!text.includes("couldn't check"), 'confirmed-off wording, not the unknown wording');
   assert.equal(await dialog.getByRole('link', { name: 'Open theme editor' }).getAttribute('href'), EDITOR_URL);
   assert.ok(page.url().endsWith('/app/bundles/customize'), 'must not navigate away before the merchant has seen it');

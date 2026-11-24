@@ -196,6 +196,10 @@ export const defaultCartEditorState = {
       // "Continue shopping" next to Checkout (utils/continue-shopping.shared.js), off by default.
       continueShopping: { ...DEFAULT_CONTINUE_SHOPPING },
       // Drawer width + spacing per device (utils/drawer-layout.shared.js), Design → Layout.
+      // Drag-and-drop order of the drawer's parts (utils/section-order.shared.js); null = each part's own position setting.
+      sectionOrder: null,
+      // Drawer colour theme (utils/drawer-theme.shared.js), Design → Colour theme; null = the white drawer.
+      theme: null,
       phoneLayout: { ...DEFAULT_LAYOUT.phone },
       desktopLayout: { ...DEFAULT_LAYOUT.desktop },
     },

@@ -1,9 +1,11 @@
 import React from 'react';
-import { Card, FormLayout, Select, BlockStack, Text, ButtonGroup, Button } from '@shopify/polaris';
+import { Card, FormLayout, Select, BlockStack, Text, ButtonGroup, Button, InlineStack } from '@shopify/polaris';
 import { useCartEditor } from '../../context/CartEditorContext';
 import { FeatureToggle } from '../shared/FeatureToggle';
 import { SliderField } from '../shared/SliderField';
 import { LAYOUT_LIMITS, sanitizeDrawerLayout } from '../../utils/drawer-layout.shared.js';
+import { THEME_PRESETS, THEME_DEFAULT_ANGLE, THEME_DEFAULT_CUSTOM, sanitizeDrawerTheme, drawerThemeCss } from '../../utils/drawer-theme.shared.js';
+import { ColorField } from './ColorField';
 
 export function DesignSection() {
   const { settings, footer, previewDevice, setPreviewDevice, updateDesign, updateCheckoutButton } = useCartEditor();
@@ -40,9 +42,68 @@ export function DesignSection() {
     />
   );
 
+  // Colour theme: the drawer's background (one colour or a mix of two) and its text.
+  const theme = sanitizeDrawerTheme(footer.checkoutButton.theme);
+  const setTheme = (patch) => updateCheckoutButton({ theme: sanitizeDrawerTheme({ ...(theme || { preset: 'custom', ...THEME_DEFAULT_CUSTOM }), ...patch }) });
+  const swatch = (bg, active, label, onClick, key) => (
+    <button
+      key={key || label}
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
+      style={{ width: 52, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
+    >
+      <span style={{ width: 44, height: 44, borderRadius: '50%', background: bg, boxSizing: 'border-box', border: active ? '3px solid #303030' : '1px solid #c9cccf', boxShadow: active ? '0 0 0 2px #fff inset' : 'none' }} />
+      <span style={{ fontSize: 11, color: active ? '#202223' : '#6d7175', fontWeight: active ? 600 : 400 }}>{label}</span>
+    </button>
+  );
+  const presetBg = (p) => drawerThemeCss({ color1: p.c1, color2: p.c2, angle: THEME_DEFAULT_ANGLE, textColor: '' }).background;
+
   return (
     <BlockStack gap="400">
       <Text as="p" variant="bodyMd" tone="subdued">Configure the visual appearance of your cart drawer.</Text>
+      <Card>
+        <BlockStack gap="300">
+          <BlockStack gap="100">
+            <Text as="h3" variant="headingSm">Colour theme</Text>
+            <Text as="p" variant="bodySm" tone="subdued">Pick a ready mix, or make your own. It colours the drawer's background; the cards on it keep their own colours.</Text>
+          </BlockStack>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            {swatch('#ffffff', !theme, 'White', () => updateCheckoutButton({ theme: null }), 'none')}
+            {THEME_PRESETS.map((p) => swatch(presetBg(p), theme?.preset === p.id, p.label, () => setTheme({ preset: p.id, color1: p.c1, color2: p.c2 })))}
+            {swatch('conic-gradient(#ff6b6b, #ffd93d, #6bcf7f, #4d96ff, #b86bff, #ff6b6b)', theme?.preset === 'custom', 'Custom', () => setTheme({ preset: 'custom' }))}
+          </div>
+          {theme && (
+            <BlockStack gap="300">
+              <Text as="h4" variant="headingXs" tone="subdued">Customise</Text>
+              <InlineStack gap="400" wrap={false}>
+                <div style={{ flex: 1 }}><ColorField label="Colour 1" value={theme.color1} onChange={(v) => setTheme({ preset: 'custom', color1: v })} /></div>
+                {theme.color2 ? (
+                  <div style={{ flex: 1 }}><ColorField label="Colour 2" value={theme.color2} onChange={(v) => setTheme({ preset: 'custom', color2: v })} /></div>
+                ) : (
+                  <div style={{ flex: 1, alignSelf: 'end' }}><Button onClick={() => setTheme({ preset: 'custom', color2: THEME_DEFAULT_CUSTOM.color2 })}>Mix with a second colour</Button></div>
+                )}
+              </InlineStack>
+              {theme.color2 && (
+                <BlockStack gap="300">
+                  <SliderField label="Mix direction" value={theme.angle} min={0} max={360} step={15} suffix="°" onChange={(v) => setTheme({ preset: 'custom', angle: v })} />
+                  <div><Button variant="plain" onClick={() => setTheme({ preset: 'custom', color2: '' })}>Use one colour only</Button></div>
+                </BlockStack>
+              )}
+              <ColorField
+                label="Text colour"
+                value={theme.textColor}
+                allowEmpty
+                fallback={drawerThemeCss(theme).color}
+                onChange={(v) => setTheme({ textColor: v })}
+              />
+              <Text as="p" variant="bodySm" tone="subdued">Leave the text colour empty to switch between dark and light text on its own.</Text>
+            </BlockStack>
+          )}
+        </BlockStack>
+      </Card>
       <Card>
         <FormLayout>
           <SliderField

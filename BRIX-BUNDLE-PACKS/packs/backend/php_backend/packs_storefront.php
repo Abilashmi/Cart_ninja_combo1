@@ -1,0 +1,260 @@
+<?php
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/plan_helpers.php';
+
+/**
+ * BRIX Packs storefront data, read straight from this server's MySQL.
+ *
+ * GET /apps/cart-app/packs_storefront.php?shop=<shop>.myshopify.com&productId=<id>[&collections=1,2][&preview=1]
+ * (collections = the page product's collection ids, for Packs used on whole collections)
+ * (Shopify's App Proxy forwards it here and appends its own `shop` param.)
+ *
+ * This server has no Shopify access, so it returns the STORED Packs only
+ * (tiers, customization, variant coverage). The widget prices them in the
+ * browser from the product page's own Liquid variant data, which is live.
+ *
+ * Whether the checkout discount is really active comes from
+ * brix_packs_shop_state, recorded by the Node app every time it verifies the
+ * discount with Shopify (see migrations/create_brix_packs_shop_state.sql).
+ * A Pack is shown to shoppers only when that record is verified AND lists the
+ * Pack's current version; `preview=1` returns it anyway, flagged unverified.
+ *
+ * Response (same contract as the Node /api/packs-storefront, plus
+ * pricing:'client' meaning tier prices are not included):
+ *   200 { success, pricing, packs, reason, checkoutDiscount, preview }
+ *   4xx/5xx { success:false, error, code }
+ */
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Cache-Control: public, max-age=15');
+
+function packs_fail($status, $code, $error) {
+    http_response_code($status);
+    echo json_encode(['success' => false, 'error' => $error, 'code' => $code]);
+    exit;
+}
+
+function packs_ok($body) {
+    echo json_encode(array_merge(['success' => true, 'pricing' => 'client'], $body));
+    exit;
+}
+
+function packs_numeric_id($value) {
+    return preg_match('/(\d+)$/', (string)$value, $m) ? $m[1] : null;
+}
+
+function packs_json($value, $fallback) {
+    $decoded = json_decode((string)$value, true);
+    return $decoded === null ? $fallback : $decoded;
+}
+
+// Fixed Combo items, as saved (mirrors sanitizeComboItems in app/utils/packs.shared.js; the
+// app server already checked each one with Shopify): numeric ids, 1-10 each, at most 5, `pick`.
+function packs_combo_items($raw) {
+    $items = [];
+    foreach ($raw as $item) {
+        if (!is_array($item)) continue;
+        $productId = preg_replace('/\D+/', '', (string)($item['productId'] ?? ''));
+        $variantId = preg_replace('/\D+/', '', (string)($item['variantId'] ?? ''));
+        $quantity = (int)($item['quantity'] ?? 1);
+        if ($productId === '' || $variantId === '' || $quantity < 1) continue;
+        $handle = is_string($item['handle'] ?? null) && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', $item['handle']) ? $item['handle'] : '';
+        $image = is_string($item['image'] ?? null) && strpos($item['image'], 'https://') === 0 ? $item['image'] : '';
+        $items[] = [
+            'productId' => $productId,
+            'variantId' => $variantId,
+            'quantity' => min(10, $quantity),
+            'handle' => $handle,
+            'title' => is_string($item['title'] ?? null) ? mb_substr(trim($item['title']), 0, 255) : '',
+            'variantTitle' => is_string($item['variantTitle'] ?? null) ? mb_substr(trim($item['variantTitle']), 0, 255) : '',
+            'image' => $image,
+        ];
+        // The shopper chooses this product's variant (a blouse's size); variantId is one of them.
+        if (($item['pick'] ?? false) === true) { $items[count($items) - 1]['pick'] = true; $items[count($items) - 1]['variantTitle'] = ''; }
+        if (count($items) >= 5) break;
+    }
+    return $items;
+}
+
+// Mirrors normalizeTiers in app/utils/packs.shared.js.
+function packs_normalize_tiers($raw) {
+    if (!is_array($raw)) return [];
+    $tiers = [];
+    foreach ($raw as $tier) {
+        if (!is_array($tier)) continue;
+        $type = in_array($tier['discountType'] ?? null, ['none', 'percentage', 'fixed', 'set'], true) ? $tier['discountType'] : 'none';
+        $out = [
+            'quantity' => (int)($tier['quantity'] ?? 0),
+            'name' => is_string($tier['name'] ?? null) ? trim($tier['name']) : '',
+            'badge' => is_string($tier['badge'] ?? null) ? trim($tier['badge']) : '',
+            'discountType' => $type,
+            'discountValue' => $type === 'none' ? 0 : (float)($tier['discountValue'] ?? 0),
+        ];
+        // Fixed Combo: the tier's products besides the page's own (sanitizeComboItems).
+        if (isset($tier['items']) && is_array($tier['items'])) $out['items'] = packs_combo_items($tier['items']);
+        $tiers[] = $out;
+    }
+    $tiers = array_values(array_filter($tiers, function ($tier) { return $tier['quantity'] > 0; }));
+    usort($tiers, function ($a, $b) { return $a['quantity'] - $b['quantity']; });
+    return $tiers;
+}
+
+// Mirrors sanitizeExtraProducts in app/utils/packs.shared.js: the other products a Mix & Match pack draws from.
+function packs_extra_products($raw) {
+    $out = [];
+    $seen = [];
+    foreach ((array)$raw as $item) {
+        if (!is_array($item)) continue;
+        $id = packs_numeric_id($item['productId'] ?? '');
+        if (!$id || isset($seen[$id])) continue;
+        $seen[$id] = true;
+        $scope = ($item['variantScope'] ?? '') === 'all' ? 'all' : 'selected';
+        $allowed = [];
+        if ($scope !== 'all') {
+            foreach ((array)($item['allowedVariantIds'] ?? []) as $variantId) {
+                $numeric = packs_numeric_id($variantId);
+                if ($numeric && !in_array($numeric, $allowed, true)) $allowed[] = $numeric;
+            }
+        }
+        $handle = (string)($item['handle'] ?? '');
+        $out[] = [
+            'productId' => $id,
+            'handle' => preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', $handle) ? $handle : '',
+            'title' => mb_substr((string)($item['title'] ?? ''), 0, 255),
+            'variantScope' => $scope,
+            'allowedVariantIds' => $allowed,
+        ];
+        if (count($out) >= 6) break;
+    }
+    return $out;
+}
+
+// Mirrors rowToPack + publicPack in the Node app — only what the widget needs.
+function packs_public($row) {
+    $template = $row['template'] ?? 'same_variant';
+    $packType = !empty($row['pack_type']) ? $row['pack_type'] : ($template === 'choose_each_item' ? 'mix_match' : 'same_variant');
+    $scope = !empty($row['variant_scope']) ? $row['variant_scope'] : 'selected';
+    $anchor = packs_numeric_id($row['variant_id']) ?: (string)$row['variant_id'];
+    $allowed = [];
+    if ($scope !== 'all') {
+        $rawAllowed = isset($row['allowed_variant_ids_json']) ? packs_json($row['allowed_variant_ids_json'], []) : [$anchor];
+        foreach ((array)$rawAllowed as $id) {
+            $numeric = packs_numeric_id($id);
+            if ($numeric && !in_array($numeric, $allowed, true)) $allowed[] = $numeric;
+        }
+    }
+    $customization = packs_json($row['customization_json'] ?? '', []);
+    return [
+        'id' => (int)$row['id'],
+        'version' => (int)($row['version'] ?? 1),
+        'variantId' => $anchor,
+        // The main product (the widget needs it on the extra pages a pack is shown on) and the extra products.
+        'productId' => packs_numeric_id($row['product_id'] ?? '') ?: '',
+        'productHandle' => preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]{0,254}$/', (string)($row['product_handle'] ?? '')) ? $row['product_handle'] : '',
+        'extraProducts' => $packType === 'mix_match' ? packs_extra_products(packs_json($row['extra_products_json'] ?? '', [])) : [],
+        'template' => $template,
+        'packType' => $packType,
+        'variantScope' => $scope,
+        'allowedVariantIds' => $allowed,
+        'productTitle' => $row['product_title'],
+        'variantTitle' => $row['variant_title'],
+        'productImage' => $row['product_image'] ?: '',
+        'basePrice' => (float)$row['base_price'],
+        'tiers' => packs_normalize_tiers(packs_json($row['tiers_json'] ?? '', [])),
+        'customization' => is_array($customization) && $customization ? $customization : new stdClass(),
+    ];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') packs_fail(405, 'method_not_allowed', 'Method not allowed');
+
+$shop = strtolower(trim((string)($_GET['shop'] ?? '')));
+$productId = packs_numeric_id($_GET['productId'] ?? '');
+// The page product's collections (Packs used on whole collections), numeric ids, at most 50.
+$collectionIds = array_slice(array_values(array_unique(array_filter(array_map('packs_numeric_id', explode(',', (string)($_GET['collections'] ?? '')))))), 0, 50);
+$preview = ($_GET['preview'] ?? '') === '1';
+if (!preg_match('/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/', $shop)) packs_fail(400, 'invalid_shop', 'A valid shop is required.');
+if (!$productId) packs_fail(400, 'invalid_product', 'A valid productId is required.');
+
+$empty = ['packs' => [], 'checkoutDiscount' => null, 'preview' => $preview];
+
+try {
+    $planKey = resolve_plan_key($pdo, $shop);
+    if (plan_get_feature_state($planKey, 'packs') !== 'enabled') {
+        packs_ok(array_merge($empty, ['reason' => 'plan_restricted']));
+    }
+    if (plan_order_cap_exceeded($pdo, $shop, $planKey)) {
+        packs_ok(array_merge($empty, ['reason' => 'order_cap_reached']));
+    }
+
+    // Packs of this product, plus packs the merchant chose to also show on this product's page
+    // (show_on_ids is ",101,102,"; before migrations/alter_brix_packs_extra_products.sql was run only the first part applies).
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND (product_id IN (?, ?) OR show_on_ids LIKE ?)");
+        $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId, '%,' . $productId . ',%']);
+    } catch (PDOException $e) {
+        if (stripos($e->getMessage(), 'show_on_ids') === false) throw $e;
+        $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND product_id IN (?, ?)");
+        $stmt->execute([$shop, $productId, 'gid://shopify/Product/' . $productId]);
+    }
+    $packs = array_map('packs_public', $stmt->fetchAll(PDO::FETCH_ASSOC));
+
+    // Packs used on more products / collections (applies_ids / applies_collection_ids, added by the app the
+    // first time such a Pack is saved). A product with its own Pack keeps it: shared Packs only fill in.
+    $own = array_filter($packs, function ($pack) use ($productId) { return (string)$pack['productId'] === (string)$productId; });
+    if (!$own) {
+        try {
+            $where = ['applies_ids LIKE ?'];
+            $params = [$shop, '%,' . $productId . ',%'];
+            foreach ($collectionIds as $collectionId) { $where[] = 'applies_collection_ids LIKE ?'; $params[] = '%,' . $collectionId . ',%'; }
+            $stmt = $pdo->prepare("SELECT * FROM brix_packs WHERE shop_domain = ? AND status = 'active' AND enabled = 1 AND (" . implode(' OR ', $where) . ') ORDER BY updated_at DESC');
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $applies = packs_json($row['applies_json'] ?? '', []);
+                $excluded = array_map('strval', (array)($applies['excluded'] ?? []));
+                if (in_array((string)$productId, $excluded, true)) continue;
+                $already = false;
+                foreach ($packs as $pack) if ($pack['id'] === (int)$row['id']) $already = true;
+                if ($already) continue;
+                $pack = packs_public($row);
+                // On this page the Pack sells this page's product (every variant).
+                $pack['shared'] = true;
+                $packs[] = $pack;
+            }
+        } catch (PDOException $e) {
+            if (stripos($e->getMessage(), 'applies_') === false) throw $e;
+        }
+    }
+    if (!$packs) packs_ok(array_merge($empty, ['reason' => 'no_active_pack']));
+} catch (PDOException $e) {
+    error_log('[packs_storefront] ' . $e->getMessage());
+    packs_fail(503, 'database_error', 'Could not load Packs.');
+}
+
+$state = null;
+try {
+    $stmt = $pdo->prepare('SELECT * FROM brix_packs_shop_state WHERE shop_domain = ? LIMIT 1');
+    $stmt->execute([$shop]);
+    $state = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+} catch (PDOException $e) {
+    // Table not created yet — treated as "not verified" below.
+    error_log('[packs_storefront] brix_packs_shop_state: ' . $e->getMessage());
+}
+
+$verifiedPacks = $state && (int)$state['discount_verified'] === 1 ? (array)packs_json($state['verified_packs_json'] ?? '', []) : [];
+$verified = array_values(array_filter($packs, function ($pack) use ($verifiedPacks) {
+    return isset($verifiedPacks[(string)$pack['id']]) && (int)$verifiedPacks[(string)$pack['id']] === $pack['version'];
+}));
+
+if (count($verified) === count($packs)) {
+    $checkoutDiscount = ['verified' => true, 'state' => 'active', 'message' => 'Checkout discount is active.'];
+} elseif ($state && (int)$state['discount_verified'] !== 1) {
+    $checkoutDiscount = ['verified' => false, 'state' => $state['discount_state'], 'message' => $state['discount_message']];
+} else {
+    $checkoutDiscount = ['verified' => false, 'state' => 'config_out_of_date', 'message' => 'Pack configuration has not been verified with Shopify yet. Open the Packs page in the BRIX app to re-check.'];
+}
+
+if ($preview) packs_ok(['packs' => $packs, 'reason' => null, 'checkoutDiscount' => $checkoutDiscount, 'preview' => true]);
+if (!$verified) packs_ok(array_merge($empty, ['checkoutDiscount' => $checkoutDiscount, 'reason' => 'discount_unverified']));
+packs_ok(['packs' => $verified, 'reason' => null, 'checkoutDiscount' => ['verified' => true, 'state' => 'active', 'message' => 'Checkout discount is active.'], 'preview' => false]);

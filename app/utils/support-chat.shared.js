@@ -27,7 +27,7 @@ export const DEFAULT_CHAT_SETTINGS = Object.freeze({
   // Most AI answers per store per day (cost guard); past it, the chat waits for the team.
   aiDailyLimit: 40,
   quickReplies: [
-    'Go to Online Store > Themes > Customize > App embeds and switch on "Custom Cart Drawer", then save.',
+    'Go to Online Store > Themes > Customize > App embeds and switch on "BRIX Cart & Combo", then save.',
     'Could you share a screenshot of what you see? It helps us fix it faster.',
     'Done! Please refresh your store and check again.',
   ],

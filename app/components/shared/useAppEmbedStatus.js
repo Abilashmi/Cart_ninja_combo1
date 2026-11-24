@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CART_DRAWER_EMBED_HANDLE } from '../../config/theme-extension';
 
-// Whether the "Custom Cart Drawer" app embed is on in the store's published
+// Whether the "BRIX Cart & Combo" app embed is on in the store's published
 // theme, from App Bridge's shopify.app.extensions() (Built for Shopify 4.2.3:
 // the home page shows whether the app is set up). 'loading' until it answers,
 // 'active' | 'off', or 'unknown' when App Bridge isn't there (test harnesses)

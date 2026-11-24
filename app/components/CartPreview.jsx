@@ -16,6 +16,8 @@ import { sanitizeDrawerLayout } from '../utils/drawer-layout.shared.js';
 import { couponIconHtml, couponSubtitleStyle, drawerCouponLayout, RUPEE_GLYPH_PATHS, RUPEE_GLYPH_VIEWBOX } from '../utils/coupon-style.shared.js';
 import { bannerSlot, bannerSources, bannerVisible } from '../utils/cart-banner.shared';
 import { footerExtras } from '../utils/cart-footer-extras.shared';
+import { drawerThemeCss, sanitizeDrawerTheme } from '../utils/drawer-theme.shared.js';
+import { SECTION_LABELS as ARRANGE_LABELS, deriveSectionOrder, moveSection, sanitizeSectionOrder } from '../utils/section-order.shared.js';
 import { milestonePositions, progressFill, fillMoneyTag } from '../utils/progress-layout.shared.js';
 // The storefront drawer's own stylesheet for item rows, pricing summary and the
 // image banner, so the preview draws them exactly like the live drawer. Linked
@@ -81,7 +83,7 @@ function RupeeIcon({ width = '13', height = '13', fill = 'currentColor' }) {
   return <svg viewBox={RUPEE_GLYPH_VIEWBOX} width={width} height={height} fill={fill} dangerouslySetInnerHTML={{ __html: RUPEE_GLYPH_PATHS }} />;
 }
 
-const TIER_ICON_MAP = {
+export const TIER_ICON_MAP = {
   gift: GiftCardFilledIcon,
   shipping: DeliveryFilledIcon,
   star: StarFilledIcon,
@@ -94,18 +96,54 @@ const MOCK_PREVIEW_COUPONS = [
   {
     id: 'preview-1', code: 'SAVE20', labelText: 'SAVE20', description: '20% off your order',
     bgColor: '#1a9de0', textColor: '#ffffff', icon: 'discount', borderRadius: 8,
-    buttonText: 'Apply', buttonBgColor: '#000000', buttonTextColor: '#ffffff',
+    buttonText: 'Copy', buttonBgColor: '#000000', buttonTextColor: '#ffffff',
   },
   {
     id: 'preview-2', code: 'FREESHIP', labelText: 'FREESHIP', description: 'Free shipping',
     bgColor: '#059669', textColor: '#ffffff', icon: 'shipping', borderRadius: 8,
-    buttonText: 'Apply', buttonBgColor: '#000000', buttonTextColor: '#ffffff',
+    buttonText: 'Copy', buttonBgColor: '#000000', buttonTextColor: '#ffffff',
   },
 ];
 
 const CART_TOTAL = 489;
 
 const BRAND = '#1a9de0';
+
+// One part of the drawer in the "Arrange sections" mode: it carries its CSS
+// `order` (when the merchant has arranged them) and, while arranging, can be
+// dragged onto another part of the same area (top bars / body / footer).
+function ArrangeItem({ zone, k, lists, order, dragRef, onMove, children, style }) {
+  const [dragging, setDragging] = useState(false);
+  const num = order ? order[zone].indexOf(k) + 1 : undefined;
+  return (
+    <div
+      draggable
+      data-arrange-key={k}
+      onDragStart={(e) => { dragRef.current = { zone, key: k }; setDragging(true); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', k); } catch (err) { /* some browsers refuse; the drag still works */ } }}
+      // Live sorting: the part moves as soon as the pointer passes the middle of
+      // another part, so there is no exact drop spot to hit (thin parts like the
+      // announcement bar are as easy as tall ones).
+      onDragOver={(e) => {
+        const d = dragRef.current;
+        if (!d || d.zone !== zone) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (d.key === k) return;
+        const list = lists[zone];
+        const from = list.indexOf(d.key);
+        const to = list.indexOf(k);
+        const r = e.currentTarget.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        if ((from < to && e.clientY >= mid) || (from > to && e.clientY <= mid)) onMove(zone, d.key, k);
+      }}
+      onDrop={(e) => { e.preventDefault(); e.stopPropagation(); dragRef.current = null; setDragging(false); }}
+      onDragEnd={() => { dragRef.current = null; setDragging(false); }}
+      style={{ order: num, flexShrink: 0, position: 'relative', opacity: dragging ? 0.5 : 1, ...style }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function HighlightZone({ sectionId, activeSection, label, children, className, style, onSectionClick }) {
   const [hovered, setHovered] = useState(false);
@@ -482,7 +520,7 @@ function CouponCard({ coupon, template, isVertical, minHeight }) {
         </div>
         {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', color: '#6b7280', lineHeight: 1.3, flex: 1 })}>{coupon.description}</div>}
         {!coupon.textOnly && (<button style={{ marginTop: 'auto', alignSelf: 'center', padding: '3px 4px', borderRadius: '4px', border: `1px solid ${coupon.bgColor}`, backgroundColor: 'transparent', color: coupon.bgColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', width: '68%', textAlign: 'center' }}>
-          {coupon.buttonText}
+          {(!coupon.buttonText || coupon.buttonText === 'Apply') ? 'Copy' : coupon.buttonText}
         </button>)}
       </div>
     );
@@ -496,7 +534,7 @@ function CouponCard({ coupon, template, isVertical, minHeight }) {
         <div style={{ fontSize: '11px', fontWeight: 800, color: coupon.textColor, letterSpacing: '1px', lineHeight: 1.3, ...WRAP_TEXT, width: '100%' }}>{coupon.labelText}</div>
         {!isVertical && <div style={couponSubtitleStyle(coupon, { fontSize: '8px', color: coupon.textColor, opacity: 0.85, lineHeight: 1.3, flex: 1 })}>{coupon.description}</div>}
         {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '4px 6px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 700, cursor: 'pointer', width: '68%', textAlign: 'center', letterSpacing: '0.5px' }}>
-          {coupon.buttonText}
+          {(!coupon.buttonText || coupon.buttonText === 'Apply') ? 'Copy' : coupon.buttonText}
         </button>)}
       </div>
     );
@@ -514,7 +552,7 @@ function CouponCard({ coupon, template, isVertical, minHeight }) {
         </div>
       </div>
       {!coupon.textOnly && (<button style={{ marginTop: 'auto', padding: '3px 4px', borderRadius: '4px', border: 'none', backgroundColor: coupon.buttonBgColor, color: coupon.buttonTextColor, fontSize: '9px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, alignSelf: 'center', width: '60%', textAlign: 'center' }}>
-        {coupon.buttonText}
+        {(!coupon.buttonText || coupon.buttonText === 'Apply') ? 'Copy' : coupon.buttonText}
       </button>)}
     </div>
   );
@@ -543,7 +581,7 @@ function SingleCouponCard({ coupon, template }) {
           {coupon.description && <div style={couponSubtitleStyle(coupon, { fontSize: '9px', opacity: 0.85, lineHeight: 1.35, marginTop: '1px' })}>{coupon.description}</div>}
         </div>
         {!coupon.textOnly && (<button style={{ ...buttonStyle, flexShrink: 0, maxWidth: '45%', padding: '5px 10px', borderRadius: '5px', fontSize: '10px', fontWeight: 700, cursor: 'pointer', lineHeight: 1.25, ...WRAP_TEXT }}>
-          {coupon.buttonText}
+          {(!coupon.buttonText || coupon.buttonText === 'Apply') ? 'Copy' : coupon.buttonText}
         </button>)}
       </div>
     </div>
@@ -856,7 +894,9 @@ function PreviewImageBanner({ banner, device, editing }) {
 export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' }) {
   const { previewMode, setPreviewMode, previewDevice, setPreviewDevice, activeSection, navigateToSection, header, body, footer, settings, allProducts } = useCartEditor();
   const cardsHtml = footerExtras.cardsHtml(footerExtras.cardsConfig(footer.paymentCards));
-  const trustHtml = footerExtras.trustHtml(footerExtras.trustConfig(footer.trustBadges));
+  const trustCfg = footerExtras.trustConfig(footer.trustBadges);
+  const trustHtml = footerExtras.trustHtml(trustCfg);
+  const trustAbove = trustCfg.placement === 'above';
   // The preview draws the drawer smaller than the storefront (13px text and
   // 11px padding for the storefront's 15 / 16); the Checkout button's text
   // size and height keep that ratio.
@@ -887,8 +927,10 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
 
   const designTheme = settings.design?.theme;
   const isDarkTheme = designTheme === "dark";
-  const drawerBg = isDarkTheme ? "#1a1a2e" : "#ffffff";
-  const drawerTextColor = isDarkTheme ? "#e0e0e0" : "#1a1a1a";
+  // Colour theme (Design → Colour theme): the drawer's background, one colour or a mix.
+  const themeCss = drawerThemeCss(sanitizeDrawerTheme(footer.checkoutButton.theme));
+  const drawerBg = themeCss ? themeCss.background : (isDarkTheme ? "#1a1a2e" : "#ffffff");
+  const drawerTextColor = themeCss ? themeCss.color : (isDarkTheme ? "#e0e0e0" : "#1a1a1a");
   const previewRootRef = useRef(null);
   const isDesktop = previewDevice === 'desktop';
   const isEmpty = previewMode === 'empty';
@@ -920,6 +962,12 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   const cs = body.couponSlider;
   const up = body.upsellProducts;
 
+  // Arrange sections: drag the drawer's parts into the order the merchant wants
+  // (saved as checkout_button_style.sectionOrder; null = each part's own position).
+  const { updateCheckoutButton } = useCartEditor();
+  const dragRef = useRef(null);
+  const savedOrder = sanitizeSectionOrder(footer.checkoutButton.sectionOrder);
+
   const showProgressBar = pb.enabled && (!isEmpty || pb.showWhenEmpty);
   const showCouponSlider = cs.enabled && (!isEmpty || cs.showWhenEmpty);
   const showUpsell = up.enabled && (!isEmpty || up.showWhenEmpty);
@@ -929,17 +977,71 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   const banner = body.imageBanner;
   const bannerAt = bannerSlot(banner.placement, { progressShown: showProgressBar, progressPosition: pb.position });
   const bannerEditing = activeSection === 'imageBanner';
+  const derivedOrder = deriveSectionOrder({
+    progressPos: pb.position, couponPos: cs.position, upsellPos: up.position, bannerSlot: bannerAt,
+    trustPlacement: trustCfg.placement, continuePlacement: continueShopping.placement,
+  });
+  const effectiveOrder = savedOrder || derivedOrder;
+  const onMoveSection = (zone, from, to) => {
+    const start = savedOrder || deriveSectionOrder({
+      progressPos: pb.position, couponPos: cs.position, upsellPos: up.position, bannerSlot: bannerAt,
+      trustPlacement: trustCfg.placement, continuePlacement: continueShopping.placement,
+    });
+    updateCheckoutButton({ sectionOrder: moveSection(start, zone, from, to) });
+  };
+  // Wraps one part: carries its order and, in Arrange mode, the drag handle.
+  const arr = (zone, k, node, style) => (
+    <ArrangeItem key={`${zone}-${k}`} zone={zone} k={k} order={savedOrder} lists={effectiveOrder} dragRef={dragRef} onMove={onMoveSection} style={style}>{node}</ArrangeItem>
+  );
   // Sticky upsell at the bottom sits right on the footer (storefront:
   // margin-top:auto, and over the list's bottom padding when nothing follows it).
   const afterBottomUpsell = (showProgressBar && pb.position === 'bottom')
     || (showCouponSlider && cs.position === 'bottom')
     || (['beforeBottomBar', 'afterBottomBar', 'end'].includes(bannerAt) && (bannerVisible(banner) || bannerEditing))
     || (isEmpty && body.emptyCart.showRecommendations && !up.showWhenEmpty);
-  const renderBanner = (slot) => (slot === bannerAt && (bannerVisible(banner) || bannerEditing) ? (
+  // Header, announcement and countdown: above the body while they lead the list, inside it once dragged below a body part.
+  const TOP_KEYS = ['header', 'announcement', 'countdown'];
+  const mainList = effectiveOrder.main;
+  let leadN = 0;
+  while (leadN < mainList.length && TOP_KEYS.includes(mainList[leadN])) leadN += 1;
+  const fixedTop = mainList.slice(0, leadN);
+  const renderTop = (k) => {
+    if (k === 'header') {
+      return arr('main', 'header', <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${lay.headerPadding}px ${isDesktop ? 18 : 14}px`, backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none', flexShrink: 0 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: header.textColor }}>{header.title} {!isEmpty ? `(${itemCount})` : '(0)'}</h3>
+                    <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: header.textColor, padding: 0, lineHeight: 1 }}>
+                      {header.closeStyle === 'icon' ? '×' : 'Close'}
+                    </button>
+                  </div>
+                </HighlightZone>);
+    }
+    if (k === 'announcement') {
+      return (body.announcements.enabled || activeSection === 'announcements') ? arr('main', 'announcement', (
+                  <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                    <AnnouncementRotator
+                      ann={body.announcements}
+                      placeholder="Your announcement text here…"
+                      className={body.announcements.enabled ? 'cart-preview-announcement' : 'cart-preview-announcement cart-preview-announcement--disabled'}
+                      style={{ paddingTop: lay.announcementPadding, paddingBottom: lay.announcementPadding, backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: body.announcements.textAlign || 'center', fontWeight: body.announcements.bold ? 700 : 400, fontStyle: body.announcements.italic ? 'italic' : 'normal' }}
+                    />
+                  </HighlightZone>
+                )) : null;
+    }
+    if (k === 'countdown') {
+      return (body.countdownTimer.enabled && !isEmpty) ? arr('main', 'countdown', (
+                  <HighlightZone sectionId="countdownTimer" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
+                    <CountdownTimerPreview countdown={body.countdownTimer} padY={lay.countdownPadding} />
+                  </HighlightZone>
+                )) : null;
+    }
+    return null;
+  };
+  const renderBanner = (slot) => (slot === bannerAt && (bannerVisible(banner) || bannerEditing) ? arr('main', 'banner', (
     <HighlightZone sectionId="imageBanner" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
       <PreviewImageBanner banner={banner} device={previewDevice} editing={bannerEditing} />
     </HighlightZone>
-  ) : null);
+  )) : null);
 
   // Live preview cart: the sample product plus whatever the merchant "adds"
   // from the upsell / recommended lists. The progress bar reads THIS cart, and
@@ -995,10 +1097,11 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
   return (
     <div ref={previewRootRef} style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden', background: '#f0f1f3' }}>
       <link rel="stylesheet" href={CART_UI_STYLESHEET} />
+      <style>{'.bxcd-root[data-themed="1"] .cart-preview-progress, .bxcd-root[data-themed="1"] .cart-preview-coupon-section, .bxcd-root[data-themed="1"] .cart-preview-upsell-section { background: transparent !important; } .bxcd-root[data-themed="1"] .bxcd-theme-text, .bxcd-root[data-themed="1"] .bxcd-summary__label:not(.bxcd-summary__label--saving), .bxcd-root[data-themed="1"] .bxcd-summary__value:not(.bxcd-summary__value--saving) { color: var(--bxcd-theme-text) !important; } .bxcd-root [data-arrange-key], .bxcd-root [data-arrange-key] * { cursor: grab !important; user-select: none; } .bxcd-root [data-arrange-key]:active, .bxcd-root [data-arrange-key]:active * { cursor: grabbing !important; }'}</style>
 
       {/* ── Preview header ── */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px', background: '#f0f1f3', borderBottom: '1px solid #e1e3e5', gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#6d7175', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Live Preview</span>
+        <span title="Drag any part of the drawer to change its order" style={{ fontSize: 11, fontWeight: 700, color: '#6d7175', textTransform: 'uppercase', letterSpacing: '0.5px', flexShrink: 0 }}>Live Preview · drag to reorder</span>
         <div style={{ display: 'flex', border: '1px solid #c9cccf', borderRadius: 6, overflow: 'hidden', flexShrink: 0 }}>
           {[{ key: 'desktop', src: DesktopIcon }, { key: 'mobile', src: MobileIcon }].map(({ key, src }) => (
             <button key={key} onClick={() => setPreviewDevice(key)}
@@ -1014,6 +1117,9 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
             <button onClick={replayAnimation} title="Replay animation" style={{ padding: '3px 8px', border: '1px solid #c9cccf', borderRadius: 5, background: '#fff', fontSize: 10, fontWeight: 600, cursor: 'pointer', color: '#6d7175', letterSpacing: '0.3px' }}>
               ▶ Replay
             </button>
+          )}
+          {savedOrder && (
+            <Button size="slim" onClick={() => updateCheckoutButton({ sectionOrder: null })}>Reset order</Button>
           )}
           <Button onClick={onDiscard} disabled={saveStatus === 'saving' || !isDirty} size="slim">Discard</Button>
           <Button
@@ -1059,7 +1165,7 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
               <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(0deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,#e8e8e8 39px,#e8e8e8 40px)', opacity: 0.4 }} />
 
               {/* Cart Drawer */}
-              <div key={animKey} className={`${animClass} bxcd-root ${isDesktop ? 'bxcd-root--desktop' : 'bxcd-root--mobile'}`} style={{ [isDesktop ? '--bxcd-d-item-pad' : '--bxcd-m-item-pad']: `${lay.itemPadding}px`, [isDesktop ? '--bxcd-d-item-gap' : '--bxcd-m-item-gap']: `${lay.itemGap}px`, [isDesktop ? '--bxcd-d-img' : '--bxcd-m-img']: `${lay.itemImageSize}px`, [isDesktop ? '--bxcd-d-title' : '--bxcd-m-title']: `${lay.itemTitleSize}px`, [isDesktop ? '--bxcd-d-price' : '--bxcd-m-price']: `${lay.itemPriceSize}px`, [isDesktop ? '--bxcd-d-total' : '--bxcd-m-total']: `${lay.itemTotalSize}px`, position: 'absolute', top: 0, right: 0, bottom: 0, width: isDesktop ? '100%' : `${lay.drawerWidth}%`, display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
+              <div key={animKey} className={`${animClass} bxcd-root ${isDesktop ? 'bxcd-root--desktop' : 'bxcd-root--mobile'}`} data-themed={themeCss ? '1' : undefined} style={{ ...(themeCss ? { '--bxcd-theme-text': themeCss.color } : {}), [isDesktop ? '--bxcd-d-item-pad' : '--bxcd-m-item-pad']: `${lay.itemPadding}px`, [isDesktop ? '--bxcd-d-item-gap' : '--bxcd-m-item-gap']: `${lay.itemGap}px`, [isDesktop ? '--bxcd-d-img' : '--bxcd-m-img']: `${lay.itemImageSize}px`, [isDesktop ? '--bxcd-d-title' : '--bxcd-m-title']: `${lay.itemTitleSize}px`, [isDesktop ? '--bxcd-d-price' : '--bxcd-m-price']: `${lay.itemPriceSize}px`, [isDesktop ? '--bxcd-d-total' : '--bxcd-m-total']: `${lay.itemTotalSize}px`, position: 'absolute', top: 0, right: 0, bottom: 0, width: isDesktop ? '100%' : `${lay.drawerWidth}%`, display: 'flex', flexDirection: 'column', background: drawerBg, color: drawerTextColor, boxShadow: '-4px 0 20px rgba(0,0,0,0.12)', overflow: 'hidden' }}>
 
                 {/* Design/CSS global overlay */}
                 {['design', 'customCSS'].includes(activeSection) && (
@@ -1068,72 +1174,43 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   </div>
                 )}
 
-                {/* ── HEADER ── */}
-                <HighlightZone sectionId="header" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${lay.headerPadding}px ${isDesktop ? 18 : 14}px`, backgroundColor: header.bgColor, color: header.textColor, borderBottom: header.borderBottom ? '1px solid #e1e3e5' : 'none', flexShrink: 0 }}>
-                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: header.textColor }}>{header.title} {!isEmpty ? `(${itemCount})` : '(0)'}</h3>
-                    <button style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: header.textColor, padding: 0, lineHeight: 1 }}>
-                      {header.closeStyle === 'icon' ? '×' : 'Close'}
-                    </button>
-                  </div>
-                </HighlightZone>
+                {/* The leading header / announcement / countdown stay above the scrolling
+                    body (like the storefront); one dragged below a body part moves into it. */}
+                {fixedTop.map((k) => renderTop(k))}
 
                 {/* ── BODY (scrollable) ── */}
-                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: lay.bodyPadding, display: 'flex', flexDirection: 'column', gap: lay.sectionGap }}>
-
-                  {/* Announcements — show when enabled, or show muted placeholder when section is active */}
-                  {(body.announcements.enabled || activeSection === 'announcements') && (
-                    <HighlightZone sectionId="announcements" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <AnnouncementRotator
-                        ann={body.announcements}
-                        placeholder="Your announcement text here…"
-                        className={body.announcements.enabled ? 'cart-preview-announcement' : 'cart-preview-announcement cart-preview-announcement--disabled'}
-                        style={{ paddingTop: lay.announcementPadding, paddingBottom: lay.announcementPadding, backgroundColor: body.announcements.bgColor, color: body.announcements.textColor, fontSize: `${body.announcements.fontSize}px`, textAlign: body.announcements.textAlign || 'center', fontWeight: body.announcements.bold ? 700 : 400, fontStyle: body.announcements.italic ? 'italic' : 'normal' }}
-                      />
-                    </HighlightZone>
-                  )}
-
-                  {/* Countdown Timer — shown below announcement, hidden on the
-                      empty-cart state to match extensions/cart-drawer/assets/
-                      cart_drawer_inline.js (`countdown.enabled && !isEmpty`).
-                      Unlike other sections, this one does NOT preview while
-                      merely opened in the sidebar — it must only appear once
-                      the merchant has actually enabled the toggle. */}
-                  {body.countdownTimer.enabled && !isEmpty && (
-                    <HighlightZone sectionId="countdownTimer" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                      <CountdownTimerPreview countdown={body.countdownTimer} padY={lay.countdownPadding} />
-                    </HighlightZone>
-                  )}
+                <div style={{ flex: 1, order: 10, overflowY: 'auto', overflowX: 'hidden', padding: lay.bodyPadding, display: 'flex', flexDirection: 'column', gap: lay.sectionGap }}>
+                  {TOP_KEYS.filter((k) => !fixedTop.includes(k)).map((k) => renderTop(k))}
 
                   {renderBanner('top')}
 
                   {/* Progress Bar — TOP */}
-                  {showProgressBar && pb.position === 'top' && (
+                  {showProgressBar && pb.position === 'top' && arr('main', 'progress', (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} phone={lay} headBase={isDesktop ? 15 : 14} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
-                  )}
+                  ))}
 
                   {renderBanner('afterTopBar')}
 
                   {/* Coupon Slider — TOP */}
-                  {showCouponSlider && cs.position === 'top' && (
+                  {showCouponSlider && cs.position === 'top' && arr('main', 'coupons', (
                     <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
-                  )}
+                  ))}
 
                   {/* Upsell — TOP */}
-                  {showUpsell && up.position === 'top' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', top: 0, zIndex: 5, background: '#fff', boxShadow: '0 6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
+                  {showUpsell && up.position === 'top' && arr('main', 'upsell', (
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <UpsellPreview phone={!isDesktop} upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
-                  )}
+                  ), up.sticky ? { position: 'sticky', top: 0, zIndex: 5, background: '#fff', boxShadow: '0 6px 8px -8px rgba(15,23,42,.25)' } : undefined)}
 
                   {renderBanner('beforeProducts')}
 
                   {/* Empty state OR Cart items */}
-                  {isEmpty ? (
+                  {arr('main', 'items', isEmpty ? (
                     <HighlightZone sectionId="emptyCart" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', textAlign: 'center', gap: 10 }}>
                         <div style={{ fontSize: 40, color: '#c9cccf' }}><Icon source={CartIcon} /></div>
@@ -1154,16 +1231,16 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                       onRemove={removeFromPreviewCart}
                       onReset={resetPreviewCart}
                     />
-                  )}
+                  ))}
 
                   {renderBanner('afterProducts')}
 
                   {/* Upsell — BOTTOM */}
-                  {showUpsell && up.position === 'bottom' && (
-                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={up.sticky ? { position: 'sticky', bottom: -lay.bodyPadding, marginTop: 'auto', marginBottom: afterBottomUpsell ? 0 : -lay.bodyPadding, zIndex: 5, background: '#fff', boxShadow: '0 -6px 8px -8px rgba(15,23,42,.25)' } : undefined}>
+                  {showUpsell && up.position === 'bottom' && arr('main', 'upsell', (
+                    <HighlightZone sectionId="upsellProducts" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <UpsellPreview phone={!isDesktop} upsell={up} checkoutBg={footer.checkoutButton.bgColor} checkoutText={footer.checkoutButton.textColor} allProducts={allProducts} currencySymbol={currencySymbol} onAdd={addToPreviewCart} lockBadge={<PreviewLockBadge featureKey="ai_cart_upsell" inline />} />
                     </HighlightZone>
-                  )}
+                  ), up.sticky ? { position: 'sticky', bottom: -lay.bodyPadding, marginTop: 'auto', marginBottom: afterBottomUpsell ? 0 : -lay.bodyPadding, zIndex: 5, background: '#fff', boxShadow: '0 -6px 8px -8px rgba(15,23,42,.25)' } : undefined)}
 
                   {/* Empty cart recommendations */}
                   {isEmpty && body.emptyCart.showRecommendations && !up.showWhenEmpty && (
@@ -1191,29 +1268,30 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                   {renderBanner('beforeBottomBar')}
 
                   {/* Progress Bar — BOTTOM */}
-                  {showProgressBar && pb.position === 'bottom' && (
+                  {showProgressBar && pb.position === 'bottom' && arr('main', 'progress', (
                     <HighlightZone sectionId="progressBar" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <ProgressBarPreview pb={pb} cartTotal={paidTotal} cartCount={paidCount} phone={lay} headBase={isDesktop ? 15 : 14} lockBadge={<PreviewLockBadge featureKey="progress_bar" inline />} />
                     </HighlightZone>
-                  )}
+                  ))}
 
                   {renderBanner('afterBottomBar')}
 
                   {/* Coupon Slider — BOTTOM */}
-                  {showCouponSlider && cs.position === 'bottom' && (
+                  {showCouponSlider && cs.position === 'bottom' && arr('main', 'coupons', (
                     <HighlightZone sectionId="couponSlider" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
                       <CouponSliderPreview cs={cs} />
                     </HighlightZone>
-                  )}
+                  ))}
 
                   {renderBanner('end')}
                 </div>
 
                 {/* ── FOOTER ── */}
                 {!isEmpty && (
-                  <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection}>
-                    <div style={{ padding: `${lay.footerPadding}px ${isDesktop ? 18 : 12}px`, borderTop: '1px solid #e1e3e5', flexShrink: 0, background: drawerBg }}>
+                  <HighlightZone sectionId="checkoutButton" activeSection={activeSection} label={activeSectionLabel} onSectionClick={navigateToSection} style={{ order: 20 }}>
+                    <div style={{ padding: `${lay.footerPadding}px ${isDesktop ? 18 : 12}px`, borderTop: themeCss ? `1px solid ${themeCss.dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.08)'}` : '1px solid #e1e3e5', flexShrink: 0, background: themeCss ? 'transparent' : drawerBg, ...(savedOrder ? { display: 'flex', flexDirection: 'column' } : {}) }}>
                       {/* Pricing summary: labels left, amounts right (brix_cart_ui.css, same as the storefront) */}
+                      {arr('footer', 'summary', (
                       <div className="bxcd-summary" style={{ marginBottom: lay.summaryGap, rowGap: lay.summaryRowGap }}>
                         {showDetails && (
                           <>
@@ -1245,8 +1323,11 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                         </span>
                         <span className="bxcd-summary__value bxcd-summary__value--total">{formatMoney(subtotal)}</span>
                       </div>
-                      {continueShopping.enabled && continueShopping.placement === 'above' && continueButton}
-                      {/* Checkout button */}
+                      ))}
+                      {continueShopping.enabled && (savedOrder || continueShopping.placement === 'above') && arr('footer', 'continue', continueButton)}
+                      {(savedOrder || trustAbove) && trustHtml && arr('footer', 'trust', <div onClick={(e) => { e.stopPropagation(); navigateToSection('trustBadges'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: trustHtml }} />)}
+                      {arr('footer', 'checkout', (
+                      <>
                       {!isDesktop && footer.checkoutButton.mobileButtonType === 'swipe' ? (
                         <div style={{ background: footer.checkoutButton.bgColor, borderRadius: `${footer.checkoutButton.borderRadius}px`, height: checkoutPreview.swipeH, display: 'flex', alignItems: 'center', overflow: 'hidden', position: 'relative', cursor: 'pointer' }}>
                           <div style={{ width: checkoutPreview.swipeH - 6, height: checkoutPreview.swipeH - 6, margin: 3, borderRadius: `${Math.max(footer.checkoutButton.borderRadius - 2, 4)}px`, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.18)', flexShrink: 0, zIndex: 1, position: 'relative' }}>
@@ -1259,12 +1340,14 @@ export function CartPreview({ onSave, onDiscard, isDirty, saveStatus = 'idle' })
                           {checkoutLabel} →
                         </button>
                       )}
+                      </>
+                      ))}
                       {/* Cards + trust badges: the storefront's own HTML (cart-footer-extras.shared.js) */}
-                      {cardsHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('paymentCards'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: cardsHtml }} />}
-                      {trustHtml && <div onClick={(e) => { e.stopPropagation(); navigateToSection('trustBadges'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: trustHtml }} />}
-                      {continueShopping.enabled && continueShopping.placement !== 'above' && continueButton}
+                      {cardsHtml && arr('footer', 'cards', <div onClick={(e) => { e.stopPropagation(); navigateToSection('paymentCards'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: cardsHtml }} />)}
+                      {!savedOrder && !trustAbove && trustHtml && arr('footer', 'trust', <div onClick={(e) => { e.stopPropagation(); navigateToSection('trustBadges'); }} style={{ cursor: 'pointer' }} dangerouslySetInnerHTML={{ __html: trustHtml }} />)}
+                      {continueShopping.enabled && !savedOrder && continueShopping.placement !== 'above' && arr('footer', 'continue', continueButton)}
                       {/* Footer note */}
-                      {showDetails && lay.showFooterNote && <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6 }}>{footer.checkoutButton.footerText}</div>}
+                      {showDetails && lay.showFooterNote && <div style={{ textAlign: 'center', fontSize: 11, color: '#8c9196', marginTop: 6, order: 100 }} className="bxcd-theme-text">{footer.checkoutButton.footerText}</div>}
                     </div>
                   </HighlightZone>
                 )}
