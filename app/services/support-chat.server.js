@@ -6,12 +6,16 @@
  * answers from /internal/chat (routes/internal.chat*.jsx). A team reply, or
  * the merchant asking for a person, stops the AI in that chat.
  *
- * Every function takes `deps` ({ db, llm, now }) so the tests can run it on
- * fakes.
+ * Chats handed to the team also go to the Brix Partner Dashboard as tickets
+ * (services/brix-dashboard.server.js); its webhook brings replies back.
+ *
+ * Every function takes `deps` ({ db, llm, now, forward }) so the tests can
+ * run it on fakes.
  */
 import { getDb } from './db.server';
 import { callLlm } from './ai-llm.server';
 import { SUPPORT_GUIDE } from './support-chat-knowledge';
+import { forwardChat, transcript } from './brix-dashboard.server';
 import {
   DEFAULT_CHAT_SETTINGS, cleanMessage, publicChatSettings, sanitizeChatSettings, teamOnline,
 } from '../utils/support-chat.shared.js';
@@ -22,7 +26,23 @@ const SETTINGS_TTL_MS = 20_000;
 const CONTEXT_TTL_MS = 10 * 60_000;
 
 const sqlTime = (d) => new Date(d).toISOString().slice(0, 19).replace('T', ' ');
-const resolve = (deps = {}) => ({ db: deps.db || getDb(), llm: deps.llm || callLlm, now: deps.now || (() => new Date()) });
+const resolve = (deps = {}) => ({
+  db: deps.db || getDb(), llm: deps.llm || callLlm, now: deps.now || (() => new Date()), forward: deps.forward || forwardChat,
+});
+
+/**
+ * Hands the chat to the Partner Dashboard ticket (in the background): the
+ * chat so far on the first hand-off, and after a "Hand back to AI" only what
+ * came after the team's last reply (the ticket already has the rest).
+ */
+async function sendToTeamInbox(conv, deps) {
+  const { forward } = resolve(deps);
+  const fresh = (await getConversation(conv.id, deps)) || conv;
+  const messages = await listMessages(conv.id, {}, deps);
+  let lastTeam = -1;
+  messages.forEach((m, i) => { if (m.sender === 'team') lastTeam = i; });
+  void forward(fresh, transcript(messages.slice(lastTeam + 1))).catch(() => {});
+}
 
 const ensured = new WeakSet();
 async function ensureTables(db) {
@@ -217,7 +237,13 @@ export async function merchantSend(shop, { body, context = null } = {}, deps) {
     await db.execute('UPDATE support_chat_conversations SET context = ?, context_at = ? WHERE id = ?', [JSON.stringify(context).slice(0, 20000), sqlTime(now()), conv.id]);
   }
   const message = await addMessage(conv, 'merchant', text, '', deps);
-  return { message, aiWillAnswer: settings.aiEnabled && !conv.aiPaused };
+  const aiWillAnswer = settings.aiEnabled && !conv.aiPaused;
+  // The team has this chat: the message goes to its dashboard ticket too.
+  if (!aiWillAnswer) {
+    const { forward } = resolve(deps);
+    void forward(context && typeof context === 'object' ? { ...conv, context } : conv, text).catch(() => {});
+  }
+  return { message, aiWillAnswer };
 }
 
 export async function merchantMarkRead(shop, deps) {
@@ -231,7 +257,10 @@ export async function merchantAskTeam(shop, deps) {
   const settings = await getChatSettings(deps);
   const conv = await ensureConversation(shop, deps);
   await setFlags(conv.id, { needsTeam: true, aiPaused: true, status: 'open' }, deps);
-  return addMessage(conv, 'system', teamOnline(settings, now()) ? settings.handoffMessage : settings.awayMessage, settings.teamName, deps);
+  const note = await addMessage(conv, 'system', teamOnline(settings, now()) ? settings.handoffMessage : settings.awayMessage, settings.teamName, deps);
+  // Only the first hand-over sends the transcript; after that each message is forwarded as it comes.
+  if (settings.aiEnabled && !conv.aiPaused) await sendToTeamInbox(conv, deps);
+  return note;
 }
 
 /* ---------- BRIX AI ---------- */
@@ -291,7 +320,9 @@ export async function aiAnswer(shop, deps) {
 
   const handOff = async () => {
     await setFlags(conv.id, { needsTeam: true, aiPaused: true }, deps);
-    return addMessage(conv, 'system', teamOnline(settings, now()) ? settings.handoffMessage : settings.awayMessage, settings.teamName, deps);
+    const note = await addMessage(conv, 'system', teamOnline(settings, now()) ? settings.handoffMessage : settings.awayMessage, settings.teamName, deps);
+    await sendToTeamInbox(conv, deps);
+    return note;
   };
   if ((await aiAnswersToday(conv, deps)) >= settings.aiDailyLimit) return handOff();
 

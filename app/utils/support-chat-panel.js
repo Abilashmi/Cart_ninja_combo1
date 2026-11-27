@@ -18,6 +18,7 @@ export function supportChatPanel(nonce) {
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;height:100vh;display:flex;flex-direction:column}
 header.top{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
 header.top h1{margin:0;font-size:17px}
+.dash-notice{margin:0;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--warnbg);color:var(--warn);font-weight:600}
 .tabs{display:flex;gap:4px}
 .tabs button,.filters button{background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;cursor:pointer}
 .tabs button[aria-pressed=true],.filters button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -78,6 +79,7 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
   <div class="who"><label for="agent">Replying as</label><input id="agent" maxlength="40" placeholder="Your name">
     <form method="post"><input type="hidden" name="intent" value="logout"><button class="plain" type="submit">Sign out</button></form></div>
 </header>
+<p class="dash-notice" id="dash-notice" role="note">Answer chats in the Brix Partner Dashboard → Tickets; replies here don't reach the ticket.</p>
 <div class="wrap" id="inbox">
   <aside class="list">
     <div class="filters" role="group" aria-label="Show">

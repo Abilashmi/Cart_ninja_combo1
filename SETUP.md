@@ -71,7 +71,29 @@ PHP_BASE_URL=http://localhost/cartdrawerv2_ui/php_backend
 
 # AI features — holds the NVIDIA NIM key (nvapi-...) or an OpenAI key
 OPENAI_API_KEY=nvapi-xxxxxxxxxxxx
+
+# Brix Partner Dashboard — the team inbox for support chats (optional; no key = off)
+BRIX_DASHBOARD_URL=https://admin-partners.thebrix.io
+BRIX_DASHBOARD_KEY=
+BRIX_DASHBOARD_WEBHOOK_SECRET=
+BRIX_DASHBOARD_APP=Cart Ninja
 ```
+
+> **Brix Partner Dashboard (support chats).** Chats handed to the team (the
+> merchant pressed "Talk to a person", BRIX AI handed over, or AI is off) become
+> tickets in the dashboard; the team's replies come back through a signed webhook.
+>
+> | Variable | Value |
+> |---|---|
+> | `BRIX_DASHBOARD_URL` | Dashboard base URL. Default `https://admin-partners.thebrix.io` |
+> | `BRIX_DASHBOARD_KEY` | API key from dashboard Settings → API keys. Unset = nothing is sent |
+> | `BRIX_DASHBOARD_WEBHOOK_SECRET` | The dashboard webhook's signing secret. Unset = every webhook is refused |
+> | `BRIX_DASHBOARD_APP` | This app's name (or Partner app ID) in the dashboard. Default `Cart Ninja` |
+>
+> In production these are Fly secrets:
+> `fly secrets set BRIX_DASHBOARD_KEY=... BRIX_DASHBOARD_WEBHOOK_SECRET=... BRIX_DASHBOARD_APP="Cart Ninja"`.
+> In the dashboard, Settings → Webhooks: URL `https://<app host>/api/brix-dashboard`,
+> events `ticket.replied` and `ticket.status_changed`.
 
 > **Windows Prisma issue:** If you get `query_engine-windows.dll.node` errors, also add:
 > ```env
