@@ -31,7 +31,7 @@ const DEFAULT_ANALYTICS = {
   cartdrawer_total_revenue: 0,
   cartdrawer_total_coupon_applied: 0,
   avg_order_value: 0,
-  conversion_rate: 0,
+  conversion_rate: null, // null = not known (no visits recorded): shown as "—"
   order_count: 0,
 };
 
@@ -50,7 +50,7 @@ function normalizeAnalytics(p = {}) {
     cartdrawer_total_revenue: toAmount(p.cartdrawer_total_revenue),
     cartdrawer_total_coupon_applied: toCount(p.cartdrawer_total_coupon_applied),
     avg_order_value: toAmount(p.avg_order_value),
-    conversion_rate: toAmount(p.conversion_rate),
+    conversion_rate: p.conversion_rate == null ? null : toAmount(p.conversion_rate),
     order_count: toCount(p.order_count),
   };
 }
@@ -226,7 +226,7 @@ export default function DashboardPage() {
   const kpis = [
     { label: t('admin.home.kpi_orders'), value: String(analytics.order_count), icon: OrderIcon, accent: '#0284c7' },
     { label: t('admin.home.kpi_revenue_generated'), value: formatAmount(analytics.cartdrawer_total_revenue, currencySymbol, currencyCode), icon: CashDollarIcon, accent: '#16a34a' },
-    { label: t('admin.home.kpi_conversion'), value: `${analytics.conversion_rate.toFixed(1).replace(/\.0$/, '')}%`, icon: ChartCohortIcon, accent: '#7c3aed' },
+    { label: t('admin.home.kpi_conversion'), value: analytics.conversion_rate == null ? '—' : `${analytics.conversion_rate.toFixed(1).replace(/\.0$/, '')}%`, icon: ChartCohortIcon, accent: '#7c3aed' },
   ];
 
   return (

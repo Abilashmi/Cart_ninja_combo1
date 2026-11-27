@@ -107,41 +107,62 @@ function normalizeAnalyticsPayload(payload) {
   return { ...DEFAULT_ANALYTICS };
 }
 
-// Local, dev-time source of truth for real order revenue/AOV/conversion rate —
-// populated by app/routes/webhooks.orders.paid.jsx into store_order_events on
-// the same MySQL DB as getDb(). Click counts (checkout/coupon/upsell) still
-// come from the PHP upstream below. Once ready to run this against production,
-// no code change is needed here — it already reads from whatever DB_HOST/
-// DB_NAME the deployed app is configured with.
-async function getLocalOrderStats(shop, startDate, endDate, checkoutClicks) {
-  const stats = { total_revenue: 0, avg_order_value: 0, conversion_rate: 0, order_count: 0 };
+// Real order revenue / AOV / conversion rate for Home, from the same MySQL as
+// getDb(): orders = store_order_events (webhooks.orders.paid.jsx, every paid
+// order of the store), visits = analytics_sessions (the storefront script's
+// session_ping.php, one row per 30-minute visit). Conversion rate = orders ÷
+// visits, like the Analytics page. It used to be orders ÷ BRIX drawer Checkout
+// clicks, which counted orders from every checkout against clicks in one
+// drawer: 23 orders and 1 click showed 2300%. No visits recorded, or fewer
+// visits than orders (the app embed was off for part of the period), = null:
+// Home shows "—" rather than a wrong number.
+async function getLocalOrderStats(shop, startDate, endDate) {
+  const stats = { total_revenue: 0, avg_order_value: 0, conversion_rate: null, order_count: 0, visit_count: 0 };
+  const range = (column) => {
+    let sql = '';
+    const params = [];
+    if (startDate) { sql += ` AND ${column} >= ?`; params.push(`${startDate} 00:00:00`); }
+    if (endDate) { sql += ` AND ${column} <= ?`; params.push(`${endDate} 23:59:59`); }
+    return { sql, params };
+  };
 
   try {
     const db = getDb();
-    let query = `SELECT COUNT(*) AS n, COALESCE(SUM(revenue), 0) AS total FROM store_order_events WHERE shop_domain = ?`;
-    const params = [shop];
-    if (startDate) {
-      query += ` AND created_at >= ?`;
-      params.push(`${startDate} 00:00:00`);
-    }
-    if (endDate) {
-      query += ` AND created_at <= ?`;
-      params.push(`${endDate} 23:59:59`);
-    }
-
-    const [rows] = await db.execute(query, params);
+    const r = range('created_at');
+    const [rows] = await db.execute(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(revenue), 0) AS total FROM store_order_events WHERE shop_domain = ?${r.sql}`,
+      [shop, ...r.params],
+    );
     const orderCount = Number(rows[0]?.n || 0);
     const totalRevenue = parseFloat(rows[0]?.total || 0);
 
     stats.order_count = orderCount;
     stats.total_revenue = totalRevenue;
     stats.avg_order_value = orderCount > 0 ? totalRevenue / orderCount : 0;
-    stats.conversion_rate = checkoutClicks > 0 ? (orderCount / checkoutClicks) * 100 : 0;
   } catch (error) {
     console.error("[analytics.server] Local order stats query failed:", error.message);
   }
 
+  try {
+    const db = getDb();
+    const r = range('first_seen_at');
+    const [rows] = await db.execute(
+      `SELECT COUNT(DISTINCT session_id) AS n FROM analytics_sessions WHERE shop_domain = ?${r.sql}`,
+      [shop, ...r.params],
+    );
+    stats.visit_count = Number(rows[0]?.n || 0);
+  } catch (error) {
+    console.error("[analytics.server] Visit count query failed:", error.message);
+  }
+
+  stats.conversion_rate = conversionRate(stats.order_count, stats.visit_count);
   return stats;
+}
+
+/** Orders ÷ visits as a percent; null when it can't be a real rate (no visits, or more orders than visits). */
+export function conversionRate(orders, visits) {
+  if (!(visits > 0) || orders > visits) return null;
+  return (orders / visits) * 100;
 }
 
 async function getErrorBody(response) {
@@ -199,7 +220,7 @@ export async function getAnalyticsData(shop, startDate, endDate) {
 
       const payload = await response.json();
       const clickData = normalizeAnalyticsPayload(payload);
-      const orderStats = await getLocalOrderStats(shop, startDate, endDate, clickData.checkout_click);
+      const orderStats = await getLocalOrderStats(shop, startDate, endDate);
 
       return {
         success: true,
@@ -217,7 +238,7 @@ export async function getAnalyticsData(shop, startDate, endDate) {
   }
 
   const detail = upstreamErrors.slice(0, 3).join(" | ") || "No upstream configured.";
-  const orderStats = await getLocalOrderStats(shop, startDate, endDate, 0);
+  const orderStats = await getLocalOrderStats(shop, startDate, endDate);
 
   return {
     success: true,
